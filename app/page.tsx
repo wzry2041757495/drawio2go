@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import BottomBar from "./components/BottomBar";
 import UnifiedSidebar from "./components/UnifiedSidebar";
+import { UPDATE_EVENT } from "./lib/drawio-tools";
 
 export default function Home() {
   const [diagramXml, setDiagramXml] = useState<string>("");
@@ -25,6 +26,22 @@ export default function Home() {
       if (savedPath) {
         setSettings({ defaultPath: savedPath });
       }
+
+      // 监听 DrawIO XML 更新事件（由工具函数触发）
+      const handleXmlUpdate = (event: Event) => {
+        const customEvent = event as CustomEvent<{ xml: string }>;
+        if (customEvent.detail?.xml) {
+          console.log("🔄 收到 DrawIO 工具触发的 XML 更新事件");
+          setDiagramXml(customEvent.detail.xml);
+          setCurrentXml(customEvent.detail.xml);
+        }
+      };
+
+      window.addEventListener(UPDATE_EVENT, handleXmlUpdate);
+
+      return () => {
+        window.removeEventListener(UPDATE_EVENT, handleXmlUpdate);
+      };
     }
   }, []);
 

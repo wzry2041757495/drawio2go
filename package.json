@@ -21,6 +21,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.54",
     "@ai-sdk/react": "^2.0.79",
     "@heroui/react": "^3.0.0-alpha.35",
     "@heroui/styles": "^3.0.0-alpha.35",
