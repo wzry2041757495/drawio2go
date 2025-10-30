@@ -29,13 +29,15 @@
 ### 3. 定义 LLMConfig 接口
 - [ ] 定义配置类型（与设置侧边栏保持一致）：
   ```typescript
+  type ProviderType = 'openai' | 'openai-response' | 'deepseek' | 'anthropic';
+
   interface LLMConfig {
     apiUrl: string;
     apiKey: string;
     temperature: number;
     modelName: string;
     systemPrompt: string;
-    useLegacyOpenAIFormat: boolean;
+    providerType: ProviderType;
     maxToolRounds: number;
   }
   ```
@@ -78,28 +80,56 @@
   }
   ```
 
-### 5. 实现动态 Provider 选择
-- [ ] 添加 Provider 选择逻辑：
+### 5. 实现动态 Provider 选择与路由
+- [ ] 根据 `providerType` 选择对应的 Provider 和调用方式：
   ```typescript
-  // 根据配置选择 Provider
-  let provider;
+  // 根据供应商类型创建模型实例
+  let model;
 
-  if (llmConfig.useLegacyOpenAIFormat) {
-    // 使用 DeepSeek Provider
-    provider = createDeepSeek({
-      baseURL: llmConfig.apiUrl,
-      apiKey: llmConfig.apiKey || 'dummy-key',
-    });
-  } else {
-    // 使用 OpenAI 兼容 Provider
-    provider = createOpenAI({
-      baseURL: llmConfig.apiUrl,
-      apiKey: llmConfig.apiKey || 'dummy-key',
-    });
+  switch (llmConfig.providerType) {
+    case 'openai':
+      // OpenAI Chat API (.chat 方法)
+      // 参考文档：.claude/docs/aisdk-openai.md 第644-651行
+      const openaiChatProvider = createOpenAI({
+        baseURL: llmConfig.apiUrl,
+        apiKey: llmConfig.apiKey || 'dummy-key',
+      });
+      model = openaiChatProvider.chat(llmConfig.modelName);
+      break;
+
+    case 'openai-response':
+      // OpenAI Responses API (AI SDK 5 默认方式)
+      // 参考文档：.claude/docs/aisdk-openai.md 第125-132行
+      const openaiResponseProvider = createOpenAI({
+        baseURL: llmConfig.apiUrl,
+        apiKey: llmConfig.apiKey || 'dummy-key',
+      });
+      model = openaiResponseProvider(llmConfig.modelName);
+      // 或使用 openaiResponseProvider.responses(llmConfig.modelName)
+      break;
+
+    case 'deepseek':
+      // DeepSeek Provider (预留，需安装 @ai-sdk/deepseek)
+      const deepseekProvider = createDeepSeek({
+        baseURL: llmConfig.apiUrl,
+        apiKey: llmConfig.apiKey || 'dummy-key',
+      });
+      model = deepseekProvider(llmConfig.modelName);
+      break;
+
+    case 'anthropic':
+      // Anthropic Provider (预留，需安装 @ai-sdk/anthropic)
+      throw new Error('Anthropic 供应商暂未实现');
+
+    default:
+      throw new Error(`不支持的供应商类型: ${llmConfig.providerType}`);
   }
-
-  const model = provider(llmConfig.modelName);
   ```
+
+**技术说明**：
+- **openai (.chat)**：调用传统的 `/v1/chat/completions` 端点，对应 OpenAI Chat API
+- **openai-response**：使用 AI SDK 5 的 Responses API，支持更多功能（Web Search、File Search、Image Generation、Code Interpreter 等）
+- 两种方式的详细区别参见 `.claude/docs/aisdk-openai.md` 第102-106行和第125-287行
 
 ### 6. 实现 Agent Loop
 - [ ] 调用 streamText API：
@@ -188,8 +218,9 @@ export async function POST(req: NextRequest) {
 ## 验收标准
 - [ ] API 路由能正确处理 POST 请求
 - [ ] 能正确解析 messages 和 llmConfig
-- [ ] `useLegacyOpenAIFormat = true` 时使用 DeepSeek
-- [ ] `useLegacyOpenAIFormat = false` 时使用 OpenAI
+- [ ] `providerType = 'openai'` 时使用 .chat() 方法
+- [ ] `providerType = 'openai-response'` 时使用默认方法
+- [ ] 不支持的 providerType 能正确抛出错误
 - [ ] 工具调用能正确执行
 - [ ] 达到 `maxToolRounds` 限制时停止
 - [ ] 流式响应能正确返回
@@ -209,14 +240,19 @@ export async function POST(req: NextRequest) {
          "temperature": 0.3,
          "modelName": "deepseek-chat",
          "systemPrompt": "You are a helpful assistant.",
-         "useLegacyOpenAIFormat": true,
+         "providerType": "openai-response",
          "maxToolRounds": 5
        }
      }'
    ```
 
-2. 检查响应是否为流式格式
-3. 查看服务器日志确认步骤完成事件
+2. 测试不同的 providerType：
+   - `"providerType": "openai"` - 使用 Chat API
+   - `"providerType": "openai-response"` - 使用 Responses API
+   - `"providerType": "deepseek"` - 使用 DeepSeek（如果已安装）
+
+3. 检查响应是否为流式格式
+4. 查看服务器日志确认步骤完成事件
 
 ## 注意事项
 - **Edge Runtime**：必须使用 Edge Runtime 以支持流式响应
@@ -234,6 +270,19 @@ A: `maxSteps` 是 AI SDK 的参数，表示最大交互轮次（包括工具调�
 
 **Q: 如果工具执行失败会怎样？**
 A: AI SDK 会捕获错误，将错误信息作为工具结果返回给模型，模型可以根据错误调整策略。
+
+**Q: openai 和 openai-response 有什么区别？**
+A:
+- `openai`: 使用 `.chat()` 方法，调用传统 Chat Completions API (`/v1/chat/completions`)
+- `openai-response`: 使用 AI SDK 5 默认的 Responses API，功能更丰富（支持 Web Search、File Search、Image Generation、Code Interpreter 等）
+详见 `.claude/docs/aisdk-openai.md` 第102-106行和第125-287行
+
+**Q: 如何添加新的供应商支持？**
+A:
+1. 在 `ProviderType` 类型中添加新的供应商标识（如 `'anthropic'`）
+2. 在 switch 语句中添加对应的 case 分支
+3. 创建对应的 Provider 实例并返回 model
+4. 更新相关文档和测试用例
 
 ---
 

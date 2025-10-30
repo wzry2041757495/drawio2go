@@ -11,6 +11,18 @@
 
 ### 1. 创建统一的类型定义文件
 - [ ] 创建 `app/types/chat.ts`
+- [ ] 定义供应商类型枚举：
+  ```typescript
+  /**
+   * 支持的 AI 供应商类型
+   * - openai: 使用 OpenAI Chat API (.chat 方法)
+   * - openai-response: 使用 OpenAI Responses API (AI SDK 5 默认)
+   * - deepseek: DeepSeek API (预留扩展)
+   * - anthropic: Anthropic Claude API (预留扩展)
+   */
+  export type ProviderType = 'openai' | 'openai-response' | 'deepseek' | 'anthropic';
+  ```
+
 - [ ] 定义 LLM 配置类型：
   ```typescript
   /**
@@ -27,12 +39,20 @@
     modelName: string;
     /** 系统提示词 */
     systemPrompt: string;
-    /** 是否使用旧式 OpenAI 格式 */
-    useLegacyOpenAIFormat: boolean;
+    /** 供应商类型 */
+    providerType: ProviderType;
     /** 最大工具调用轮次 */
     maxToolRounds: number;
   }
   ```
+
+  **供应商类型说明**：
+  - **openai**: 使用 `createOpenAI().chat()` 方法，调用传统的 OpenAI Chat Completions API
+  - **openai-response**: 使用 `createOpenAI()()` 默认方法，调用 AI SDK 5 的 Responses API，支持更多功能（Web Search、File Search、Image Generation、Code Interpreter 等）
+  - **deepseek**: 使用 DeepSeek 官方 Provider（需安装 `@ai-sdk/deepseek`，预留）
+  - **anthropic**: 使用 Anthropic Claude Provider（需安装 `@ai-sdk/anthropic`，预留）
+
+  详细 API 区别参见 `.claude/docs/aisdk-openai.md` 第102-106行和第125-287行。
 
 - [ ] 定义工具调用相关类型：
   ```typescript
@@ -120,6 +140,18 @@
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
             const parsed = JSON.parse(saved);
+
+            // 迁移旧配置格式（useLegacyOpenAIFormat → providerType）
+            if ('useLegacyOpenAIFormat' in parsed) {
+              parsed.providerType = parsed.useLegacyOpenAIFormat
+                ? 'openai'           // 旧式 = openai .chat
+                : 'openai-response'; // 新式 = openai .responses
+              delete parsed.useLegacyOpenAIFormat;
+              // 自动保存迁移后的配置
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+              console.log('已自动迁移旧配置格式到新格式');
+            }
+
             setConfig(parsed);
           }
         }

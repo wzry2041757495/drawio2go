@@ -1,7 +1,7 @@
 # 里程碑 2：工具定义层
 
-**状态**：⏸️ 待执行
-**预计耗时**：45 分钟
+**状态**：✅ 已完成
+**实际耗时**：完成
 **依赖**：无
 
 ## 目标
@@ -10,8 +10,8 @@
 ## 任务清单
 
 ### 1. 创建工具定义文件
-- [ ] 创建 `app/lib/drawio-ai-tools.ts`
-- [ ] 添加必要的导入：
+- [x] 创建 `app/lib/drawio-ai-tools.ts`
+- [x] 添加必要的导入：
   ```typescript
   import { tool } from 'ai';
   import { z } from 'zod';
@@ -23,7 +23,7 @@
   ```
 
 ### 2. 定义工具 1：get_drawio_xml
-- [ ] 实现获取 XML 工具：
+- [x] 实现获取 XML 工具：
   ```typescript
   export const getDrawioXMLTool = tool({
     description: '获取当前 DrawIO 图表的完整 XML 内容。使用场景：需要查看当前图表结构时调用此工具。',
@@ -43,7 +43,7 @@
   ```
 
 ### 3. 定义工具 2：replace_drawio_xml
-- [ ] 实现完全替换 XML 工具：
+- [x] 实现完全替换 XML 工具：
   ```typescript
   export const replaceDrawioXMLTool = tool({
     description: '完全替换当前 DrawIO 图表的 XML 内容。使用场景：需要生成全新的图表或进行大范围修改时使用。注意：此操作会覆盖整个图表。',
@@ -64,7 +64,7 @@
   ```
 
 ### 4. 定义工具 3：batch_replace_drawio_xml
-- [ ] 实现批量替换工具：
+- [x] 实现批量替换工具：
   ```typescript
   export const batchReplaceDrawioXMLTool = tool({
     description: '批量精准替换 DrawIO XML 中的内容片段。使用场景：需要修改图表中的特定文本、属性或样式时使用。每个 search 字符串必须在 XML 中唯一出现，否则会跳过该替换。建议先使用 get_drawio_xml 获取内容，确认要替换的字符串唯一后再调用。',
@@ -103,7 +103,7 @@
   ```
 
 ### 5. 导出工具对象
-- [ ] 在文件末尾添加统一导出：
+- [x] 在文件末尾添加统一导出：
   ```typescript
   /**
    * 所有 DrawIO 工具的集合，用于传递给 AI SDK
@@ -135,12 +135,12 @@ export const drawioTools = { ... };
 ```
 
 ## 验收标准
-- [ ] 文件能正常导入，无 TypeScript 错误
-- [ ] 每个工具都有清晰的 description
-- [ ] 参数使用 zod schema 正确定义
-- [ ] execute 函数能正确调用底层函数
-- [ ] 错误情况能正确抛出或返回
-- [ ] 工具名称使用下划线命名（snake_case）
+- [x] 文件能正常导入，无 TypeScript 错误
+- [x] 每个工具都有清晰的 description
+- [x] 参数使用 zod schema 正确定义（使用 inputSchema）
+- [x] execute 函数能正确调用底层函数
+- [x] 错误情况能正确抛出或返回
+- [x] 工具名称使用下划线命名（snake_case）
 
 ## 测试步骤
 1. 创建测试文件或在控制台测试：

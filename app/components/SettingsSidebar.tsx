@@ -35,6 +35,7 @@ interface LLMConfig {
   modelName: string;
   systemPrompt: string;
   useLegacyOpenAIFormat: boolean;
+  maxToolRounds: number;
 }
 
 export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: SettingsSidebarProps) {
@@ -49,6 +50,7 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
     modelName: "deepseek-chat",
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
     useLegacyOpenAIFormat: true, // 默认勾选
+    maxToolRounds: 5,
   });
   const [savedLlmConfig, setSavedLlmConfig] = useState<LLMConfig>(llmConfig);
 
@@ -78,8 +80,13 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
       if (savedLlmConfigStr) {
         try {
           const parsed = JSON.parse(savedLlmConfigStr);
-          setLlmConfig(parsed);
-          setSavedLlmConfig(parsed);
+          // 兼容旧配置：如果没有 maxToolRounds 字段，使用默认值 5
+          const configWithDefaults = {
+            ...parsed,
+            maxToolRounds: parsed.maxToolRounds ?? 5,
+          };
+          setLlmConfig(configWithDefaults);
+          setSavedLlmConfig(configWithDefaults);
           setTempSystemPrompt(parsed.systemPrompt);
         } catch (e) {
           console.error("加载 LLM 配置失败:", e);
@@ -334,6 +341,28 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
             />
             <Description className="mt-2">
               控制生成的随机性，范围 0-2，值越大越随机
+            </Description>
+          </div>
+
+          {/* 最大工具调用轮次 */}
+          <div className="w-full mt-4">
+            <Label>最大工具调用轮次: {llmConfig.maxToolRounds}</Label>
+            <input
+              type="range"
+              min="1"
+              max="20"
+              step="1"
+              value={llmConfig.maxToolRounds}
+              onChange={(e) =>
+                setLlmConfig({
+                  ...llmConfig,
+                  maxToolRounds: parseInt(e.target.value),
+                })
+              }
+              className="w-full mt-2 temperature-slider"
+            />
+            <Description className="mt-2">
+              限制 AI 工具调用的最大循环次数，防止无限循环（范围 1-20）
             </Description>
           </div>
 

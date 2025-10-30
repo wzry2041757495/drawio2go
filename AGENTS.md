@@ -36,7 +36,7 @@ electron/               # 桌面应用 [详细文档 → electron/AGENTS.md]
 └── preload.js          # 预加载脚本（IPC 桥接）
 ```
 
-## 核心开发准则
+## 开发准则
 
 ### 1. HeroUI v3 使用规范
 - **复合组件**: 使用 `Card.Root`, `Card.Header`, `Card.Content` 等
@@ -53,6 +53,10 @@ electron/               # 桌面应用 [详细文档 → electron/AGENTS.md]
 - **localStorage**: `currentDiagram`, `defaultPath`, `sidebarWidth`
 - **React State**: 组件内临时状态
 - **保存策略**: 自动保存到 localStorage，手动保存到文件系统
+
+### 4. 检查测试
+- 主动调用`getDiagnostics`工具获得语法错误检查信息，避免在编译时才处理语法错误
+- 完成相关里程碑后，使用`web-function-tester`子代理进行页面功能测试
 
 ## 开发命令
 
