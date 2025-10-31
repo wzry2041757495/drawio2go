@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ai-sdk/deepseek':
+        specifier: ^1.0.25
+        version: 1.0.25(zod@4.1.12)
       '@ai-sdk/openai':
         specifier: ^2.0.54
         version: 2.0.54(zod@4.1.12)
@@ -84,8 +87,20 @@ packages:
   7zip-bin@5.2.0:
     resolution: {integrity: sha512-ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A==}
 
+  '@ai-sdk/deepseek@1.0.25':
+    resolution: {integrity: sha512-sGVWQVE4wf7KrsSuaBGSzwjW2QHgZLtCe8JRuqNS5dxmA1p9xrFdXVu4OeQabqY7+fcPl3zJBNu/IDXhp8NLgw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/gateway@2.0.1':
     resolution: {integrity: sha512-vPVIbnP35ZnayS937XLo85vynR85fpBQWHCdUweq7apzqFOTU2YkUd4V3msebEHbQ2Zro60ZShDDy9SMiyWTqA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@1.0.24':
+    resolution: {integrity: sha512-dzhh6NjcSEmhvOPTy1PXFUZ6X4J4IHZqtuo/HNTXWo5OPqwcgSMm9NizTbe8NMmeSXgE3Eim6v6Nuj7yHcpbMw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -104,6 +119,12 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.13':
     resolution: {integrity: sha512-aXFLBLRPTUYA853MJliItefSXeJPl+mg0KSjbToP41kJ+banBmHO8ZPGLJhNqGlCU82o11TYN7G05EREKX8CkA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.14':
+    resolution: {integrity: sha512-CYRU6L7IlR7KslSBVxvlqlybQvXJln/PI57O8swhOaDIURZbjRP2AY3igKgUsrmWqqnFFUHP+AwTN8xqJAknnA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -2576,11 +2597,24 @@ snapshots:
 
   7zip-bin@5.2.0: {}
 
+  '@ai-sdk/deepseek@1.0.25(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 1.0.24(zod@4.1.12)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.14(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/gateway@2.0.1(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
       '@vercel/oidc': 3.0.3
+      zod: 4.1.12
+
+  '@ai-sdk/openai-compatible@1.0.24(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.14(zod@4.1.12)
       zod: 4.1.12
 
   '@ai-sdk/openai@2.0.54(zod@4.1.12)':
@@ -2597,6 +2631,13 @@ snapshots:
       zod: 4.1.12
 
   '@ai-sdk/provider-utils@3.0.13(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.12
+
+  '@ai-sdk/provider-utils@3.0.14(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@standard-schema/spec': 1.0.0

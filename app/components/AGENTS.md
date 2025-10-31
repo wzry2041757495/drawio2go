@@ -63,6 +63,7 @@ interface UnifiedSidebarProps {
 - **无标题栏设计**: 删除顶部标题和关闭按钮
 - **智能浮动按钮**: 仅在有修改时右下角浮现保存/取消按钮
 - **自动检测修改**: 对比当前值与已保存值
+- **供应商选择**: 支持 OpenAI Responses、Chat Completions 与 DeepSeek 兼容接口切换
 - **扁平化设计**: 无分隔线，简化视觉
 
 #### Props
@@ -84,7 +85,8 @@ interface SettingsSidebarProps {
   - 左侧：新建聊天、历史对话（仅图标 + Tooltip）
   - 右侧：版本管理、文件上传（仅图标 + Tooltip）、发送（图标+文本）
 - **@ai-sdk/react**: 使用 useChat hook
-- **后端留空**: 所有功能仅 console.log，UI 已完成
+- **配置加载**: 结合 `useLLMConfig` Hook 自动附带 LLM 配置请求 `/api/chat`
+- **流式响应**: 通过 `/api/chat` 调用 AI SDK，支持工具调用与流式输出
 
 #### Props
 ```typescript

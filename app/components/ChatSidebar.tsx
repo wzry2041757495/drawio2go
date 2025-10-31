@@ -1,8 +1,74 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useChat } from "@ai-sdk/react";
-import { Button, TooltipRoot, TooltipContent } from "@heroui/react";
+import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
+import { useLLMConfig } from "@/app/hooks/useLLMConfig";
+import {
+  getDrawioXML,
+  replaceDrawioXML,
+  batchReplaceDrawioXML,
+} from "@/app/lib/drawio-tools";
+
+type DrawioToolName =
+  | "get_drawio_xml"
+  | "replace_drawio_xml"
+  | "batch_replace_drawio_xml";
+
+const TOOL_LABELS: Record<string, string> = {
+  "tool-get_drawio_xml": "获取 DrawIO XML",
+  "tool-replace_drawio_xml": "完全替换 DrawIO XML",
+  "tool-batch_replace_drawio_xml": "批量替换 DrawIO XML",
+};
+
+const renderToolState = (part: any) => {
+  const title = TOOL_LABELS[part.type] ?? part.type.replace("tool-", "");
+  const getBody = () => {
+    switch (part.state) {
+      case "input-streaming":
+        return "正在准备工具参数...";
+      case "input-available":
+        return (
+          <>
+            <div className="tool-status waiting">等待客户端执行</div>
+            <pre className="tool-json">{JSON.stringify(part.input, null, 2)}</pre>
+          </>
+        );
+      case "output-available":
+        return (
+          <>
+            <div className="tool-status success">执行完成</div>
+            {part.output ? (
+              <pre className="tool-json">{JSON.stringify(part.output, null, 2)}</pre>
+            ) : null}
+          </>
+        );
+      case "output-error":
+        return (
+          <>
+            <div className="tool-status error">执行失败</div>
+            <p className="tool-error-text">{part.errorText ?? "未知错误"}</p>
+            {part.input ? (
+              <details>
+                <summary>查看输入参数</summary>
+                <pre className="tool-json">{JSON.stringify(part.input, null, 2)}</pre>
+              </details>
+            ) : null}
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div key={`${part.toolCallId}-${part.state}`} className="tool-call-block">
+      <div className="tool-title">{title}</div>
+      {getBody()}
+    </div>
+  );
+};
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -12,55 +78,156 @@ interface ChatSidebarProps {
 export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { config: llmConfig, isLoading: configLoading, error: configError } = useLLMConfig();
 
-  // 使用 useChat hook（仅 UI 模式，不连接真实 API）
-  const { messages } = useChat();
+  const { messages, sendMessage, status, error: chatError, addToolResult } = useChat({
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.dynamic) {
+        return;
+      }
 
-  // 自动滚动到底部
+      const { toolCallId, toolName, input } = toolCall;
+
+      const respondError = (errorText: string) => {
+        addToolResult({
+          tool: toolName as DrawioToolName,
+          toolCallId,
+          state: "output-error",
+          errorText,
+        });
+      };
+
+      try {
+        switch (toolName) {
+          case "get_drawio_xml": {
+            const result = getDrawioXML();
+            if (!result.success) {
+              respondError(result.error ?? "获取 XML 失败");
+              return;
+            }
+            addToolResult({
+              tool: toolName as DrawioToolName,
+              toolCallId,
+              output: result,
+            });
+            break;
+          }
+          case "replace_drawio_xml": {
+            const params = input as { drawio_xml: string };
+            if (!params?.drawio_xml) {
+              respondError("缺少 drawio_xml 参数");
+              return;
+            }
+            const result = replaceDrawioXML(params.drawio_xml);
+            if (!result.success) {
+              respondError(result.error ?? "替换 XML 失败");
+              return;
+            }
+            addToolResult({
+              tool: toolName as DrawioToolName,
+              toolCallId,
+              output: result,
+            });
+            break;
+          }
+          case "batch_replace_drawio_xml": {
+            const params = input as { replacements: Array<{ search: string; replace: string }> };
+            if (!params?.replacements) {
+              respondError("缺少 replacements 参数");
+              return;
+            }
+            const result = batchReplaceDrawioXML(params.replacements);
+            if (!result.success) {
+              respondError(result.message ?? "批量替换失败");
+              return;
+            }
+            addToolResult({
+              tool: toolName as DrawioToolName,
+              toolCallId,
+              output: result,
+            });
+            break;
+          }
+          default: {
+            respondError(`未实现的工具: ${toolName}`);
+          }
+        }
+      } catch (error) {
+        respondError(error instanceof Error ? error.message : "客户端执行异常");
+      }
+    },
+  });
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 处理发送消息
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const isChatStreaming = status === "submitted" || status === "streaming";
 
-    // TODO: 发送消息逻辑（后端留空）
-    console.log("发送消息:", input);
-    setInput("");
+  const submitMessage = async () => {
+    if (!input.trim() || !llmConfig || configLoading || isChatStreaming) {
+      return;
+    }
+
+    try {
+      await sendMessage({ text: input.trim() }, {
+        body: { llmConfig },
+      });
+      setInput("");
+    } catch (error) {
+      console.error("[ChatSidebar] 发送消息失败:", error);
+    }
   };
 
-  // 新建聊天
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitMessage();
+  };
+
   const handleNewChat = () => {
     console.log("新建聊天");
     // TODO: 清空当前对话，开始新对话
   };
 
-  // 历史对话
   const handleHistory = () => {
     console.log("打开历史对话");
     // TODO: 显示历史对话列表
   };
 
-  // 版本管理
   const handleVersionControl = () => {
     console.log("版本管理");
     // TODO: 打开版本管理界面
   };
 
-  // 文件上传
   const handleFileUpload = () => {
     console.log("文件上传");
     // TODO: 打开文件选择器
   };
+
+  const isSendDisabled =
+    !input.trim() || isChatStreaming || configLoading || !llmConfig;
+
+  const combinedError = configError || chatError?.message || null;
 
   return (
     <div className="chat-sidebar-content">
       {/* 消息内容区域 - 无分隔线一体化设计 */}
       <div className="chat-messages-area">
         <div className="messages-scroll-area">
-          {messages.length === 0 ? (
+          {configLoading ? (
+            <div className="empty-state">
+              <div className="empty-icon">⏳</div>
+              <p className="empty-text">正在加载 LLM 配置</p>
+              <p className="empty-hint">请稍候...</p>
+            </div>
+          ) : !llmConfig ? (
+            <div className="empty-state">
+              <div className="empty-icon">⚙️</div>
+              <p className="empty-text">尚未配置 AI 供应商</p>
+              <p className="empty-hint">请在设置中保存连接参数后重试</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">💬</div>
               <p className="empty-text">开始与 AI 助手对话</p>
@@ -86,15 +253,20 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                   </span>
                 </div>
                 <div className="message-content">
-                  {message.parts.map((part, i) => {
-                    switch (part.type) {
-                      case "text":
-                        return (
-                          <div key={`${message.id}-${i}`}>{part.text}</div>
-                        );
-                      default:
-                        return null;
+                  {message.parts.map((part, index) => {
+                    if (part.type === "text") {
+                      return <div key={`${message.id}-${index}`}>{part.text}</div>;
                     }
+                    if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+                      return renderToolState(part);
+                    }
+                    if (part.type === "dynamic-tool") {
+                      return renderToolState({
+                        ...part,
+                        type: `tool-${part.toolName}`,
+                      });
+                    }
+                    return null;
                   })}
                 </div>
               </div>
@@ -106,18 +278,35 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
 
       {/* 底部输入区域 - 一体化设计 */}
       <div className="chat-input-area">
+        {combinedError && (
+          <div className="error-banner">
+            <span className="error-icon">⚠️</span>
+            <div className="error-content">
+              <div className="error-title">无法发送请求</div>
+              <div className="error-message">{combinedError}</div>
+              <button
+                className="error-retry"
+                type="button"
+                onClick={() => window.location.reload()}
+              >
+                刷新页面
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="chat-input-container">
           {/* 多行文本输入框 */}
           <textarea
             placeholder="描述你想要对图表进行的修改，或上传（粘贴）图像来复制图表..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(event) => setInput(event.target.value)}
             className="chat-input-textarea"
             rows={3}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
+            disabled={configLoading || !llmConfig}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submitMessage();
               }
             }}
           />
@@ -243,7 +432,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 type="submit"
                 variant="primary"
                 size="sm"
-                isDisabled={!input.trim()}
+                isDisabled={isSendDisabled}
                 className="chat-send-button button-primary"
               >
                 <svg
@@ -259,7 +448,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
-                发送
+                {isChatStreaming ? "发送中..." : "发送"}
               </Button>
             </div>
           </div>

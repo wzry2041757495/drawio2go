@@ -593,6 +593,81 @@ body {
   transform: scale(1.2);
 }
 
+/* ==================== 供应商下拉选择 ==================== */
+
+.provider-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(51, 136, 187, 0.25);
+  background: rgba(51, 136, 187, 0.04);
+  color: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.provider-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(51, 136, 187, 0.15);
+}
+
+.provider-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ==================== 错误提示组件 ==================== */
+
+.error-banner {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.error-icon {
+  font-size: 1.25rem;
+}
+
+.error-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.error-title {
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.error-message {
+  font-size: 0.875rem;
+  color: var(--foreground-secondary, #6b7280);
+}
+
+.error-retry {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.error-retry:hover {
+  background: #dc2626;
+}
+
 /* ==================== 弹窗样式 ==================== */
 
 .modal-overlay {

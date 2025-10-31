@@ -1,8 +1,19 @@
-# DrawIO XML 工具集
+# 工具库
 
 ## 概述
 
-提供 DrawIO XML 文档操作的完整工具集，支持获取、修改和批量替换 XML内容。
+汇总应用层工具函数，包括 DrawIO XML 操作与 LLM 配置管理，支持跨组件复用。
+
+## LLM 配置工具（`llm-config.ts`）
+
+- **默认配置**: `DEFAULT_LLM_CONFIG` 与 `DEFAULT_SYSTEM_PROMPT` 提供统一的初始参数。
+- **URL 规范化**: `normalizeApiUrl` 自动补全 `/v1` 路径并清理尾部斜杠。
+- **供应商识别**: `resolveProviderType`/`isProviderType` 兼容旧版 `useLegacyOpenAIFormat` 配置。
+- **配置归一化**: `normalizeLLMConfig` 输出后端与前端共用的标准化 `LLMConfig`。
+
+## DrawIO XML 工具集（`drawio-tools.ts`）
+
+提供 DrawIO XML 文档操作的完整工具集，支持获取、修改和批量替换 XML 内容。
 
 ### 存储管理
 - **存储键**: `currentDiagram`

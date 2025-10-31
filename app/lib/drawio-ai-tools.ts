@@ -1,10 +1,10 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import {
-  getDrawioXML,
-  replaceDrawioXML,
-  batchReplaceDrawioXML,
-} from './drawio-tools';
+
+const CLIENT_ROUTE_PLACEHOLDER = {
+  routedToClient: true,
+  message: '操作已转交前端执行',
+};
 
 /**
  * 工具 1: 获取 DrawIO XML
@@ -13,17 +13,7 @@ import {
 export const getDrawioXMLTool = tool({
   description: '获取当前 DrawIO 图表的完整 XML 内容。使用场景：需要查看当前图表结构时调用此工具。',
   inputSchema: z.object({}),
-  execute: async () => {
-    const result = getDrawioXML();
-    if (!result.success) {
-      throw new Error(result.error || '获取 XML 失败');
-    }
-    return {
-      success: true,
-      xml: result.xml,
-      message: 'XML 获取成功',
-    };
-  },
+  execute: async () => CLIENT_ROUTE_PLACEHOLDER,
 });
 
 /**
@@ -35,16 +25,7 @@ export const replaceDrawioXMLTool = tool({
   inputSchema: z.object({
     drawio_xml: z.string().describe('新的完整 DrawIO XML 内容，必须是合法的 XML 格式'),
   }),
-  execute: async ({ drawio_xml }) => {
-    const result = replaceDrawioXML(drawio_xml);
-    if (!result.success) {
-      throw new Error(result.error || '替换 XML 失败');
-    }
-    return {
-      success: true,
-      message: result.message,
-    };
-  },
+  execute: async () => CLIENT_ROUTE_PLACEHOLDER,
 });
 
 /**
@@ -61,29 +42,7 @@ export const batchReplaceDrawioXMLTool = tool({
       })
     ).describe('替换对数组，每个对象包含 search 和 replace 字段'),
   }),
-  execute: async ({ replacements }) => {
-    const result = batchReplaceDrawioXML(replacements);
-
-    // 如果有错误，包含在返回信息中
-    if (!result.success) {
-      return {
-        success: false,
-        message: result.message,
-        totalRequested: result.totalRequested,
-        successCount: result.successCount,
-        skippedCount: result.skippedCount,
-        errors: result.errors,
-      };
-    }
-
-    return {
-      success: true,
-      message: result.message,
-      totalRequested: result.totalRequested,
-      successCount: result.successCount,
-      skippedCount: result.skippedCount,
-    };
-  },
+  execute: async () => CLIENT_ROUTE_PLACEHOLDER,
 });
 
 /**

@@ -6,6 +6,16 @@
 
 ## 类型文件
 
+### chat.ts
+LLM 供应商与聊天消息相关的核心类型定义。
+
+#### 核心类型
+
+- **ProviderType**: 支持的供应商枚举（`openai`、`openai-response`、`deepseek`、`anthropic`）。
+- **LLMConfig**: 设置页与后端共用的 LLM 配置（URL、密钥、温度、模型、系统提示、供应商、工具轮次数）。
+- **ToolInvocation/ToolInvocationState**: AI 工具调用的状态结构。
+- **ChatMessage**: 扩展 AI SDK Message 的聊天消息定义。
+
 ### drawio-tools.ts
 DrawIO XML 操作工具的完整类型定义。
 

@@ -1,6 +1,6 @@
 # 里程碑 3：聊天 API 核心逻辑
 
-**状态**：⏸️ 待执行
+**状态**：✅ 已完成
 **预计耗时**：90 分钟
 **依赖**：里程碑 1, 2
 
@@ -19,7 +19,7 @@
 ### 2. 添加必要的导入
 - [ ] 添加导入语句：
   ```typescript
-  import { streamText, CoreMessage } from 'ai';
+  import { streamText, ModelMessage } from 'ai';
   import { createDeepSeek } from '@ai-sdk/deepseek';
   import { createOpenAI } from '@ai-sdk/openai';
   import { NextRequest, NextResponse } from 'next/server';
@@ -50,7 +50,7 @@
       // 1. 解析请求体
       const body = await req.json();
       const { messages, llmConfig } = body as {
-        messages: CoreMessage[];
+        messages: ModelMessage[];
         llmConfig: LLMConfig;
       };
 
@@ -140,7 +140,7 @@
     messages: messages,
     temperature: llmConfig.temperature,
     tools: drawioTools,
-    maxSteps: llmConfig.maxToolRounds,
+    stopWhen: stepCountIs(llmConfig.maxToolRounds),
 
     // 可选：添加调试日志
     onStepFinish: (step) => {
@@ -152,8 +152,8 @@
     },
   });
 
-  // 返回流式响应
-  return result.toDataStreamResponse();
+  // 返回流式响应（支持工具调用）
+  return result.toUIMessageStreamResponse();
   ```
 
 ### 7. 完善错误处理
@@ -187,7 +187,7 @@
 ```typescript
 export const runtime = 'edge';
 
-import { streamText, CoreMessage } from 'ai';
+import { streamText, ModelMessage } from 'ai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAI } from '@ai-sdk/openai';
 import { NextRequest, NextResponse } from 'next/server';
@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
 - **API Key**：如果为空，使用 `'dummy-key'` 占位符
 - **错误处理**：确保所有错误都被捕获并返回 JSON 格式
 - **调试日志**：生产环境可移除 `onStepFinish` 回调
-- **导入路径**：使用 `@/lib/drawio-ai-tools` 别名导入
+- **导入路径**：使用 `../../lib/drawio-ai-tools` 相对路径导入
 
 ## 常见问题
 **Q: streamText 返回什么？**
@@ -276,6 +276,13 @@ A:
 - `openai`: 使用 `.chat()` 方法，调用传统 Chat Completions API (`/v1/chat/completions`)
 - `openai-response`: 使用 AI SDK 5 默认的 Responses API，功能更丰富（支持 Web Search、File Search、Image Generation、Code Interpreter 等）
 详见 `.claude/docs/aisdk-openai.md` 第102-106行和第125-287行
+
+**Q: toUIMessageStreamResponse() vs toDataStreamResponse() vs toTextStreamResponse()？**
+A:
+- `toTextStreamResponse()`: 仅支持纯文本流式传输
+- `toUIMessageStreamResponse()`: 支持完整的 UI 消息流，包括工具调用、文件、数据等（推荐用于工具调用场景）
+- `toDataStreamResponse()`: AI SDK 5.0.79 中不存在，是文档中错误引用
+**注意**: 对于需要支持工具调用的场景，必须使用 `toUIMessageStreamResponse()`
 
 **Q: 如何添加新的供应商支持？**
 A:

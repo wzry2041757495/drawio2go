@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Button, TextField, Label, Input, Description, TextArea } from "@heroui/react";
+import { LLMConfig, ProviderType } from "@/app/types/chat";
+import {
+  DEFAULT_LLM_CONFIG,
+  DEFAULT_SYSTEM_PROMPT,
+  normalizeLLMConfig,
+} from "@/app/lib/llm-config";
 
 interface SettingsSidebarProps {
   isOpen: boolean;
@@ -9,50 +15,42 @@ interface SettingsSidebarProps {
   onSettingsChange?: (settings: { defaultPath: string }) => void;
 }
 
-// 默认的 DrawIO XML 绘制助手提示词
-const DEFAULT_SYSTEM_PROMPT = `你是一个专业的 DrawIO XML 绘制助手。你的任务是帮助用户创建、修改和优化 DrawIO 图表。
-
-你需要：
-1. 理解用户对图表的描述和需求
-2. 生成或修改符合 DrawIO XML 格式的代码
-3. 确保 XML 结构正确，包含必要的元数据、样式和连接关系
-4. 提供清晰的节点布局和美观的视觉效果
-5. 解释你所做的修改和设计决策
-
-DrawIO XML 基本规范：
-- 使用 <mxGraphModel> 作为根元素
-- 使用 <mxCell> 定义节点和连接
-- 使用 style 属性定义样式（形状、颜色、字体等）
-- 使用 mxGeometry 定义位置和大小
-- 保持 ID 的唯一性
-
-请始终确保生成的 XML 可以被 DrawIO 正确解析和渲染。`;
-
-interface LLMConfig {
-  apiUrl: string;
-  apiKey: string;
-  temperature: number;
-  modelName: string;
-  systemPrompt: string;
-  useLegacyOpenAIFormat: boolean;
-  maxToolRounds: number;
-}
+const PROVIDER_OPTIONS: Array<{
+  value: ProviderType;
+  label: string;
+  description: string;
+  disabled?: boolean;
+}> = [
+  {
+    value: "openai-response",
+    label: "OpenAI Responses API",
+    description: "AI SDK 默认模式，适配最新 Responses 能力",
+  },
+  {
+    value: "openai",
+    label: "OpenAI Chat Completions",
+    description: "兼容 /v1/chat/completions 的传统接口",
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek (OpenAI 兼容)",
+    description: "使用 DeepSeek API，基于 OpenAI 协议",
+  },
+  {
+    value: "anthropic",
+    label: "Anthropic Claude (即将支持)",
+    description: "暂不可用，后续版本开放",
+    disabled: true,
+  },
+];
 
 export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: SettingsSidebarProps) {
   const [defaultPath, setDefaultPath] = useState("");
   const [savedPath, setSavedPath] = useState("");
 
   // LLM 配置状态
-  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
-    apiUrl: "https://api.deepseek.com",
-    apiKey: "",
-    temperature: 0.3,
-    modelName: "deepseek-chat",
-    systemPrompt: DEFAULT_SYSTEM_PROMPT,
-    useLegacyOpenAIFormat: true, // 默认勾选
-    maxToolRounds: 5,
-  });
-  const [savedLlmConfig, setSavedLlmConfig] = useState<LLMConfig>(llmConfig);
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ ...DEFAULT_LLM_CONFIG });
+  const [savedLlmConfig, setSavedLlmConfig] = useState<LLMConfig>({ ...DEFAULT_LLM_CONFIG });
 
   // 系统提示词弹窗状态
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
@@ -80,17 +78,21 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
       if (savedLlmConfigStr) {
         try {
           const parsed = JSON.parse(savedLlmConfigStr);
-          // 兼容旧配置：如果没有 maxToolRounds 字段，使用默认值 5
-          const configWithDefaults = {
-            ...parsed,
-            maxToolRounds: parsed.maxToolRounds ?? 5,
-          };
+          const configWithDefaults = normalizeLLMConfig(parsed);
+
           setLlmConfig(configWithDefaults);
           setSavedLlmConfig(configWithDefaults);
-          setTempSystemPrompt(parsed.systemPrompt);
+          setTempSystemPrompt(configWithDefaults.systemPrompt);
         } catch (e) {
           console.error("加载 LLM 配置失败:", e);
+          setLlmConfig({ ...DEFAULT_LLM_CONFIG });
+          setSavedLlmConfig({ ...DEFAULT_LLM_CONFIG });
+          setTempSystemPrompt(DEFAULT_SYSTEM_PROMPT);
         }
+      } else {
+        setLlmConfig({ ...DEFAULT_LLM_CONFIG });
+        setSavedLlmConfig({ ...DEFAULT_LLM_CONFIG });
+        setTempSystemPrompt(DEFAULT_SYSTEM_PROMPT);
       }
     }
   }, []);
@@ -121,9 +123,11 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
       localStorage.setItem("defaultPath", defaultPath);
       setSavedPath(defaultPath);
 
-      // 保存 LLM 配置
-      localStorage.setItem("llmConfig", JSON.stringify(llmConfig));
-      setSavedLlmConfig(llmConfig);
+      const normalizedLlmConfig = normalizeLLMConfig(llmConfig);
+
+      localStorage.setItem("llmConfig", JSON.stringify(normalizedLlmConfig));
+      setLlmConfig(normalizedLlmConfig);
+      setSavedLlmConfig(normalizedLlmConfig);
 
       if (onSettingsChange) {
         onSettingsChange({ defaultPath });
@@ -134,7 +138,7 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
   // 取消修改
   const handleCancel = () => {
     setDefaultPath(savedPath);
-    setLlmConfig(savedLlmConfig);
+    setLlmConfig({ ...savedLlmConfig });
     setTempSystemPrompt(savedLlmConfig.systemPrompt);
   };
 
@@ -167,17 +171,19 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
     setIsTestModalOpen(true);
 
     try {
+      const requestConfig = normalizeLLMConfig(llmConfig);
+
       const response = await fetch("/api/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          apiUrl: llmConfig.apiUrl,
-          apiKey: llmConfig.apiKey,
-          temperature: llmConfig.temperature,
-          modelName: llmConfig.modelName,
-          useLegacyOpenAIFormat: llmConfig.useLegacyOpenAIFormat,
+          apiUrl: requestConfig.apiUrl,
+          apiKey: requestConfig.apiKey,
+          temperature: requestConfig.temperature,
+          modelName: requestConfig.modelName,
+          providerType: requestConfig.providerType,
         }),
       });
 
@@ -259,35 +265,40 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
               onChange={(e) =>
                 setLlmConfig({ ...llmConfig, apiUrl: e.target.value })
               }
-              placeholder="https://api.deepseek.com"
+              placeholder="https://api.deepseek.com/v1"
               className="mt-2"
             />
             <Description className="mt-2">
-              API 端点地址，默认为 DeepSeek API
+              API 端点地址，支持 OpenAI 兼容服务，推荐包含 /v1 路径
             </Description>
           </TextField>
 
-          {/* OpenAI 标准格式开关 */}
-          <div className="w-full mt-4">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <Label>使用旧式 OpenAI 标准格式</Label>
-                <Description className="mt-1">
-                  勾选时使用传统的 /v1/chat/completions 格式
-                </Description>
-              </div>
-              <label className="custom-switch">
-                <input
-                  type="checkbox"
-                  checked={llmConfig.useLegacyOpenAIFormat}
-                  onChange={(e) =>
-                    setLlmConfig({ ...llmConfig, useLegacyOpenAIFormat: e.target.checked })
-                  }
-                />
-                <span className="switch-slider"></span>
-              </label>
-            </div>
-          </div>
+          {/* 供应商选择 */}
+          <TextField className="w-full mt-4">
+            <Label>请求供应商</Label>
+            <select
+              className="mt-2 provider-select"
+              value={llmConfig.providerType}
+              onChange={(e) =>
+                setLlmConfig({
+                  ...llmConfig,
+                  providerType: e.target.value as ProviderType,
+                })
+              }
+            >
+              {PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} disabled={option.disabled}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Description className="mt-2">
+              根据接口兼容性选择请求方式，Responses 模式支持最新 Response API
+            </Description>
+            <Description className="mt-1 text-xs">
+              {PROVIDER_OPTIONS.find((option) => option.value === llmConfig.providerType)?.description}
+            </Description>
+          </TextField>
 
           {/* 请求密钥 */}
           <TextField className="w-full mt-4">

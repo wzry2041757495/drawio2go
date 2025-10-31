@@ -54,7 +54,12 @@ electron/               # 桌面应用 [详细文档 → electron/AGENTS.md]
 - **React State**: 组件内临时状态
 - **保存策略**: 自动保存到 localStorage，手动保存到文件系统
 
-### 4. 检查测试
+### 4. 包开发信息获取
+- **首选 context7**: 获取任何第三方包的开发信息时，必须优先使用 `context7` MCP 工具
+- **工作流程**: 先调用 `resolve-library-id` 获取包ID，再调用 `get-library-docs` 获取最新文档
+- **适用场景**: 新增包、使用包的API、版本升级、遇到兼容性问题时
+
+### 5. 检查测试
 - 主动调用`getDiagnostics`工具获得语法错误检查信息，避免在编译时才处理语法错误
 - 完成相关里程碑后，使用`web-function-tester`子代理进行页面功能测试
 
@@ -71,17 +76,23 @@ npm run electron:build   # 构建 Electron 应用 (输出到 dist/)
 
 ### 1. HeroUI v3 Alpha 警告
 - ✅ 正常现象，v3 仍在 alpha 阶段
-- 📖 优先使用 `context7` MCP 工具查询最新 API
+- 📖 使用 `context7` MCP 工具查询最新 API：`resolve-library-id('heroui-react')` → `get-library-docs('/heroui/react')`
 
 ### 2. Tailwind 样式不生效
 - ✅ 检查 `globals.css` 导入顺序: Tailwind → HeroUI
 - ✅ 确认使用 Tailwind v4 配置
 
-### 3. React 版本要求
+### 3. context7 使用指南
+- **查询包信息**: `resolve-library-id('包名')` 获取包ID
+- **获取文档**: `get-library-docs('包ID')` 获取最新开发文档
+- **支持格式**: 包ID格式如 `/heroui/react`, `/vercel/next.js/v14.3.0`
+- **优势**: 获得最新、准确的API文档，避免使用过时信息
+
+### 4. React 版本要求
 - ⚠️ HeroUI v3 需要 React 19+
 - ✅ 检查 `package.json`: `"react": "^19.0.0"`
 
-### 4. DrawIO 在 Electron 中不显示
+### 5. DrawIO 在 Electron 中不显示
 👉 详细解决方案见 `electron/AGENTS.md` - "DrawIO iframe 不显示" 章节
 
 ## 子包文档导航
@@ -94,6 +105,24 @@ npm run electron:build   # 构建 Electron 应用 (输出到 dist/)
 | **桌面应用** | `electron/AGENTS.md` | Electron 配置、安全策略和调试指南 |
 
 ## 最近更新
+
+### 2025-10-31 - LLM 配置供应商切换
+- ✅ 设置侧边栏支持选择 AI 请求供应商（OpenAI Responses/Chat、DeepSeek 等）
+- ✅ 全局统一通过 `@ai-sdk/openai` 发送请求，移除旧式 REST 手写调用
+- ✅ `/api/chat` 与 `/api/test` 兼容历史配置并自动规范化 API 地址
+
+### 2025-10-31 - 开发准则更新
+- ✅ 明确要求使用 context7 获取包开发信息
+- ✅ 添加 context7 使用工作流程和详细指南
+- ✅ 优化开发准则结构，提高开发效率
+
+### 2025-10-31 - 聊天消息格式修复
+- ✅ `/app/api/chat/route.ts` 现在将前端传入的 `UIMessage[]` 转换为模型可用的 `ModelMessage[]`，修复 "Invalid prompt: The messages must be a ModelMessage[]" 报错
+
+### 2025-10-31 - DrawIO 工具调用前端化
+- ✅ `drawio-ai-tools` 不再直接访问浏览器 API，统一返回前端路由占位
+- ✅ `ChatSidebar` 使用 `onToolCall + addToolResult` 在客户端执行 DrawIO XML 相关操作
+- ✅ 聊天界面新增工具执行状态展示，失败会提示错误文本
 
 ### 2025-10-27 - DrawIO XML 工具集
 - ✅ 新增 XML 操作工具集 (`app/lib/drawio-tools.ts`)
@@ -116,4 +145,4 @@ npm run electron:build   # 构建 Electron 应用 (输出到 dist/)
 
 ---
 
-*最后更新: 2025-10-27*
+*最后更新: 2025-10-31*
