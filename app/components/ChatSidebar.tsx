@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
+import ReactMarkdown, { type Components as MarkdownComponents } from "react-markdown";
 import { useLLMConfig } from "@/app/hooks/useLLMConfig";
 import {
   getDrawioXML,
@@ -22,50 +23,159 @@ const TOOL_LABELS: Record<string, string> = {
   "tool-batch_replace_drawio_xml": "批量替换 DrawIO XML",
 };
 
-const renderToolState = (part: any) => {
-  const title = TOOL_LABELS[part.type] ?? part.type.replace("tool-", "");
-  const getBody = () => {
-    switch (part.state) {
-      case "input-streaming":
-        return "正在准备工具参数...";
-      case "input-available":
-        return (
-          <>
-            <div className="tool-status waiting">等待客户端执行</div>
-            <pre className="tool-json">{JSON.stringify(part.input, null, 2)}</pre>
-          </>
-        );
-      case "output-available":
-        return (
-          <>
-            <div className="tool-status success">执行完成</div>
-            {part.output ? (
-              <pre className="tool-json">{JSON.stringify(part.output, null, 2)}</pre>
-            ) : null}
-          </>
-        );
-      case "output-error":
-        return (
-          <>
-            <div className="tool-status error">执行失败</div>
-            <p className="tool-error-text">{part.errorText ?? "未知错误"}</p>
-            {part.input ? (
-              <details>
-                <summary>查看输入参数</summary>
-                <pre className="tool-json">{JSON.stringify(part.input, null, 2)}</pre>
-              </details>
-            ) : null}
-          </>
-        );
-      default:
-        return null;
+const TOOL_STATUS_META: Record<
+  string,
+  { label: string; icon: string; tone: "pending" | "success" | "error" | "info" }
+> = {
+  "input-streaming": { label: "准备中", icon: "⏳", tone: "pending" },
+  "input-available": { label: "等待执行", icon: "🛠️", tone: "pending" },
+  "output-available": { label: "成功", icon: "✅", tone: "success" },
+  "output-error": { label: "失败", icon: "⚠️", tone: "error" },
+};
+
+type ToolMessagePart = {
+  type: string;
+  state: string;
+  toolCallId?: string;
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+  [key: string]: unknown;
+};
+
+const getToolTitle = (type: string) => {
+  if (TOOL_LABELS[type]) {
+    return TOOL_LABELS[type];
+  }
+
+  if (type.startsWith("tool-")) {
+    return type.replace("tool-", "");
+  }
+
+  return type;
+};
+
+const markdownComponents: MarkdownComponents = {
+  a({ node, ...props }) {
+    return (
+      <a
+        {...props}
+        className="message-link"
+        target="_blank"
+        rel="noopener noreferrer"
+      />
+    );
+  },
+  code({ inline, className, children, ...props }) {
+    const content = String(children).replace(/\n$/, "");
+    if (inline) {
+      return (
+        <code className={`inline-code ${className ?? ""}`.trim()} {...props}>
+          {content}
+        </code>
+      );
     }
+
+    return (
+      <pre className={`code-block ${className ?? ""}`.trim()} {...props}>
+        <code>{content}</code>
+      </pre>
+    );
+  },
+  blockquote({ node, ...props }) {
+    return <blockquote className="message-quote" {...props} />;
+  },
+  ul({ node, ordered, ...props }) {
+    return <ul className="message-list" {...props} />;
+  },
+  ol({ node, ...props }) {
+    return <ol className="message-list message-list-ordered" {...props} />;
+  },
+};
+
+const getToolSummary = (part: ToolMessagePart) => {
+  switch (part.state) {
+    case "input-streaming":
+      return "AI 正在准备工具参数";
+    case "input-available":
+      return "等待客户端执行工具";
+    case "output-available":
+      return "工具执行完成";
+    case "output-error":
+      return part.errorText ?? "工具执行失败";
+    default:
+      return "工具状态更新";
+  }
+};
+
+interface ToolCallCardProps {
+  part: ToolMessagePart;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+const ToolCallCard = ({ part, expanded, onToggle }: ToolCallCardProps) => {
+  const title = getToolTitle(part.type);
+  const meta = TOOL_STATUS_META[part.state] ?? {
+    label: "未知状态",
+    icon: "ℹ️",
+    tone: "info" as const,
   };
 
+  const showInput = Boolean(part.input);
+  const showOutput = Boolean(part.output);
+
   return (
-    <div key={`${part.toolCallId}-${part.state}`} className="tool-call-block">
-      <div className="tool-title">{title}</div>
-      {getBody()}
+    <div
+      className={`tool-call-card tool-call-card--${meta.tone} ${
+        expanded ? "tool-call-card--expanded" : ""
+      }`.trim()}
+    >
+      <button type="button" className="tool-call-header" onClick={onToggle}>
+        <div className="tool-call-title">{title}</div>
+        <div className="tool-call-status">
+          <span className="tool-call-status-icon" aria-hidden>{meta.icon}</span>
+          <span className="tool-call-status-label">{meta.label}</span>
+          <svg
+            className={`tool-call-chevron ${expanded ? "tool-call-chevron--open" : ""}`.trim()}
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </button>
+      <div className="tool-call-summary">{getToolSummary(part)}</div>
+      {expanded ? (
+        <div className="tool-call-body">
+          {part.state === "output-error" && (
+            <div className="tool-call-error-text">{part.errorText ?? "未知错误"}</div>
+          )}
+          {showInput && (
+            <div className="tool-call-section">
+              <div className="tool-call-section-title">输入参数</div>
+              <pre className="tool-call-json">
+                {JSON.stringify(part.input, null, 2)}
+              </pre>
+            </div>
+          )}
+          {showOutput && (
+            <div className="tool-call-section">
+              <div className="tool-call-section-title">执行结果</div>
+              <pre className="tool-call-json">
+                {JSON.stringify(part.output, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -77,6 +187,7 @@ interface ChatSidebarProps {
 
 export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const [input, setInput] = useState("");
+  const [expandedToolCalls, setExpandedToolCalls] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { config: llmConfig, isLoading: configLoading, error: configError } = useLLMConfig();
 
@@ -255,16 +366,48 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 <div className="message-content">
                   {message.parts.map((part, index) => {
                     if (part.type === "text") {
-                      return <div key={`${message.id}-${index}`}>{part.text}</div>;
+                      return (
+                        <div key={`${message.id}-${index}`} className="message-markdown">
+                          <ReactMarkdown components={markdownComponents}>
+                            {part.text ?? ""}
+                          </ReactMarkdown>
+                        </div>
+                      );
                     }
-                    if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-                      return renderToolState(part);
-                    }
-                    if (part.type === "dynamic-tool") {
-                      return renderToolState({
-                        ...part,
-                        type: `tool-${part.toolName}`,
-                      });
+
+                    const normalizedPart: ToolMessagePart =
+                      part.type === "dynamic-tool"
+                        ? {
+                            ...part,
+                            type: `tool-${part.toolName}`,
+                          }
+                        : (part as ToolMessagePart);
+
+                    if (
+                      typeof normalizedPart.type === "string" &&
+                      normalizedPart.type.startsWith("tool-")
+                    ) {
+                      const baseKey = normalizedPart.toolCallId
+                        ? String(normalizedPart.toolCallId)
+                        : `${message.id}-${index}`;
+                      const expansionKey = `${baseKey}-${normalizedPart.state}`;
+                      const isExpanded =
+                        expandedToolCalls[expansionKey] ??
+                        normalizedPart.state === "output-error";
+
+                      return (
+                        <ToolCallCard
+                          key={expansionKey}
+                          part={normalizedPart}
+                          expanded={isExpanded}
+                          onToggle={() =>
+                            setExpandedToolCalls((prev) => ({
+                              ...prev,
+                              [expansionKey]: !isExpanded,
+                            }))
+                          }
+                        />
+                      );
                     }
                     return null;
                   })}

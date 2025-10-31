@@ -87,6 +87,8 @@ interface SettingsSidebarProps {
 - **@ai-sdk/react**: 使用 useChat hook
 - **配置加载**: 结合 `useLLMConfig` Hook 自动附带 LLM 配置请求 `/api/chat`
 - **流式响应**: 通过 `/api/chat` 调用 AI SDK，支持工具调用与流式输出
+- **Markdown 渲染**: 使用 `react-markdown` 将 AI 响应转成富文本，支持代码块、列表、引用与链接
+- **工具状态卡片**: 工具调用以状态卡片展示，支持进行中/成功/失败提示，并可点击展开查看输入与输出详情
 
 #### Props
 ```typescript
