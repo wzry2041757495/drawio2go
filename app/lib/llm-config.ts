@@ -30,7 +30,7 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
   maxToolRounds: 5,
 };
 
-const PROVIDER_TYPES: ProviderType[] = ["openai", "openai-response", "deepseek", "anthropic"];
+const PROVIDER_TYPES: ProviderType[] = ["openai-reasoning", "openai-compatible", "deepseek"];
 
 export const isProviderType = (value: unknown): value is ProviderType =>
   typeof value === "string" && PROVIDER_TYPES.includes(value as ProviderType);
@@ -43,11 +43,23 @@ export const resolveProviderType = (
     return providerType;
   }
 
-  if (legacyFlag === true) {
-    return "openai";
+  // 向后兼容：将旧的 provider 类型映射到新类型
+  if (typeof providerType === "string") {
+    if (providerType === "openai" || providerType === "openai-response") {
+      return "openai-compatible";
+    }
+    if (providerType === "anthropic") {
+      return "openai-compatible";
+    }
   }
 
-  return "openai-response";
+  // 兼容旧的 legacyFlag
+  if (legacyFlag === true) {
+    return "openai-compatible";
+  }
+
+  // 默认使用 openai-compatible
+  return "openai-compatible";
 };
 
 export const normalizeApiUrl = (value?: string, fallback: string = DEFAULT_API_URL): string => {

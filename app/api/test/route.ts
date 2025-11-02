@@ -1,6 +1,7 @@
 import { normalizeLLMConfig } from "@/app/lib/llm-config";
 import { LLMConfig } from "@/app/types/chat";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -19,13 +20,6 @@ export async function POST(req: NextRequest) {
       useLegacyOpenAIFormat: body?.useLegacyOpenAIFormat,
     });
 
-    if (normalizedConfig.providerType === "anthropic") {
-      return NextResponse.json(
-        { error: "Anthropic 供应商暂未接入测试接口" },
-        { status: 400 }
-      );
-    }
-
     if (!normalizedConfig.apiUrl || !normalizedConfig.modelName) {
       return NextResponse.json(
         { error: "缺少必要的配置参数：apiUrl 和 modelName" },
@@ -33,15 +27,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customProvider = createOpenAI({
-      baseURL: normalizedConfig.apiUrl,
-      apiKey: normalizedConfig.apiKey || "dummy-key",
-      name: normalizedConfig.providerType === "deepseek" ? "deepseek" : undefined,
-    });
+    // 根据 providerType 选择合适的 provider
+    let model;
 
-    const model = normalizedConfig.providerType === "openai-response"
-      ? customProvider(normalizedConfig.modelName)
-      : customProvider.chat(normalizedConfig.modelName);
+    if (normalizedConfig.providerType === "openai-reasoning") {
+      // OpenAI Reasoning 模型：使用原生 @ai-sdk/openai
+      const openaiProvider = createOpenAI({
+        baseURL: normalizedConfig.apiUrl,
+        apiKey: normalizedConfig.apiKey || "dummy-key",
+      });
+      model = openaiProvider.chat(normalizedConfig.modelName);
+    } else {
+      // OpenAI Compatible 和 DeepSeek：使用 @ai-sdk/openai-compatible
+      const compatibleProvider = createOpenAICompatible({
+        name: normalizedConfig.providerType,
+        baseURL: normalizedConfig.apiUrl,
+        apiKey: normalizedConfig.apiKey || "dummy-key",
+      });
+      model = compatibleProvider(normalizedConfig.modelName);
+    }
 
     const result = await generateText({
       model,

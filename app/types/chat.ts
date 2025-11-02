@@ -1,4 +1,4 @@
-export type ProviderType = 'openai' | 'openai-response' | 'deepseek' | 'anthropic';
+export type ProviderType = 'openai-reasoning' | 'openai-compatible' | 'deepseek';
 
 export interface LLMConfig {
   apiUrl: string;

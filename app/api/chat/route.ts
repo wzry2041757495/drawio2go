@@ -8,6 +8,7 @@ import {
   type UIMessage,
 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { NextRequest, NextResponse } from 'next/server';
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -40,13 +41,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (normalizedConfig.providerType === 'anthropic') {
-      return NextResponse.json(
-        { error: 'Anthropic 供应商暂未实现' },
-        { status: 400 }
-      );
-    }
-
     if (isDev) {
       console.log('[Chat API] 收到请求:', {
         messagesCount: modelMessages.length,
@@ -56,15 +50,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const openaiProvider = createOpenAI({
-      baseURL: normalizedConfig.apiUrl,
-      apiKey: normalizedConfig.apiKey || 'dummy-key',
-      name: normalizedConfig.providerType === 'deepseek' ? 'deepseek' : undefined,
-    });
+    // 根据 providerType 选择合适的 provider
+    let model;
 
-    const model = normalizedConfig.providerType === 'openai-response'
-      ? openaiProvider(normalizedConfig.modelName)
-      : openaiProvider.chat(normalizedConfig.modelName);
+    if (normalizedConfig.providerType === 'openai-reasoning') {
+      // OpenAI Reasoning 模型：使用原生 @ai-sdk/openai
+      const openaiProvider = createOpenAI({
+        baseURL: normalizedConfig.apiUrl,
+        apiKey: normalizedConfig.apiKey || 'dummy-key',
+      });
+      model = openaiProvider.chat(normalizedConfig.modelName);
+    } else {
+      // OpenAI Compatible 和 DeepSeek：使用 @ai-sdk/openai-compatible
+      const compatibleProvider = createOpenAICompatible({
+        name: normalizedConfig.providerType,
+        baseURL: normalizedConfig.apiUrl,
+        apiKey: normalizedConfig.apiKey || 'dummy-key',
+      });
+      model = compatibleProvider(normalizedConfig.modelName);
+    }
 
     const result = streamText({
       model,

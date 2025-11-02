@@ -22,25 +22,19 @@ const PROVIDER_OPTIONS: Array<{
   disabled?: boolean;
 }> = [
   {
-    value: "openai-response",
-    label: "OpenAI Responses API",
-    description: "AI SDK 默认模式，适配最新 Responses 能力",
-  },
-  {
-    value: "openai",
-    label: "OpenAI Chat Completions",
-    description: "兼容 /v1/chat/completions 的传统接口",
+    value: "openai-compatible",
+    label: "OpenAI Compatible",
+    description: "通用 OpenAI 兼容服务，支持大部分 OpenAI 协议的服务商",
   },
   {
     value: "deepseek",
-    label: "DeepSeek (OpenAI 兼容)",
-    description: "使用 DeepSeek API，基于 OpenAI 协议",
+    label: "DeepSeek",
+    description: "DeepSeek API，基于 OpenAI Compatible 实现",
   },
   {
-    value: "anthropic",
-    label: "Anthropic Claude (即将支持)",
-    description: "暂不可用，后续版本开放",
-    disabled: true,
+    value: "openai-reasoning",
+    label: "OpenAI Reasoning (o1/o3)",
+    description: "OpenAI 官方 Reasoning 模型专用（o1、o3 系列）",
   },
 ];
 

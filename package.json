@@ -23,6 +23,7 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^1.0.26",
     "@ai-sdk/openai": "^2.0.59",
+    "@ai-sdk/openai-compatible": "^1.0.25",
     "@ai-sdk/react": "^2.0.86",
     "@heroui/react": "3.0.0-alpha.35",
     "@heroui/styles": "3.0.0-alpha.35",
