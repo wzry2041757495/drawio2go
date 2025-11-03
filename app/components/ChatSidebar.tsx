@@ -96,7 +96,9 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
 
   // 事件处理函数
   const submitMessage = async () => {
-    if (!input.trim() || !llmConfig || configLoading || isChatStreaming) {
+    const trimmedInput = input.trim();
+
+    if (!trimmedInput || !llmConfig || configLoading || isChatStreaming) {
       return;
     }
 
@@ -112,15 +114,19 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
     sendingSessionIdRef.current = targetSessionId;
     console.log("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
 
+    // 在完成发送前清空输入框，提升响应速度
+    setInput("");
+
     try {
-      await sendMessage({ text: input.trim() }, {
+      await sendMessage({ text: trimmedInput }, {
         body: { llmConfig },
       });
-      setInput("");
     } catch (error) {
       console.error("[ChatSidebar] 发送消息失败:", error);
       // 发送失败时清除记录的会话ID
       sendingSessionIdRef.current = null;
+      // 恢复用户输入，便于重试
+      setInput(trimmedInput);
     }
   };
 
