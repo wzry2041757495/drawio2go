@@ -26,12 +26,6 @@ export default function MessageItem({
   onToolCallToggle,
   onThinkingBlockToggle,
 }: MessageItemProps) {
-  // 从 parts 数组中提取思考内容
-  const reasoningParts = message.parts.filter((part: any) => part.type === 'reasoning');
-  const reasoning = reasoningParts.map((part: any) => part.text).join('\n');
-  const isReasoningStreaming = reasoningParts.some((part: any) => part.state === 'streaming');
-  const isStreaming = isReasoningStreaming || (message.role === 'assistant' && status === 'streaming');
-
   return (
     <div
       className={`message ${
@@ -52,8 +46,6 @@ export default function MessageItem({
       <div className="message-content">
         <MessageContent
           message={message}
-          reasoning={reasoning}
-          isStreaming={isStreaming}
           expandedToolCalls={expandedToolCalls}
           expandedThinkingBlocks={expandedThinkingBlocks}
           onToolCallToggle={onToolCallToggle}

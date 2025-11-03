@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({ sendReasoning: true });
   } catch (error: any) {
     console.error('聊天 API 错误:', error);
 
