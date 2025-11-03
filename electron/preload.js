@@ -14,4 +14,10 @@ contextBridge.exposeInMainWorld("electron", {
 
   // 打开外部链接
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+
+  // 通用文件对话框和文件操作
+  showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
+  showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
+  writeFile: (filePath, data) => ipcRenderer.invoke("write-file", filePath, data),
+  readFile: (filePath) => ipcRenderer.invoke("read-file", filePath),
 });

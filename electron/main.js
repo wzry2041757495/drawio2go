@@ -190,3 +190,43 @@ ipcMain.handle("load-diagram", async () => {
 ipcMain.handle("open-external", async (event, url) => {
   await shell.openExternal(url);
 });
+
+// IPC 处理：通用保存对话框
+ipcMain.handle("show-save-dialog", async (event, options) => {
+  const result = await dialog.showSaveDialog(mainWindow, options);
+  if (!result.canceled && result.filePath) {
+    return result.filePath;
+  }
+  return null;
+});
+
+// IPC 处理：通用打开对话框
+ipcMain.handle("show-open-dialog", async (event, options) => {
+  const result = await dialog.showOpenDialog(mainWindow, options);
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths;
+  }
+  return null;
+});
+
+// IPC 处理：写入文件
+ipcMain.handle("write-file", async (event, filePath, data) => {
+  try {
+    fs.writeFileSync(filePath, data, "utf-8");
+    return { success: true };
+  } catch (error) {
+    console.error("写入文件错误:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC 处理：读取文件
+ipcMain.handle("read-file", async (event, filePath) => {
+  try {
+    const data = fs.readFileSync(filePath, "utf-8");
+    return data;
+  } catch (error) {
+    console.error("读取文件错误:", error);
+    throw error;
+  }
+});
