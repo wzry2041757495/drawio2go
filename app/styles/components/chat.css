@@ -1,0 +1,192 @@
+/* 聊天侧边栏内容容器 */
+.chat-sidebar-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.25rem;
+}
+
+/* 聊天消息区域 - 一体化设计，无分隔线 */
+.chat-messages-area {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* 消息滚动区域 */
+.messages-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
+  color: var(--foreground-secondary, #6b7280);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.empty-hint {
+  font-size: 0.875rem;
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* 消息样式 */
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--primary-light);
+  animation: slideIn 0.3s var(--ease-out-cubic);
+}
+
+.message-user {
+  background: linear-gradient(135deg, #3388BB 0%, #2a6fa0 100%);
+  color: var(--primary-foreground);
+  align-self: flex-end;
+  max-width: 85%;
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s var(--ease-out-cubic);
+}
+
+.message-user:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.message-ai {
+  background: var(--primary-light);
+  color: var(--foreground, #000000);
+  align-self: flex-start;
+  max-width: 85%;
+  border-radius: 1rem 1rem 1rem 0.25rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s var(--ease-out-cubic);
+}
+
+.message-ai:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(51, 136, 187, 0.25);
+}
+
+.dark .message-ai {
+  color: var(--foreground, #ffffff);
+  background: linear-gradient(135deg, #1a3d52 0%, #2a4d62 100%);
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.message-role {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.message-time {
+  font-size: 0.7rem;
+}
+
+.message-content {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  word-wrap: break-word;
+}
+
+/* 聊天输入区域 - 一体化设计，无分隔线 */
+.chat-input-area {
+  padding: 0.25rem;
+  background: var(--background, #ffffff);
+}
+
+.dark .chat-input-area {
+  background: var(--background, #1a1a1a);
+}
+
+.chat-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* 圆角矩形边框输入框 */
+.chat-input-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 150px;
+  padding: 0.75rem;
+  border: 1.5px solid var(--border-primary);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.6;
+  background: var(--background, #ffffff);
+  color: var(--foreground, #000000);
+  outline: none;
+  transition: all 0.25s var(--ease-out-cubic);
+}
+
+.chat-input-textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(51, 136, 187, 0.12);
+  transform: translateY(-1px);
+}
+
+.chat-input-textarea::placeholder {
+  color: var(--foreground-secondary, #9ca3af);
+  opacity: 0.7;
+}
+
+.dark .chat-input-textarea {
+  background: var(--background, #1a1a1a);
+  color: var(--foreground, #ffffff);
+  border-color: rgba(51, 136, 187, 0.4);
+}
+
+/* 按钮组布局 */
+.chat-input-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-actions-left,
+.chat-actions-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}

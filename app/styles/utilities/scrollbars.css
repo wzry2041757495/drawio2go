@@ -1,0 +1,37 @@
+/* 消息滚动条样式优化 */
+.messages-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+.messages-scroll-area::-webkit-scrollbar-thumb:hover {
+  opacity: 0.7;
+}
+
+/* 会话菜单滚动条样式 */
+.chat-session-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-session-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-session-menu::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+.chat-session-menu::-webkit-scrollbar-thumb:hover {
+  opacity: 0.7;
+}
