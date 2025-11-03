@@ -1,0 +1,152 @@
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.modal-content {
+  background: var(--background, #ffffff);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  min-width: 400px;
+  max-width: 90vw;
+  max-height: 90vh;
+  box-shadow: 0 4px 16px rgba(51, 136, 187, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: slideIn 0.2s ease-out;
+}
+
+.dark .modal-content {
+  background: var(--background, #1a1a1a);
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* 系统提示词弹窗 */
+.prompt-modal {
+  min-width: 600px;
+  max-width: 800px;
+}
+
+.prompt-textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 0.75rem;
+  border: 2px solid rgba(51, 136, 187, 0.3);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.6;
+  background: var(--background, #ffffff);
+  color: var(--foreground, #000000);
+  outline: none;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.prompt-textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(51, 136, 187, 0.1);
+}
+
+.dark .prompt-textarea {
+  background: var(--background, #1a1a1a);
+  color: var(--foreground, #ffffff);
+  border-color: rgba(51, 136, 187, 0.4);
+}
+
+/* 测试弹窗 */
+.test-modal {
+  min-width: 400px;
+}
+
+.test-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--primary-light);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.test-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  border-radius: 0.5rem;
+}
+
+.test-success {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.test-error {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.test-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.test-success .test-icon {
+  background: rgba(34, 197, 94, 0.2);
+  color: rgb(34, 197, 94);
+}
+
+.test-error .test-icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: rgb(239, 68, 68);
+}
+
+.test-message {
+  text-align: center;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--foreground, #000000);
+  margin: 0;
+}
+
+.dark .test-message {
+  color: var(--foreground, #ffffff);
+}
