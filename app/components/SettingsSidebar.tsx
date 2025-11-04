@@ -38,7 +38,7 @@ const PROVIDER_OPTIONS: Array<{
   },
 ];
 
-export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: SettingsSidebarProps) {
+export default function SettingsSidebar({ onSettingsChange }: SettingsSidebarProps) {
   const [defaultPath, setDefaultPath] = useState("");
   const [savedPath, setSavedPath] = useState("");
 
@@ -100,8 +100,8 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
 
   // 选择文件夹
   const handleSelectFolder = async () => {
-    if (typeof window !== "undefined" && (window as any).electron) {
-      const result = await (window as any).electron.selectFolder();
+    if (typeof window !== "undefined" && window.electron) {
+      const result = await window.electron.selectFolder();
       if (result) {
         setDefaultPath(result);
       }
@@ -194,10 +194,10 @@ export default function SettingsSidebar({ isOpen, onClose, onSettingsChange }: S
           message: `测试失败：${data.error}`,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setTestResult({
         success: false,
-        message: `测试失败：${error.message || "网络错误"}`,
+        message: `测试失败：${(error as Error).message || "网络错误"}`,
       });
     } finally {
       setIsTesting(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 
 interface DrawioEditorNativeProps {
   initialXml?: string;
@@ -16,7 +16,7 @@ export default function DrawioEditorNative({ initialXml, onSave }: DrawioEditorN
   const drawioUrl = `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=1&noExitBtn=1`;
 
   // 提取加载数据的函数
-  const loadDiagram = (xml: string | undefined, skipReadyCheck = false) => {
+  const loadDiagram = useCallback((xml: string | undefined, skipReadyCheck = false) => {
     if (iframeRef.current && iframeRef.current.contentWindow && (isReady || skipReadyCheck)) {
       const loadData = {
         action: 'load',
@@ -26,7 +26,7 @@ export default function DrawioEditorNative({ initialXml, onSave }: DrawioEditorN
       console.log("📤 发送 load 命令");
       iframeRef.current.contentWindow.postMessage(JSON.stringify(loadData), '*');
     }
-  };
+  }, [isReady]);
 
   useEffect(() => {
     console.log("🔵 DrawioEditorNative 组件已挂载");
@@ -81,7 +81,8 @@ export default function DrawioEditorNative({ initialXml, onSave }: DrawioEditorN
       console.log("🔴 DrawioEditorNative 组件将卸载");
       window.removeEventListener('message', handleMessage);
     };
-  }, [onSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 监听 initialXml 的变化，动态加载新内容
   useEffect(() => {
@@ -94,7 +95,7 @@ export default function DrawioEditorNative({ initialXml, onSave }: DrawioEditorN
       loadDiagram(initialXml);
       previousXmlRef.current = initialXml;
     }
-  }, [initialXml, isReady]);
+  }, [initialXml, isReady, loadDiagram]);
 
   // iframe 加载事件
   const handleIframeLoad = () => {

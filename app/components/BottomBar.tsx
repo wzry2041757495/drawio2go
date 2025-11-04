@@ -19,8 +19,8 @@ export default function BottomBar({
 }: BottomBarProps) {
   const handleGithubClick = () => {
     // 在 Electron 中打开外部链接
-    if (typeof window !== "undefined" && (window as any).electron) {
-      (window as any).electron.openExternal("https://github.com/Menghuan1918/drawio2go");
+    if (typeof window !== "undefined" && window.electron) {
+      window.electron.openExternal("https://github.com/Menghuan1918/drawio2go");
     } else {
       // 在浏览器中直接打开
       window.open("https://github.com/Menghuan1918/drawio2go", "_blank");

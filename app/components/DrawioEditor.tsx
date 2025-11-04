@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { DrawIoEmbed, DrawIoEmbedRef } from "react-drawio";
 
 interface DrawioEditorProps {
@@ -10,7 +10,6 @@ interface DrawioEditorProps {
 
 export default function DrawioEditor({ initialXml, onSave }: DrawioEditorProps) {
   const drawioRef = useRef<DrawIoEmbedRef>(null);
-  const [isReady, setIsReady] = useState(false);
 
   // 组件挂载时的日志
   useEffect(() => {
@@ -19,11 +18,11 @@ export default function DrawioEditor({ initialXml, onSave }: DrawioEditorProps) 
     return () => {
       console.log("DrawioEditor 组件将卸载");
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 当编辑器准备好时
   const handleLoad = () => {
-    setIsReady(true);
     console.log("✅ DrawIO 编辑器已加载成功！");
   };
 
@@ -36,7 +35,7 @@ export default function DrawioEditor({ initialXml, onSave }: DrawioEditorProps) 
   };
 
   // 导出功能
-  const handleExport = (data: any) => {
+  const handleExport = (data: unknown) => {
     console.log("导出触发", data);
   };
 

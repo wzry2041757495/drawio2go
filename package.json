@@ -7,7 +7,7 @@
     "dev": "node server.js",
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
-    "lint": "eslint .",
+    "lint": "eslint . && npx tsc --noEmit",
     "electron": "electron .",
     "electron:dev": "concurrently \"pnpm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "pnpm run build && electron-builder"

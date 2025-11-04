@@ -15,18 +15,22 @@ import type { ToolCallRequest } from '@/app/types/socket-protocol';
  * @param toolName - 工具名称
  * @param input - 工具输入参数
  * @param timeout - 超时时间（毫秒），默认 30000ms (30秒)
- * @returns Promise<any> - 工具执行结果
+ * @returns Promise<unknown> - 工具执行结果
  *
  * @throws Error - 当 Socket.IO 未初始化、连接断开或执行超时时抛出错误
  */
 export async function executeToolOnClient(
   toolName: string,
-  input: any,
+  input: Record<string, unknown>,
   timeout: number = 30000
-): Promise<any> {
+): Promise<unknown> {
   // 获取全局 Socket.IO 实例
-  const io = (global as any).io;
-  const pendingRequests = (global as any).pendingRequests;
+  const io = global.io;
+  const pendingRequests = global.pendingRequests;
+
+  if (!pendingRequests) {
+    throw new Error('pendingRequests 未初始化');
+  }
 
   if (!io) {
     throw new Error('Socket.IO 服务器未初始化');
@@ -49,7 +53,7 @@ export async function executeToolOnClient(
 
     // 存储 Promise 回调
     pendingRequests.set(requestId, {
-      resolve: (result: any) => {
+      resolve: (result: unknown) => {
         clearTimeout(timeoutId);
         resolve(result);
       },
@@ -62,7 +66,7 @@ export async function executeToolOnClient(
     // 构造请求消息
     const request: ToolCallRequest = {
       requestId,
-      toolName: toolName as any,
+      toolName: toolName as ToolCallRequest['toolName'],
       input,
       timeout,
     };
@@ -79,14 +83,14 @@ export async function executeToolOnClient(
  *
  * @param toolName - 工具名称
  * @param input - 工具输入参数
- * @returns Promise<any> - 工具执行结果
+ * @returns Promise<unknown> - 工具执行结果
  *
  * @throws Error - 当工具未实现时抛出错误
  */
 export async function executeToolOnServer(
   toolName: string,
-  input: any
-): Promise<any> {
+  _input: Record<string, unknown>
+): Promise<unknown> {
   // 未来在这里实现后端工具
   // 例如：文件读写、数据库操作等不需要浏览器环境的工具
   throw new Error(`服务器端工具 ${toolName} 尚未实现`);

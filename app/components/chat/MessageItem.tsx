@@ -1,16 +1,10 @@
 "use client";
 
 import MessageContent from "./MessageContent";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  parts: any[];
-  createdAt?: Date;
-}
+import type { UIMessage } from "ai";
 
 interface MessageItemProps {
-  message: Message;
+  message: UIMessage;
   status: string;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;
@@ -20,18 +14,11 @@ interface MessageItemProps {
 
 export default function MessageItem({
   message,
-  status,
   expandedToolCalls,
   expandedThinkingBlocks,
   onToolCallToggle,
   onThinkingBlockToggle,
 }: MessageItemProps) {
-  // 从 parts 数组中提取思考内容
-  const reasoningParts = message.parts.filter((part: any) => part.type === 'reasoning');
-  const reasoning = reasoningParts.map((part: any) => part.text).join('\n');
-  const isReasoningStreaming = reasoningParts.some((part: any) => part.state === 'streaming');
-  const isStreaming = isReasoningStreaming || (message.role === 'assistant' && status === 'streaming');
-
   return (
     <div
       className={`message ${
@@ -40,7 +27,7 @@ export default function MessageItem({
     >
       <div className="message-header">
         <span className="message-role">
-          {message.role === "user" ? "你" : "AI"}
+          {message.role === "user" ? "你" : message.role === "system" ? "系统" : "AI"}
         </span>
         <span className="message-time">
           {new Date().toLocaleTimeString("zh-CN", {
@@ -52,8 +39,6 @@ export default function MessageItem({
       <div className="message-content">
         <MessageContent
           message={message}
-          reasoning={reasoning}
-          isStreaming={isStreaming}
           expandedToolCalls={expandedToolCalls}
           expandedThinkingBlocks={expandedThinkingBlocks}
           onToolCallToggle={onToolCallToggle}

@@ -1,20 +1,15 @@
 "use client";
 
 import { useRef } from "react";
+import { type LLMConfig } from "@/app/types/chat";
+import type { UIMessage } from "ai";
 import EmptyState from "./EmptyState";
 import MessageItem from "./MessageItem";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  parts: any[];
-  createdAt?: Date;
-}
-
 interface MessageListProps {
-  messages: Message[];
+  messages: UIMessage[];
   configLoading: boolean;
-  llmConfig: any;
+  llmConfig: LLMConfig | null;
   status: string;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;

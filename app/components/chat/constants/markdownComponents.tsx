@@ -5,7 +5,7 @@
 import { type Components as MarkdownComponents } from "react-markdown";
 
 export const markdownComponents: MarkdownComponents = {
-  a({ node, ...props }) {
+  a({ node: _node, ...props }) {
     return (
       <a
         {...props}
@@ -15,7 +15,7 @@ export const markdownComponents: MarkdownComponents = {
       />
     );
   },
-  code({ node, className, children, ...props }) {
+  code({ node: _node, className, children, ...props }) {
     const content = String(children).replace(/\n$/, "");
     const isInline = !className?.includes('language-');
 
@@ -33,13 +33,13 @@ export const markdownComponents: MarkdownComponents = {
       </pre>
     );
   },
-  blockquote({ node, ...props }) {
+  blockquote({ node: _node, ...props }) {
     return <blockquote className="message-quote" {...props} />;
   },
-  ul({ node, ...props }) {
+  ul({ node: _node, ...props }) {
     return <ul className="message-list" {...props} />;
   },
-  ol({ node, ...props }) {
+  ol({ node: _node, ...props }) {
     return <ol className="message-list message-list-ordered" {...props} />;
   },
 };

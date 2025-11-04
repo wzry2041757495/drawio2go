@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatSession, ChatSessionsData } from "./types/chat";
+import type { ChatSessionsData } from "@/app/types/chat";
 
 interface ChatSessionMenuProps {
   showSessionMenu: boolean;

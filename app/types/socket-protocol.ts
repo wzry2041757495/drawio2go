@@ -10,7 +10,7 @@
 export interface ToolCallRequest {
   requestId: string;
   toolName: 'get_drawio_xml' | 'replace_drawio_xml' | 'batch_replace_drawio_xml';
-  input: any;
+  input: Record<string, unknown>;
   timeout: number;
 }
 
@@ -20,7 +20,7 @@ export interface ToolCallRequest {
 export interface ToolCallResult {
   requestId: string;
   success: boolean;
-  result?: any;
+  result?: unknown;
   error?: string;
 }
 

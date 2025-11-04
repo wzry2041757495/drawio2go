@@ -18,7 +18,7 @@ declare global {
    * key: requestId, value: { resolve, reject }
    */
   var pendingRequests: Map<string, {
-    resolve: (value: any) => void;
+    resolve: (value: unknown) => void;
     reject: (error: Error) => void;
   }> | undefined;
 

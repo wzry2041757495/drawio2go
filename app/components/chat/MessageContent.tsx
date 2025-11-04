@@ -6,18 +6,10 @@ import ToolCallCard from "./ToolCallCard";
 import { markdownComponents } from "./constants/markdownComponents";
 import { getToolExpansionKey, shouldToolBeExpanded } from "./utils/toolUtils";
 import { type ToolMessagePart } from "./constants/toolConstants";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  parts: any[];
-  createdAt?: Date;
-}
+import type { UIMessage } from "ai";
 
 interface MessageContentProps {
-  message: Message;
-  reasoning: string;
-  isStreaming: boolean;
+  message: UIMessage;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;
   onToolCallToggle: (key: string) => void;
@@ -26,8 +18,6 @@ interface MessageContentProps {
 
 export default function MessageContent({
   message,
-  reasoning,
-  isStreaming,
   expandedToolCalls,
   expandedThinkingBlocks,
   onToolCallToggle,
@@ -35,18 +25,22 @@ export default function MessageContent({
 }: MessageContentProps) {
   return (
     <>
-      {/* 如果有思考内容，先渲染思考框 */}
-      {reasoning && message.role === 'assistant' && (
-        <ThinkingBlock
-          reasoning={reasoning}
-          isStreaming={isStreaming}
-          expanded={expandedThinkingBlocks[message.id] ?? false}
-          onToggle={() => onThinkingBlockToggle(message.id)}
-        />
-      )}
-
       {/* 渲染消息部分 */}
-      {message.parts.map((part: any, index: number) => {
+      {message.parts.map((part, index: number) => {
+        // 思考内容
+        if (part.type === "reasoning") {
+          const isReasoningStreaming = part.state === 'streaming';
+          return (
+            <ThinkingBlock
+              key={`${message.id}-${index}`}
+              reasoning={part.text ?? ""}
+              isStreaming={isReasoningStreaming}
+              expanded={expandedThinkingBlocks[message.id] ?? false}
+              onToggle={() => onThinkingBlockToggle(message.id)}
+            />
+          );
+        }
+
         // 文本内容
         if (part.type === "text") {
           return (

@@ -23,6 +23,14 @@ export default [
     },
     ...compat.extends("next/core-web-vitals", "next/typescript"),
     {
+        rules: {
+            "@typescript-eslint/no-unused-vars": ["warn", {
+                "argsIgnorePattern": "^_",
+                "varsIgnorePattern": "^_"
+            }]
+        },
+    },
+    {
         files: ["server.js", "electron/**/*.js"],
         rules: {
             "@typescript-eslint/no-require-imports": "off",

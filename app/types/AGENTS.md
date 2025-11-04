@@ -15,6 +15,28 @@ LLM 供应商与聊天消息相关的核心类型定义。
 - **LLMConfig**: 设置页与后端共用的 LLM 配置（URL、密钥、温度、模型、系统提示、供应商、工具轮次数）。
 - **ToolInvocation/ToolInvocationState**: AI 工具调用的状态结构。
 - **ChatMessage**: 扩展 AI SDK Message 的聊天消息定义。
+- **ChatSession**: 聊天会话定义（ID、标题、消息列表、时间戳）。
+- **ChatSessionsData**: 会话数据管理结构。
+- **ChatExportData**: 会话导入导出数据格式。
+
+### socket-protocol.ts
+Socket.IO 通讯协议的类型定义。
+
+#### 核心接口
+
+- **ToolRequest**: 工具执行请求结构
+- **ToolResponse**: 工具执行响应结构
+- **RequestStatus**: 请求状态枚举（pending, completed, error）
+- **SocketEvents**: Socket.IO 事件名称常量
+
+### global.d.ts
+全局类型声明和环境变量定义。
+
+#### 主要内容
+
+- 全局 Socket.IO 客户端类型
+- 环境变量类型声明
+- 扩展的 Window 对象属性
 
 ### drawio-tools.ts
 DrawIO XML 操作工具的完整类型定义。
