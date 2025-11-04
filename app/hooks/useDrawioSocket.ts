@@ -14,6 +14,7 @@ import type {
   ServerToClientEvents,
   ClientToServerEvents,
 } from '@/app/types/socket-protocol';
+import type { Replacement } from '@/app/types/drawio-tools';
 import {
   getDrawioXML,
   replaceDrawioXML,
@@ -61,26 +62,26 @@ export function useDrawioSocket() {
       console.log(`[Socket.IO Client] 收到工具调用请求: ${request.toolName} (${request.requestId})`);
 
       try {
-        let result: any;
+        let result: { success: boolean; error?: string; message?: string; [key: string]: unknown };
 
         // 根据工具名称执行相应函数
         switch (request.toolName) {
           case 'get_drawio_xml':
-            result = getDrawioXML();
+            result = getDrawioXML() as unknown as { success: boolean; error?: string; message?: string; [key: string]: unknown };
             break;
 
           case 'replace_drawio_xml':
             if (!request.input?.drawio_xml) {
               throw new Error('缺少 drawio_xml 参数');
             }
-            result = replaceDrawioXML(request.input.drawio_xml);
+            result = replaceDrawioXML(request.input.drawio_xml as string) as unknown as { success: boolean; error?: string; message?: string; [key: string]: unknown };
             break;
 
           case 'batch_replace_drawio_xml':
             if (!request.input?.replacements) {
               throw new Error('缺少 replacements 参数');
             }
-            result = batchReplaceDrawioXML(request.input.replacements);
+            result = batchReplaceDrawioXML(request.input.replacements as Replacement[]) as unknown as { success: boolean; error?: string; message?: string; [key: string]: unknown };
             break;
 
           default:

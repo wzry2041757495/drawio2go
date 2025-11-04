@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { type UIMessage, type TextUIPart } from "ai";
 import { ChatSession, ChatSessionsData, ChatExportData } from "@/app/types/chat";
 
 const STORAGE_KEY = "chatSessions";
@@ -10,7 +11,7 @@ const STORAGE_KEY = "chatSessions";
  * 从消息生成会话标题
  * 取第一条用户消息的前30个字符作为标题
  */
-function generateTitle(messages: any[]): string {
+function generateTitle(messages: UIMessage[]): string {
   if (messages.length === 0) return "新对话";
 
   // 查找第一条用户消息
@@ -19,10 +20,8 @@ function generateTitle(messages: any[]): string {
 
   // 提取文本内容
   let text = "";
-  if (typeof firstUserMessage.content === "string") {
-    text = firstUserMessage.content;
-  } else if (Array.isArray(firstUserMessage.parts)) {
-    const textPart = firstUserMessage.parts.find((part: any) => part.type === "text");
+  if (Array.isArray(firstUserMessage.parts)) {
+    const textPart = firstUserMessage.parts.find((part): part is TextUIPart => part.type === "text");
     text = textPart?.text || "";
   }
 
@@ -127,7 +126,7 @@ export function useChatSessions() {
   const deleteSession = useCallback((sessionId: string) => {
     if (!sessionsData) return;
 
-    const { [sessionId]: deleted, ...remainingSessions } = sessionsData.sessions;
+    const { [sessionId]: _deleted, ...remainingSessions } = sessionsData.sessions;
     const newSessionOrder = sessionsData.sessionOrder.filter((id) => id !== sessionId);
 
     // 如果删除的是当前会话，切换到第一个剩余会话
@@ -180,7 +179,7 @@ export function useChatSessions() {
   }, [sessionsData, persistData]);
 
   // 更新会话消息
-  const updateSessionMessages = useCallback((sessionId: string, messages: any[]) => {
+  const updateSessionMessages = useCallback((sessionId: string, messages: UIMessage[]) => {
     if (!sessionsData || !sessionsData.sessions[sessionId]) return;
 
     const now = Date.now();

@@ -6,16 +6,10 @@ import ToolCallCard from "./ToolCallCard";
 import { markdownComponents } from "./constants/markdownComponents";
 import { getToolExpansionKey, shouldToolBeExpanded } from "./utils/toolUtils";
 import { type ToolMessagePart } from "./constants/toolConstants";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  parts: any[];
-  createdAt?: Date;
-}
+import type { UIMessage } from "ai";
 
 interface MessageContentProps {
-  message: Message;
+  message: UIMessage;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;
   onToolCallToggle: (key: string) => void;
@@ -32,7 +26,7 @@ export default function MessageContent({
   return (
     <>
       {/* 渲染消息部分 */}
-      {message.parts.map((part: any, index: number) => {
+      {message.parts.map((part, index: number) => {
         // 思考内容
         if (part.type === "reasoning") {
           const isReasoningStreaming = part.state === 'streaming';

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent } from "react";
-import { Button } from "@heroui/react";
+import { type LLMConfig } from "@/app/types/chat";
 import ErrorBanner from "./ErrorBanner";
 import ChatInputActions from "./ChatInputActions";
 
@@ -10,7 +10,7 @@ interface ChatInputAreaProps {
   setInput: (value: string) => void;
   isChatStreaming: boolean;
   configLoading: boolean;
-  llmConfig: any;
+  llmConfig: LLMConfig | null;
   error: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onNewChat: () => void;
@@ -38,7 +38,9 @@ export default function ChatInputArea({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!isSendDisabled) {
-        onSubmit(event as any);
+        const formEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(formEvent, 'target', { value: event.currentTarget.form, enumerable: true });
+        onSubmit(formEvent as unknown as FormEvent<HTMLFormElement>);
       }
     }
   };

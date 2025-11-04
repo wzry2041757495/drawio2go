@@ -77,7 +77,7 @@ function createWindow() {
   }
 
   // 监听控制台日志，帮助调试
-  mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on("console-message", (event, level, message, _line, _sourceId) => {
     console.log(`[Renderer Console] ${message}`);
   });
 }

@@ -19,7 +19,7 @@ interface ChatSidebarProps {
   onClose: () => void;
 }
 
-export default function ChatSidebar({ onClose }: ChatSidebarProps) {
+export default function ChatSidebar({ }: ChatSidebarProps) {
   const [input, setInput] = useState("");
   const [expandedToolCalls, setExpandedToolCalls] = useState<Record<string, boolean>>({});
   const [expandedThinkingBlocks, setExpandedThinkingBlocks] = useState<Record<string, boolean>>({});
@@ -43,7 +43,7 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
   // 初始消息（从当前活动会话加载）
   const initialMessages = useMemo(() => {
     return activeSession?.messages || [];
-  }, [activeSession?.id]); // 只在会话 ID 变化时重新计算
+  }, [activeSession?.messages]); // 只在消息变化时重新计算
 
   // 使用 ref 来跟踪发送消息时的会话ID
   const sendingSessionIdRef = useRef<string | null>(null);

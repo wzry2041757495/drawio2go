@@ -65,8 +65,8 @@ export default function Home() {
     }
 
     // 如果在 Electron 环境中,保存到文件系统
-    if (typeof window !== "undefined" && (window as any).electron) {
-      const result = await (window as any).electron.saveDiagram(
+    if (typeof window !== "undefined" && window.electron) {
+      const result = await window.electron.saveDiagram(
         currentXml,
         settings.defaultPath
       );
@@ -89,9 +89,9 @@ export default function Home() {
 
   // 加载文件
   const handleLoad = async () => {
-    if (typeof window !== "undefined" && (window as any).electron) {
-      const result = await (window as any).electron.loadDiagram();
-      if (result.success) {
+    if (typeof window !== "undefined" && window.electron) {
+      const result = await window.electron.loadDiagram();
+      if (result.success && result.xml) {
         setDiagramXml(result.xml);
         setCurrentXml(result.xml);
         saveDrawioXML(result.xml);

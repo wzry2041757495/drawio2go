@@ -1,16 +1,10 @@
 "use client";
 
 import MessageContent from "./MessageContent";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  parts: any[];
-  createdAt?: Date;
-}
+import type { UIMessage } from "ai";
 
 interface MessageItemProps {
-  message: Message;
+  message: UIMessage;
   status: string;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;
@@ -20,7 +14,6 @@ interface MessageItemProps {
 
 export default function MessageItem({
   message,
-  status,
   expandedToolCalls,
   expandedThinkingBlocks,
   onToolCallToggle,
@@ -34,7 +27,7 @@ export default function MessageItem({
     >
       <div className="message-header">
         <span className="message-role">
-          {message.role === "user" ? "你" : "AI"}
+          {message.role === "user" ? "你" : message.role === "system" ? "系统" : "AI"}
         </span>
         <span className="message-time">
           {new Date().toLocaleTimeString("zh-CN", {

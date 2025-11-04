@@ -67,12 +67,12 @@ export async function POST(req: NextRequest) {
       response: result.text,
       provider: normalizedConfig.providerType,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("测试请求失败:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || "测试请求失败，请检查配置是否正确",
+        error: (error as Error)?.message || "测试请求失败，请检查配置是否正确",
       },
       { status: 500 }
     );

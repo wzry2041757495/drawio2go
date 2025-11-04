@@ -2,9 +2,43 @@
 
 ## 概述
 
-汇总应用层工具函数，包括 DrawIO XML 操作与 LLM 配置管理，支持跨组件复用。
+汇总应用层工具函数，包括 DrawIO XML 操作、AI 工具调用与 LLM 配置管理，支持跨组件复用。
 
-## LLM 配置工具（`llm-config.ts`）
+## 工具文件清单
+
+- **drawio-tools.ts**: DrawIO XML 操作工具集
+- **drawio-ai-tools.ts**: DrawIO AI 工具调用接口
+- **tool-executor.ts**: 工具执行路由器
+- ~~llm-config.ts~~: LLM 配置工具（已迁移到 hooks）
+
+## DrawIO AI 工具调用（`drawio-ai-tools.ts`）
+
+AI 工具调用的统一接口，通过 Socket.IO 与前端通讯执行 DrawIO 相关操作。
+
+### 工具方法
+- `getDiagramData()`: 获取当前图表 XML 数据
+- `updateDiagram(newXml)`: 更新图表 XML 数据
+- `batchReplaceText(replacements)`: 批量替换文本内容
+
+### Socket.IO 通讯
+- 通过 `executeToolOnClient()` 发送执行请求到前端
+- 等待前端执行结果并返回
+- 默认30秒超时机制
+
+## 工具执行路由器（`tool-executor.ts`）
+
+统一路由管理所有工具调用，区分前后端执行。
+
+### 路由逻辑
+- **前端工具**: DrawIO 相关工具 → Socket.IO → 前端执行
+- **后端工具**: 其他工具 → 直接在 Node.js 环境执行
+
+### 支持的工具
+- DrawIO 工具集（前端执行）
+- 预留其他工具接口（后端执行）
+
+## 历史功能：LLM 配置工具（已迁移）
+> ⚠️ 注意：LLM 配置工具已迁移至 `hooks/useLLMConfig.ts`，不再位于此目录
 
 - **默认配置**: `DEFAULT_LLM_CONFIG` 与 `DEFAULT_SYSTEM_PROMPT` 提供统一的初始参数。
 - **URL 规范化**: `normalizeApiUrl` 自动补全 `/v1` 路径并清理尾部斜杠。

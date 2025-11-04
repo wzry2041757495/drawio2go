@@ -76,9 +76,10 @@ interface SettingsSidebarProps {
 ```
 
 ### 5. ChatSidebar.tsx
-**聊天侧边栏内容** - AI 助手界面
+**聊天侧边栏主组件** - AI 助手界面的主入口组件（已重构为模块化架构）
 
 #### 特性
+- **模块化架构**: 重构为12个独立子组件，职责单一，便于维护
 - **一体化布局**: 无分隔线，上方消息区 + 下方输入区
 - **圆角输入框**: 支持图像上传提示
 - **按钮组布局**:
@@ -97,6 +98,31 @@ interface ChatSidebarProps {
   onClose: () => void; // 关闭回调
 }
 ```
+
+### 5.1. 聊天组件模块 (app/components/chat/)
+**模块化聊天组件集** - 从 ChatSidebar 拆分出的12个独立组件
+
+#### 核心组件
+- **ChatSessionHeader**: 会话头部，显示标题和操作按钮
+- **ChatSessionMenu**: 会话选择和操作菜单
+- **MessageList**: 消息列表容器组件
+- **MessageItem**: 单个消息项组件
+- **MessageContent**: 消息内容渲染组件（支持 Markdown）
+- **ChatInputArea**: 输入区域组件
+- **ChatInputActions**: 输入操作按钮组件
+
+#### 辅助组件
+- **EmptyState**: 空状态展示组件
+- **ErrorBanner**: 错误提示横幅组件
+- **ToolCallCard**: 工具调用状态卡片组件
+- **ThinkingBlock**: AI 思考框组件（展示推理过程）
+
+#### 常量和工具
+- **constants/**: 工具常量和 Markdown 组件定义
+- **utils/**: 工具函数和文件操作函数
+
+#### 统一导出
+所有组件通过 `app/components/chat/index.ts` 统一导出，提供清晰的导入接口。
 
 ### 6. BottomBar.tsx
 **底部工具栏** - 主要操作按钮

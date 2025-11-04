@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
-import type { ChatSession } from "./types/chat";
+import type { ChatSession } from "@/app/types/chat";
 
 interface ChatSessionHeaderProps {
   activeSession: ChatSession | null;

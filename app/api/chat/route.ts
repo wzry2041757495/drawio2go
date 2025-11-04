@@ -91,26 +91,27 @@ export async function POST(req: NextRequest) {
     });
 
     return result.toUIMessageStreamResponse({ sendReasoning: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('聊天 API 错误:', error);
 
     let errorMessage = '服务器内部错误';
     let statusCode = 500;
 
-    if (error.message?.includes('Anthropic')) {
-      errorMessage = error.message;
+    const err = error as Error;
+    if (err.message?.includes('Anthropic')) {
+      errorMessage = err.message;
       statusCode = 400;
-    } else if (error.message?.includes('API key')) {
+    } else if (err.message?.includes('API key')) {
       errorMessage = 'API 密钥无效或缺失';
       statusCode = 401;
-    } else if (error.message?.includes('model')) {
+    } else if (err.message?.includes('model')) {
       errorMessage = '模型不存在或不可用';
       statusCode = 400;
-    } else if (error.message?.includes('配置参数')) {
-      errorMessage = error.message;
+    } else if (err.message?.includes('配置参数')) {
+      errorMessage = err.message;
       statusCode = 400;
-    } else if (error.message) {
-      errorMessage = error.message;
+    } else if (err.message) {
+      errorMessage = err.message;
     }
 
     return NextResponse.json(

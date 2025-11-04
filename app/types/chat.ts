@@ -15,9 +15,9 @@ export type ToolInvocationState = 'call' | 'result';
 export interface ToolInvocation {
   toolCallId: string;
   toolName: string;
-  args: Record<string, any>;
+  args: Record<string, unknown>;
   state: ToolInvocationState;
-  result?: any;
+  result?: unknown;
 }
 
 export interface ChatMessage {
@@ -28,11 +28,13 @@ export interface ChatMessage {
   createdAt?: Date;
 }
 
+import type { UIMessage } from 'ai';
+
 // 会话管理相关类型（使用 UIMessage 从 @ai-sdk/react）
 export interface ChatSession {
   id: string;                // 唯一标识（UUID）
   title: string;             // 会话标题（自动生成）
-  messages: any[];           // 消息列表（UIMessage 类型）
+  messages: UIMessage[];     // 消息列表（UIMessage 类型）
   createdAt: number;         // 创建时间戳
   updatedAt: number;         // 最后更新时间戳
 }
