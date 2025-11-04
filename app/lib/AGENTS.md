@@ -28,7 +28,7 @@
 - **Base64 解码**: 每次从前端读取 XML 后都会自动检测并解码 `data:image/svg+xml;base64,` 前缀
 
 ### 提供的函数
-- `executeDrawioRead(xpath?: string)`: 返回结构化的查询结果（元素 / 属性 / 文本）
+- `executeDrawioRead(xpath?: string)`: 返回结构化的查询结果（元素 / 属性 / 文本），并在 `matched_xpath` 字段中携带命中路径
 - `executeDrawioEditBatch({ operations })`: 执行批量操作，遵守 `allow_no_match` 语义并保持原子性
 
 ### 支持的操作类型

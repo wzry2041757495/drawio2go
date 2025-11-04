@@ -57,7 +57,16 @@ export async function executeDrawioRead(xpathExpression?: string): Promise<Drawi
       const scalar = toScalarString(evaluation);
       return {
         success: true,
-        results: scalar !== undefined ? [{ type: 'text', value: scalar }] : [],
+        results:
+          scalar !== undefined
+            ? [
+                {
+                  type: 'text',
+                  value: scalar,
+                  matched_xpath: xpathExpression ?? '',
+                },
+              ]
+            : [],
       };
     }
 
@@ -200,6 +209,7 @@ function parseXml(xml: string): Document {
 
 function convertNodeToResult(node: Node): DrawioQueryResult | null {
   const serializer = new XMLSerializer();
+  const matchedXPath = buildXPathForNode(node);
 
   switch (node.nodeType) {
     case node.ELEMENT_NODE: {
@@ -216,6 +226,7 @@ function convertNodeToResult(node: Node): DrawioQueryResult | null {
         tag_name: element.tagName,
         attributes,
         xml_string: serializer.serializeToString(element),
+        matched_xpath: matchedXPath,
       };
     }
     case node.ATTRIBUTE_NODE: {
@@ -224,12 +235,14 @@ function convertNodeToResult(node: Node): DrawioQueryResult | null {
         type: 'attribute',
         name: attr.name,
         value: attr.value,
+        matched_xpath: matchedXPath,
       };
     }
     case node.TEXT_NODE: {
       return {
         type: 'text',
         value: node.nodeValue ?? '',
+        matched_xpath: matchedXPath,
       };
     }
     default:
@@ -464,4 +477,58 @@ function toScalarString(value: unknown): string | undefined {
     return value.textContent ?? undefined;
   }
   return undefined;
+}
+
+function buildXPathForNode(node: Node): string {
+  switch (node.nodeType) {
+    case node.DOCUMENT_NODE:
+      return '';
+    case node.ELEMENT_NODE: {
+      const element = node as Element;
+      const parent = element.parentNode;
+      const index = getElementIndex(element);
+      const segment = index > 1 ? `${element.tagName}[${index}]` : element.tagName;
+      const parentPath = parent ? buildXPathForNode(parent) : '';
+      return `${parentPath}/${segment}`;
+    }
+    case node.ATTRIBUTE_NODE: {
+      const attr = node as Attr;
+      const owner = attr.ownerElement;
+      const ownerPath = owner ? buildXPathForNode(owner) : '';
+      return `${ownerPath}/@${attr.name}`;
+    }
+    case node.TEXT_NODE: {
+      const parent = node.parentNode;
+      const parentPath = parent ? buildXPathForNode(parent) : '';
+      const index = getTextNodeIndex(node);
+      const segment = index > 1 ? `text()[${index}]` : 'text()';
+      return `${parentPath}/${segment}`;
+    }
+    default:
+      return '';
+  }
+}
+
+function getElementIndex(element: Element): number {
+  const parent = element.parentNode;
+  if (!parent) {
+    return 1;
+  }
+  const siblings = Array.from(parent.childNodes).filter(
+    (node) => node.nodeType === node.ELEMENT_NODE && (node as Element).tagName === element.tagName
+  );
+  const position = siblings.indexOf(element);
+  return position >= 0 ? position + 1 : 1;
+}
+
+function getTextNodeIndex(node: Node): number {
+  const parent = node.parentNode;
+  if (!parent) {
+    return 1;
+  }
+  const textSiblings = Array.from(parent.childNodes).filter(
+    (child): child is ChildNode => child.nodeType === child.TEXT_NODE
+  );
+  const position = textSiblings.indexOf(node as ChildNode);
+  return position >= 0 ? position + 1 : 1;
 }

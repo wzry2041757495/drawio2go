@@ -36,20 +36,24 @@ export type DrawioQueryResult =
   | DrawioAttributeResult
   | DrawioTextResult;
 
-export interface DrawioElementResult {
+interface DrawioQueryResultBase {
+  matched_xpath: string;
+}
+
+export interface DrawioElementResult extends DrawioQueryResultBase {
   type: 'element';
   tag_name: string;
   attributes: Record<string, string>;
   xml_string: string;
 }
 
-export interface DrawioAttributeResult {
+export interface DrawioAttributeResult extends DrawioQueryResultBase {
   type: 'attribute';
   name: string;
   value: string;
 }
 
-export interface DrawioTextResult {
+export interface DrawioTextResult extends DrawioQueryResultBase {
   type: 'text';
   value: string;
 }

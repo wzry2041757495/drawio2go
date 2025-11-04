@@ -7,65 +7,90 @@ import {
 } from './drawio-xml-service';
 import type { DrawioEditOperation } from '@/app/types/drawio-tools';
 
-const xpathSchema = z.string().min(1, 'XPath 表达式不能为空');
+const operationSchema = z
+  .object({
+    type: z.enum([
+      'set_attribute',
+      'remove_attribute',
+      'insert_element',
+      'remove_element',
+      'replace_element',
+      'set_text_content',
+    ]),
+    xpath: z.string().optional(),
+    target_xpath: z.string().optional(),
+    key: z.string().optional(),
+    value: z.string().optional(),
+    new_xml: z.string().optional(),
+    position: z.enum(['append_child', 'prepend_child', 'before', 'after']).optional(),
+    allow_no_match: z.boolean().optional(),
+  })
+  .superRefine((operation, ctx) => {
+    const ensureNonEmpty = (
+      value: string | undefined,
+      path: (string | number)[],
+      message: string
+    ) => {
+      if (typeof value !== 'string' || value.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path,
+          message,
+        });
+      }
+    };
 
-const setAttributeSchema = z.object({
-  type: z.literal('set_attribute'),
-  xpath: xpathSchema,
-  key: z.string().min(1, '属性名不能为空'),
-  value: z.string(),
-  allow_no_match: z.boolean().optional(),
-});
-
-const removeAttributeSchema = z.object({
-  type: z.literal('remove_attribute'),
-  xpath: xpathSchema,
-  key: z.string().min(1, '属性名不能为空'),
-  allow_no_match: z.boolean().optional(),
-});
-
-const insertElementSchema = z.object({
-  type: z.literal('insert_element'),
-  target_xpath: xpathSchema,
-  new_xml: z.string().min(1, 'new_xml 不能为空'),
-  position: z
-    .enum(['append_child', 'prepend_child', 'before', 'after'])
-    .optional(),
-  allow_no_match: z.boolean().optional(),
-});
-
-const removeElementSchema = z.object({
-  type: z.literal('remove_element'),
-  xpath: xpathSchema,
-  allow_no_match: z.boolean().optional(),
-});
-
-const replaceElementSchema = z.object({
-  type: z.literal('replace_element'),
-  xpath: xpathSchema,
-  new_xml: z.string().min(1, 'new_xml 不能为空'),
-  allow_no_match: z.boolean().optional(),
-});
-
-const setTextContentSchema = z.object({
-  type: z.literal('set_text_content'),
-  xpath: xpathSchema,
-  value: z.string(),
-  allow_no_match: z.boolean().optional(),
-});
-
-const operationSchema = z.union([
-  setAttributeSchema,
-  removeAttributeSchema,
-  insertElementSchema,
-  removeElementSchema,
-  replaceElementSchema,
-  setTextContentSchema,
-]);
+    switch (operation.type) {
+      case 'set_attribute': {
+        ensureNonEmpty(operation.xpath, ['xpath'], 'xpath 不能为空');
+        ensureNonEmpty(operation.key, ['key'], 'key 不能为空');
+        if (typeof operation.value !== 'string') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['value'],
+            message: 'value 必须是字符串',
+          });
+        }
+        break;
+      }
+      case 'remove_attribute': {
+        ensureNonEmpty(operation.xpath, ['xpath'], 'xpath 不能为空');
+        ensureNonEmpty(operation.key, ['key'], 'key 不能为空');
+        break;
+      }
+      case 'insert_element': {
+        ensureNonEmpty(operation.target_xpath, ['target_xpath'], 'target_xpath 不能为空');
+        ensureNonEmpty(operation.new_xml, ['new_xml'], 'new_xml 不能为空');
+        break;
+      }
+      case 'remove_element': {
+        ensureNonEmpty(operation.xpath, ['xpath'], 'xpath 不能为空');
+        break;
+      }
+      case 'replace_element': {
+        ensureNonEmpty(operation.xpath, ['xpath'], 'xpath 不能为空');
+        ensureNonEmpty(operation.new_xml, ['new_xml'], 'new_xml 不能为空');
+        break;
+      }
+      case 'set_text_content': {
+        ensureNonEmpty(operation.xpath, ['xpath'], 'xpath 不能为空');
+        if (typeof operation.value !== 'string') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['value'],
+            message: 'value 必须是字符串',
+          });
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
 
 export const drawioReadTool = tool({
   description:
-    '使用 XPath 精确读取 DrawIO XML 内容。默认返回根节点，可传入 xpath 参数精确查询元素、属性或文本。',
+    '使用 XPath 精确读取 DrawIO XML 内容。默认返回根节点，可传入 xpath 参数精确查询元素、属性或文本，结果会包含 matched_xpath 以便后续调用。',
   inputSchema: z
     .object({
       xpath: z.string().optional(),

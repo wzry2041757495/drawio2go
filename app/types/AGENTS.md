@@ -72,12 +72,12 @@ export interface XMLValidationResult {
 
 #### drawio_read 查询结果
 
-**DrawioQueryResult** - 统一的查询结果联合类型
+**DrawioQueryResult** - 统一的查询结果联合类型（包含 matched_xpath 字段，指向命中的节点路径）
 ```typescript
 export type DrawioQueryResult =
-  | { type: 'element'; tag_name: string; attributes: Record<string, string>; xml_string: string }
-  | { type: 'attribute'; name: string; value: string }
-  | { type: 'text'; value: string };
+  | { type: 'element'; tag_name: string; attributes: Record<string, string>; xml_string: string; matched_xpath: string }
+  | { type: 'attribute'; name: string; value: string; matched_xpath: string }
+  | { type: 'text'; value: string; matched_xpath: string };
 ```
 
 **DrawioReadResult** - 查询响应
