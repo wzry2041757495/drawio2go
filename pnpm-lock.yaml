@@ -29,6 +29,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.1.16
         version: 4.1.16
+      '@xmldom/xmldom':
+        specifier: ^0.8.11
+        version: 0.8.11
       ai:
         specifier: ^5.0.86
         version: 5.0.86(zod@4.1.12)
@@ -68,6 +71,9 @@ importers:
       uuid:
         specifier: ^11.0.6
         version: 11.1.0
+      xpath:
+        specifier: ^0.0.34
+        version: 0.0.34
       zod:
         specifier: ^4.1.12
         version: 4.1.12
@@ -3925,6 +3931,10 @@ packages:
   xmlhttprequest-ssl@2.1.2:
     resolution: {integrity: sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ==}
     engines: {node: '>=0.4.0'}
+
+  xpath@0.0.34:
+    resolution: {integrity: sha512-FxF6+rkr1rNSQrhUNYrAFJpRXNzlDoMxeXN5qI84939ylEv3qqPFKa85Oxr6tDaJKqwW6KKyo2v26TSv3k6LeA==}
+    engines: {node: '>=0.6.0'}
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -8934,6 +8944,8 @@ snapshots:
   xmlbuilder@15.1.1: {}
 
   xmlhttprequest-ssl@2.1.2: {}
+
+  xpath@0.0.34: {}
 
   y18n@5.0.8: {}
 
