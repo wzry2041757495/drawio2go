@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import ThinkingBlock from "./ThinkingBlock";
 import ToolCallCard from "./ToolCallCard";
+import { TypingIndicator } from "./TypingIndicator";
 import { markdownComponents } from "./constants/markdownComponents";
 import { getToolExpansionKey, shouldToolBeExpanded } from "./utils/toolUtils";
 import { type ToolMessagePart } from "./constants/toolConstants";
@@ -10,6 +11,7 @@ import type { UIMessage } from "ai";
 
 interface MessageContentProps {
   message: UIMessage;
+  status?: string;
   expandedToolCalls: Record<string, boolean>;
   expandedThinkingBlocks: Record<string, boolean>;
   onToolCallToggle: (key: string) => void;
@@ -18,11 +20,16 @@ interface MessageContentProps {
 
 export default function MessageContent({
   message,
+  status,
   expandedToolCalls,
   expandedThinkingBlocks,
   onToolCallToggle,
   onThinkingBlockToggle,
 }: MessageContentProps) {
+  // 判断是否正在流式输出
+  const isStreaming = status === "submitted" || status === "streaming";
+  const isAssistantMessage = message.role === "assistant";
+
   return (
     <>
       {/* 渲染消息部分 */}
@@ -43,11 +50,19 @@ export default function MessageContent({
 
         // 文本内容
         if (part.type === "text") {
+          // 判断是否是最后一个文本部分
+          const isLastTextPart = index === message.parts.length - 1;
+          const shouldShowTypingIndicator =
+            isStreaming && isAssistantMessage && isLastTextPart;
+
           return (
-            <div key={`${message.id}-${index}`} className="message-markdown">
-              <ReactMarkdown components={markdownComponents}>
-                {part.text ?? ""}
-              </ReactMarkdown>
+            <div key={`${message.id}-${index}`} className="message-markdown-wrapper">
+              <div className="message-markdown">
+                <ReactMarkdown components={markdownComponents}>
+                  {part.text ?? ""}
+                </ReactMarkdown>
+              </div>
+              {shouldShowTypingIndicator && <TypingIndicator />}
             </div>
           );
         }

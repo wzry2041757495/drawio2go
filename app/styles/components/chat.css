@@ -190,3 +190,27 @@
   gap: 0.5rem;
   align-items: center;
 }
+
+/* Markdown内容包装器 - 让打字指示器显示在同一行 */
+.message-markdown-wrapper {
+  display: inline;
+}
+
+.message-markdown-wrapper .message-markdown {
+  display: inline;
+}
+
+.message-markdown-wrapper .message-markdown > * {
+  display: inline;
+  margin: 0;
+}
+
+.message-markdown-wrapper .message-markdown p {
+  display: inline;
+  margin: 0;
+}
+
+.message-markdown-wrapper .message-markdown p:not(:last-child)::after {
+  content: "\A";
+  white-space: pre;
+}

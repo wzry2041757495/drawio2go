@@ -1,0 +1,55 @@
+/**
+ * AI打字机效果 - 脉冲缩放动画
+ * 使用项目主题色 #3388BB
+ */
+
+.typing-indicator {
+  display: inline;
+  margin-left: 2px;
+}
+
+.typing-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #3388BB;
+  animation: pulse-scale 1.5s ease-in-out infinite;
+  vertical-align: baseline;
+}
+
+/* 脉冲缩放动画 - 类似GPT效果 */
+@keyframes pulse-scale {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* 深色模式优化 */
+@media (prefers-color-scheme: dark) {
+  .typing-dot {
+    /* 深色模式下稍微调亮颜色 */
+    background-color: #4A9FDB;
+  }
+}
+
+/* 减少动画效果的无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: pulse-scale-reduced 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-scale-reduced {
+    0%, 100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}

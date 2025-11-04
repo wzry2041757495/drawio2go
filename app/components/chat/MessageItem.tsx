@@ -14,6 +14,7 @@ interface MessageItemProps {
 
 export default function MessageItem({
   message,
+  status,
   expandedToolCalls,
   expandedThinkingBlocks,
   onToolCallToggle,
@@ -39,6 +40,7 @@ export default function MessageItem({
       <div className="message-content">
         <MessageContent
           message={message}
+          status={status}
           expandedToolCalls={expandedToolCalls}
           expandedThinkingBlocks={expandedThinkingBlocks}
           onToolCallToggle={onToolCallToggle}
