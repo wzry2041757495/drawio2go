@@ -129,3 +129,28 @@ export interface DrawioEditBatchResult {
   success: true;
   operations_applied: number;
 }
+
+/**
+ * DrawIO 选中元素信息
+ */
+export interface DrawioSelectionInfo {
+  count: number;
+  cells: DrawioCellInfo[];
+}
+
+/**
+ * DrawIO 单个选中元素信息
+ */
+export interface DrawioCellInfo {
+  id: string;
+  type: 'vertex' | 'edge' | 'unknown';
+  value: any;
+  style: string;
+  label: string;
+  geometry?: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+}

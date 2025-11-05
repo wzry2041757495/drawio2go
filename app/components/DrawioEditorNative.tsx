@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { DrawioSelectionInfo } from "../types/drawio-tools";
 
 interface DrawioEditorNativeProps {
   initialXml?: string;
   onSave?: (xml: string) => void;
-  onSelectionChange?: (count: number) => void;
+  onSelectionChange?: (info: DrawioSelectionInfo) => void;
   forceReload?: boolean; // 强制完全重载（用于用户手动加载文件等场景）
 }
 
@@ -125,8 +126,23 @@ export default function DrawioEditorNative({ initialXml, onSave, onSelectionChan
         } else if (data.event === 'load') {
           console.log("✅ DrawIO 已加载内容");
         } else if (data.event === 'drawio-selection') {
+          // 处理新的详细信息格式，同时保持向后兼容
           const count = typeof data.count === 'number' ? data.count : Number(data.count ?? 0) || 0;
-          onSelectionChange?.(count);
+          const cells = data.cells || [];
+
+          const selectionInfo: DrawioSelectionInfo = {
+            count,
+            cells: cells.map((cell: any) => ({
+              id: cell.id || '',
+              type: cell.type || 'unknown',
+              value: cell.value,
+              style: cell.style || '',
+              label: cell.label || '',
+              geometry: cell.geometry || undefined
+            }))
+          };
+
+                    onSelectionChange?.(selectionInfo);
         }
       } catch (error) {
         console.error("❌ 解析消息失败:", error);

@@ -7,13 +7,14 @@ import BottomBar from "./components/BottomBar";
 import UnifiedSidebar from "./components/UnifiedSidebar";
 import { UPDATE_EVENT, saveDrawioXML } from "./lib/drawio-tools";
 import { useDrawioSocket } from "./hooks/useDrawioSocket";
+import { DrawioSelectionInfo } from "./types/drawio-tools";
 
 export default function Home() {
   const [diagramXml, setDiagramXml] = useState<string>("");
   const [currentXml, setCurrentXml] = useState<string>("");
   const [settings, setSettings] = useState({ defaultPath: "" });
   const [activeSidebar, setActiveSidebar] = useState<"none" | "settings" | "chat">("none");
-  const [selectionCount, setSelectionCount] = useState<number>(0);
+  const [selectionInfo, setSelectionInfo] = useState<DrawioSelectionInfo>({ count: 0, cells: [] });
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [forceReload, setForceReload] = useState<boolean>(false); // 控制是否强制完全重载
 
@@ -63,6 +64,12 @@ export default function Home() {
     if (typeof window !== "undefined") {
       saveDrawioXML(xml);
     }
+  };
+
+  // 处理 DrawIO 选区变化
+  const handleSelectionChange = (info: DrawioSelectionInfo) => {
+    setSelectionInfo(info);
+    console.log('🎯 选中元素详情:', JSON.stringify(info.cells, null, 2));
   };
 
   // 手动保存到文件
@@ -176,7 +183,7 @@ export default function Home() {
         <DrawioEditorNative
           initialXml={diagramXml}
           onSave={handleAutoSave}
-          onSelectionChange={setSelectionCount}
+          onSelectionChange={handleSelectionChange}
           forceReload={forceReload}
         />
       </div>
@@ -196,7 +203,10 @@ export default function Home() {
         onSave={handleManualSave}
         onLoad={handleLoad}
         activeSidebar={activeSidebar}
-        selectionLabel={isElectronEnv ? `选中了${selectionCount}个对象` : "网页无法使用该功能"}
+        selectionLabel={isElectronEnv
+          ? `选中了${selectionInfo.count}个对象${selectionInfo.cells.length > 0 ? ` (IDs: ${selectionInfo.cells.map(c => c.id).slice(0, 3).join(', ')}${selectionInfo.cells.length > 3 ? '...' : ''})` : ''}`
+          : "网页无法使用该功能"
+        }
       />
     </main>
   );

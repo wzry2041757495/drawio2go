@@ -49,7 +49,7 @@ export default function BottomBar({
       </Button>
 
       {selectionLabel && (
-        <div className="ml-3 text-sm text-white/80 whitespace-nowrap">
+        <div className="ml-3 bottom-bar-button button-secondary" style={{ cursor: 'default' }}>
           {selectionLabel}
         </div>
       )}

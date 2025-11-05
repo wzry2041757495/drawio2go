@@ -260,20 +260,54 @@ ipcMain.handle("enable-selection-watcher", async () => {
           const notify = (graph) => {
             try {
               const cells = graph.getSelectionCells();
-              let count = 0;
+              const cellInfos = [];
 
               if (Array.isArray(cells)) {
-                count = cells.filter(Boolean).length;
-              } else if (cells) {
-                count = 1;
+                cells.forEach(cell => {
+                  if (cell && cell.id) {
+                    cellInfos.push({
+                      id: cell.id,
+                      type: cell.vertex ? 'vertex' : (cell.edge ? 'edge' : 'unknown'),
+                      value: cell.value,
+                      style: cell.style,
+                      label: cell.value ? cell.value.toString() : '',
+                      geometry: cell.geometry ? {
+                        x: cell.geometry.x,
+                        y: cell.geometry.y,
+                        width: cell.geometry.width,
+                        height: cell.geometry.height
+                      } : undefined
+                    });
+                  }
+                });
               }
 
               window.parent?.postMessage(
-                JSON.stringify({ event: "drawio-selection", count }),
+                JSON.stringify({
+                  event: "drawio-selection",
+                  count: cellInfos.length,
+                  cells: cellInfos
+                }),
                 "*"
               );
             } catch (error) {
               console.error("DrawIO selection notify error", error);
+              // 降级处理：发送原始的 count 格式
+              try {
+                const cells = graph.getSelectionCells();
+                let count = 0;
+                if (Array.isArray(cells)) {
+                  count = cells.filter(Boolean).length;
+                } else if (cells) {
+                  count = 1;
+                }
+                window.parent?.postMessage(
+                  JSON.stringify({ event: "drawio-selection", count }),
+                  "*"
+                );
+              } catch (fallbackError) {
+                console.error("DrawIO selection fallback error", fallbackError);
+              }
             }
           };
 
