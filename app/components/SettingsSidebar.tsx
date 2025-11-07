@@ -8,6 +8,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   normalizeLLMConfig,
 } from "@/app/lib/llm-config";
+import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 
 interface SettingsSidebarProps {
   isOpen: boolean;
@@ -39,6 +40,9 @@ const PROVIDER_OPTIONS: Array<{
 ];
 
 export default function SettingsSidebar({ onSettingsChange }: SettingsSidebarProps) {
+  // 存储 Hook
+  const { getLLMConfig, saveLLMConfig, getDefaultPath, saveDefaultPath } = useStorageSettings();
+
   const [defaultPath, setDefaultPath] = useState("");
   const [savedPath, setSavedPath] = useState("");
 
@@ -62,34 +66,36 @@ export default function SettingsSidebar({ onSettingsChange }: SettingsSidebarPro
 
   // 加载保存的设置
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("defaultPath") || "";
-      setDefaultPath(saved);
-      setSavedPath(saved);
+    const loadSettings = async () => {
+      try {
+        // 加载默认路径
+        const savedPath = await getDefaultPath();
+        const path = savedPath || "";
+        setDefaultPath(path);
+        setSavedPath(path);
 
-      // 加载 LLM 配置
-      const savedLlmConfigStr = localStorage.getItem("llmConfig");
-      if (savedLlmConfigStr) {
-        try {
-          const parsed = JSON.parse(savedLlmConfigStr);
-          const configWithDefaults = normalizeLLMConfig(parsed);
-
+        // 加载 LLM 配置
+        const savedConfig = await getLLMConfig();
+        if (savedConfig) {
+          const configWithDefaults = normalizeLLMConfig(savedConfig);
           setLlmConfig(configWithDefaults);
           setSavedLlmConfig(configWithDefaults);
           setTempSystemPrompt(configWithDefaults.systemPrompt);
-        } catch (e) {
-          console.error("加载 LLM 配置失败:", e);
+        } else {
           setLlmConfig({ ...DEFAULT_LLM_CONFIG });
           setSavedLlmConfig({ ...DEFAULT_LLM_CONFIG });
           setTempSystemPrompt(DEFAULT_SYSTEM_PROMPT);
         }
-      } else {
+      } catch (e) {
+        console.error("加载设置失败:", e);
         setLlmConfig({ ...DEFAULT_LLM_CONFIG });
         setSavedLlmConfig({ ...DEFAULT_LLM_CONFIG });
         setTempSystemPrompt(DEFAULT_SYSTEM_PROMPT);
       }
-    }
-  }, []);
+    };
+
+    loadSettings();
+  }, [getDefaultPath, getLLMConfig]);
 
   // 监听变化，检测是否有修改
   useEffect(() => {
@@ -112,20 +118,23 @@ export default function SettingsSidebar({ onSettingsChange }: SettingsSidebarPro
   };
 
   // 保存设置
-  const handleSave = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("defaultPath", defaultPath);
+  const handleSave = async () => {
+    try {
+      // 保存默认路径
+      await saveDefaultPath(defaultPath);
       setSavedPath(defaultPath);
 
+      // 保存 LLM 配置
       const normalizedLlmConfig = normalizeLLMConfig(llmConfig);
-
-      localStorage.setItem("llmConfig", JSON.stringify(normalizedLlmConfig));
+      await saveLLMConfig(normalizedLlmConfig);
       setLlmConfig(normalizedLlmConfig);
       setSavedLlmConfig(normalizedLlmConfig);
 
       if (onSettingsChange) {
         onSettingsChange({ defaultPath });
       }
+    } catch (e) {
+      console.error("保存设置失败:", e);
     }
   };
 

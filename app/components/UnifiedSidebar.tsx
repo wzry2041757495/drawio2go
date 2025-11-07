@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import ChatSidebar from "./ChatSidebar";
 import SettingsSidebar from "./SettingsSidebar";
+import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 
 interface UnifiedSidebarProps {
   isOpen: boolean;
@@ -17,21 +18,32 @@ export default function UnifiedSidebar({
   onClose,
   onSettingsChange,
 }: UnifiedSidebarProps) {
+  // 存储 Hook
+  const { getSetting, setSetting } = useStorageSettings();
+
   const [sidebarWidth, setSidebarWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
 
-  // 从 localStorage 恢复侧栏宽度
+  // 从存储恢复侧栏宽度
   useEffect(() => {
-    const savedWidth = localStorage.getItem("unifiedSidebarWidth");
-    if (savedWidth) {
-      const width = parseInt(savedWidth);
-      setSidebarWidth(width);
-      document.documentElement.style.setProperty(
-        "--sidebar-width",
-        `${width}px`
-      );
-    }
-  }, []);
+    const loadWidth = async () => {
+      try {
+        const savedWidth = await getSetting("unifiedSidebarWidth");
+        if (savedWidth) {
+          const width = parseInt(savedWidth);
+          setSidebarWidth(width);
+          document.documentElement.style.setProperty(
+            "--sidebar-width",
+            `${width}px`
+          );
+        }
+      } catch (e) {
+        console.error("加载侧栏宽度失败:", e);
+      }
+    };
+
+    loadWidth();
+  }, [getSetting]);
 
   // 拖拽调整宽度
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -53,10 +65,14 @@ export default function UnifiedSidebar({
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = async () => {
       if (isResizing) {
         setIsResizing(false);
-        localStorage.setItem("unifiedSidebarWidth", sidebarWidth.toString());
+        try {
+          await setSetting("unifiedSidebarWidth", sidebarWidth.toString());
+        } catch (e) {
+          console.error("保存侧栏宽度失败:", e);
+        }
       }
     };
 
@@ -69,7 +85,7 @@ export default function UnifiedSidebar({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, sidebarWidth]);
+  }, [isResizing, sidebarWidth, setSetting]);
 
   return (
     <div

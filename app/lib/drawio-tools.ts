@@ -2,7 +2,8 @@
  * DrawIO XML 前端存储工具集
  *
  * 负责在浏览器环境下管理图表 XML 的持久化与事件分发。
- * 工具函数会在写入 localStorage 前自动处理 base64 编码的内容，
+ * 使用统一的存储抽象层（Electron: SQLite, Web: IndexedDB），支持更大的文件和更好的性能。
+ * 工具函数会在写入前自动处理 base64 编码的内容，
  * 并在更新后通过自定义事件通知编辑器重新加载。
  */
 
@@ -11,11 +12,17 @@ import type {
   ReplaceXMLResult,
   XMLValidationResult,
 } from "../types/drawio-tools";
+import { getStorage } from "./storage/storage-factory";
 
 /**
- * localStorage 中存储 DrawIO XML 的键名
+ * 固定的项目 UUID（单项目模式）
  */
-const STORAGE_KEY = "currentDiagram";
+const PROJECT_UUID = "default";
+
+/**
+ * 固定的语义版本号（仅保存最新版）
+ */
+const SEMANTIC_VERSION = "latest";
 
 /**
  * 自定义事件名称，用于通知编辑器重新加载
@@ -77,20 +84,44 @@ function decodeBase64XML(xml: string): string {
 }
 
 /**
- * 保存 XML 到 localStorage（自动解码 base64）
+ * 保存 XML 到 IndexedDB（自动解码 base64）
  *
- * 统一的保存入口，确保 localStorage 中永远存储解码后的纯 XML
+ * 统一的保存入口，使用 IndexedDB 存储架构
+ * 仅保存最新版本，自动删除旧版本以节省空间
  *
  * @param xml - XML 内容（可能包含 base64 编码）
  */
-export function saveDrawioXML(xml: string): void {
+export async function saveDrawioXML(xml: string): Promise<void> {
   if (typeof window === "undefined") {
     throw new Error("saveDrawioXML 只能在浏览器环境中使用");
   }
 
   const decodedXml = decodeBase64XML(xml);
-  localStorage.setItem(STORAGE_KEY, decodedXml);
-  triggerUpdateEvent(decodedXml);
+
+  try {
+    const storage = await getStorage();
+
+    // 获取现有版本
+    const existingVersions = await storage.getXMLVersionsByProject(PROJECT_UUID);
+
+    // 删除所有旧版本（仅保留最新版策略）
+    for (const version of existingVersions) {
+      await storage.deleteXMLVersion(version.id);
+    }
+
+    // 创建新版本
+    await storage.createXMLVersion({
+      project_uuid: PROJECT_UUID,
+      semantic_version: SEMANTIC_VERSION,
+      xml_content: decodedXml,
+      source_version_id: 0,
+    });
+
+    triggerUpdateEvent(decodedXml);
+  } catch (error) {
+    console.error("[DrawIO Tools] 保存 XML 失败:", error);
+    throw error;
+  }
 }
 
 /**
@@ -109,9 +140,9 @@ function triggerUpdateEvent(xml: string): void {
 }
 
 /**
- * 获取当前 DrawIO XML 内容
+ * 获取当前 DrawIO XML 内容（从 IndexedDB）
  */
-export function getDrawioXML(): GetXMLResult {
+export async function getDrawioXML(): Promise<GetXMLResult> {
   if (typeof window === "undefined") {
     return {
       success: false,
@@ -120,22 +151,26 @@ export function getDrawioXML(): GetXMLResult {
   }
 
   try {
-    const xml = localStorage.getItem(STORAGE_KEY);
+    const storage = await getStorage();
+    const versions = await storage.getXMLVersionsByProject(PROJECT_UUID);
 
-    if (!xml) {
+    if (versions.length === 0) {
       return {
         success: false,
         error: "未找到保存的图表数据",
       };
     }
 
-    const decodedXml = decodeBase64XML(xml);
+    // 获取最新版本（数组已按创建时间倒序排列）
+    const latestVersion = versions[0];
+    const decodedXml = decodeBase64XML(latestVersion.xml_content);
 
     return {
       success: true,
       xml: decodedXml,
     };
   } catch (error) {
+    console.error("[DrawIO Tools] 读取 XML 失败:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "读取数据失败",
@@ -146,7 +181,7 @@ export function getDrawioXML(): GetXMLResult {
 /**
  * 覆写 DrawIO XML 内容
  */
-export function replaceDrawioXML(drawio_xml: string): ReplaceXMLResult {
+export async function replaceDrawioXML(drawio_xml: string): Promise<ReplaceXMLResult> {
   if (typeof window === "undefined") {
     return {
       success: false,
@@ -165,7 +200,7 @@ export function replaceDrawioXML(drawio_xml: string): ReplaceXMLResult {
   }
 
   try {
-    saveDrawioXML(drawio_xml);
+    await saveDrawioXML(drawio_xml);
 
     return {
       success: true,

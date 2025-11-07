@@ -6,7 +6,7 @@
 
 ## 工具文件清单
 
-- **drawio-tools.ts**: 浏览器端的 XML 存储桥接（localStorage + 事件通知）
+- **drawio-tools.ts**: 浏览器端的 XML 存储桥接（统一存储抽象层 + 事件通知）
 - **drawio-xml-service.ts**: 服务端 XML 转接层，负责 XPath 查询与批量编辑
 - **drawio-ai-tools.ts**: AI 工具定义（`drawio_read` / `drawio_edit_batch`）
 - **tool-executor.ts**: 工具执行路由器，通过 Socket.IO 与前端通讯
@@ -15,7 +15,7 @@
 ## DrawIO Socket.IO 调用流程
 
 1. 后端工具通过 `executeToolOnClient()` 获取当前 XML 或请求前端写入
-2. 前端（`useDrawioSocket` + `drawio-tools.ts`）访问 localStorage 并响应请求
+2. 前端（`useDrawioSocket` + `drawio-tools.ts`）访问统一存储层并响应请求
 3. 服务端使用 `drawio-xml-service.ts` 对 XML 进行 XPath 查询或批量操作
 4. 编辑完成后再次通过 Socket.IO 将新 XML 写回前端
 
@@ -48,9 +48,10 @@
 
 ## 浏览器端存储工具（`drawio-tools.ts`）
 
-- localStorage 键名：`currentDiagram`
+- 使用统一存储抽象层（Electron: SQLite, Web: IndexedDB）
 - 保存时自动解码 base64，并通过 `drawio-xml-updated` 自定义事件通知编辑器
 - 提供 `getDrawioXML()`、`replaceDrawioXML()`、`saveDrawioXML()` 三个接口
+- 固定使用默认项目（uuid="default"）和版本（semantic_version="latest"）
 
 ## 类型定义
 

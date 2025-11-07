@@ -5,11 +5,15 @@ import { useState, useEffect } from "react";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import BottomBar from "./components/BottomBar";
 import UnifiedSidebar from "./components/UnifiedSidebar";
-import { UPDATE_EVENT, saveDrawioXML } from "./lib/drawio-tools";
+import { UPDATE_EVENT, saveDrawioXML, getDrawioXML } from "./lib/drawio-tools";
 import { useDrawioSocket } from "./hooks/useDrawioSocket";
 import { DrawioSelectionInfo } from "./types/drawio-tools";
+import { useStorageSettings } from "./hooks/useStorageSettings";
 
 export default function Home() {
+  // 存储 Hook
+  const { getDefaultPath } = useStorageSettings();
+
   const [diagramXml, setDiagramXml] = useState<string>("");
   const [currentXml, setCurrentXml] = useState<string>("");
   const [settings, setSettings] = useState({ defaultPath: "" });
@@ -26,16 +30,34 @@ export default function Home() {
     if (typeof window !== "undefined") {
       setIsElectronEnv(Boolean(window.electron));
 
-      const savedXml = localStorage.getItem("currentDiagram");
-      if (savedXml) {
-        setDiagramXml(savedXml);
-        setCurrentXml(savedXml);
-      }
+      // 从 IndexedDB 加载图表数据
+      const loadInitialData = async () => {
+        try {
+          const result = await getDrawioXML();
+          if (result.success && result.xml) {
+            setDiagramXml(result.xml);
+            setCurrentXml(result.xml);
+          }
+        } catch (error) {
+          console.error("加载初始图表数据失败:", error);
+        }
+      };
 
-      const savedPath = localStorage.getItem("defaultPath");
-      if (savedPath) {
-        setSettings({ defaultPath: savedPath });
-      }
+      loadInitialData();
+
+      // 加载默认路径设置
+      const loadDefaultPath = async () => {
+        try {
+          const savedPath = await getDefaultPath();
+          if (savedPath) {
+            setSettings({ defaultPath: savedPath });
+          }
+        } catch (error) {
+          console.error("加载默认路径失败:", error);
+        }
+      };
+
+      loadDefaultPath();
 
       // 监听 DrawIO XML 更新事件（由工具函数触发）
       // 注意：这里只更新 React 状态，实际的 DrawIO 编辑器更新在 DrawioEditorNative 组件内部完成
@@ -56,13 +78,18 @@ export default function Home() {
         window.removeEventListener(UPDATE_EVENT, handleXmlUpdate);
       };
     }
-  }, []);
+  }, [getDefaultPath]);
 
-  // 自动保存图表到 localStorage（自动解码 base64）
-  const handleAutoSave = (xml: string) => {
+  // 自动保存图表到 IndexedDB（自动解码 base64）
+  const handleAutoSave = async (xml: string) => {
     setCurrentXml(xml);
     if (typeof window !== "undefined") {
-      saveDrawioXML(xml);
+      try {
+        await saveDrawioXML(xml);
+      } catch (error) {
+        console.error("自动保存失败:", error);
+        // 可以在这里添加用户提示，但不中断编辑流程
+      }
     }
   };
 
@@ -111,7 +138,7 @@ export default function Home() {
         setForceReload(true); // 触发完全重载
         setDiagramXml(result.xml);
         setCurrentXml(result.xml);
-        saveDrawioXML(result.xml);
+        await saveDrawioXML(result.xml);
         // 重置 forceReload 标志
         setTimeout(() => setForceReload(false), 100);
       } else if (result.message !== "用户取消打开") {
@@ -126,13 +153,13 @@ export default function Home() {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (event) => {
+          reader.onload = async (event) => {
             const xml = event.target?.result as string;
             console.log("📂 用户手动加载文件，触发完全重载");
             setForceReload(true); // 触发完全重载
             setDiagramXml(xml);
             setCurrentXml(xml);
-            saveDrawioXML(xml);
+            await saveDrawioXML(xml);
             // 重置 forceReload 标志
             setTimeout(() => setForceReload(false), 100);
           };

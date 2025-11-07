@@ -42,7 +42,7 @@ interface DrawioEditorNativeProps {
 
 #### 特性
 - **可调整宽度**: 拖拽左边缘调整 (300-800px)
-- **持久化**: 宽度保存到 localStorage
+- **持久化**: 宽度保存到统一存储层（Settings 表）
 - **CSS 变量**: `--sidebar-width` 动态更新
 - **内容切换**: 支持设置和聊天内容切换
 
@@ -186,7 +186,7 @@ HeroUI v3 不需要全局 Provider 包裹，直接使用即可。
 
 ### 状态管理
 - **组件状态**: React useState/useRef
-- **持久化**: localStorage
+- **持久化**: 统一存储抽象层（通过 useStorageSettings Hook）
 - **跨组件通信**: props + 回调函数
 
 ### 错误处理
