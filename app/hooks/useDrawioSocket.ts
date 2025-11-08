@@ -72,7 +72,7 @@ export function useDrawioSocket() {
         // 根据工具名称执行相应函数
         switch (request.toolName) {
           case "get_drawio_xml":
-            result = getDrawioXML() as unknown as {
+            result = await getDrawioXML() as unknown as {
               success: boolean;
               error?: string;
               message?: string;
@@ -84,7 +84,7 @@ export function useDrawioSocket() {
             if (!request.input?.drawio_xml) {
               throw new Error("缺少 drawio_xml 参数");
             }
-            result = replaceDrawioXML(
+            result = await replaceDrawioXML(
               request.input.drawio_xml as string,
             ) as unknown as {
               success: boolean;
