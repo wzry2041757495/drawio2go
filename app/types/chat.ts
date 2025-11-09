@@ -23,6 +23,7 @@ export interface ToolInvocation {
   args: Record<string, unknown>;
   state: ToolInvocationState;
   result?: unknown;
+  xmlVersionId?: number; // 关联的 XML 版本 ID
 }
 
 export interface ChatMessage {

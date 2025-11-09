@@ -33,6 +33,9 @@ class SQLiteManager {
       // 创建表
       this._createTables();
 
+      // 设置数据库版本号(目前为1)
+      this.db.pragma("user_version = 1");
+
       // 创建默认工程
       this._ensureDefaultProject();
 
@@ -96,12 +99,10 @@ class SQLiteManager {
       CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         project_uuid TEXT NOT NULL,
-        xml_version_id INTEGER NOT NULL,
         title TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE,
-        FOREIGN KEY (xml_version_id) REFERENCES xml_versions(id) ON DELETE CASCADE
+        FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
       )
     `);
 
@@ -109,10 +110,6 @@ class SQLiteManager {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_conversations_project
       ON conversations(project_uuid)
-    `);
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_conversations_xml_version
-      ON conversations(xml_version_id)
     `);
 
     // Messages 表
@@ -124,8 +121,10 @@ class SQLiteManager {
         content TEXT NOT NULL,
         tool_invocations TEXT,
         model_name TEXT,
+        xml_version_id INTEGER,
         created_at INTEGER NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+        FOREIGN KEY (xml_version_id) REFERENCES xml_versions(id) ON DELETE SET NULL
       )
     `);
 
@@ -133,6 +132,10 @@ class SQLiteManager {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id)
+    `);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_messages_xml_version
+      ON messages(xml_version_id)
     `);
   }
 
@@ -309,14 +312,13 @@ class SQLiteManager {
     this.db
       .prepare(
         `
-        INSERT INTO conversations (id, project_uuid, xml_version_id, title, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO conversations (id, project_uuid, title, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
       `,
       )
       .run(
         conversation.id,
         conversation.project_uuid,
-        conversation.xml_version_id,
         conversation.title,
         now,
         now,
@@ -359,14 +361,6 @@ class SQLiteManager {
       .all(projectUuid);
   }
 
-  getConversationsByXMLVersion(xmlVersionId) {
-    return this.db
-      .prepare(
-        "SELECT * FROM conversations WHERE xml_version_id = ? ORDER BY updated_at DESC",
-      )
-      .all(xmlVersionId);
-  }
-
   // ==================== Messages ====================
 
   getMessagesByConversation(conversationId) {
@@ -382,8 +376,8 @@ class SQLiteManager {
     this.db
       .prepare(
         `
-        INSERT INTO messages (id, conversation_id, role, content, tool_invocations, model_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, conversation_id, role, content, tool_invocations, model_name, xml_version_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       )
       .run(
@@ -393,6 +387,7 @@ class SQLiteManager {
         message.content,
         message.tool_invocations || null,
         message.model_name || null,
+        message.xml_version_id || null,
         now,
       );
 
@@ -408,8 +403,8 @@ class SQLiteManager {
   createMessages(messages) {
     const now = Date.now();
     const insertStmt = this.db.prepare(`
-      INSERT INTO messages (id, conversation_id, role, content, tool_invocations, model_name, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, conversation_id, role, content, tool_invocations, model_name, xml_version_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transaction = this.db.transaction((msgs) => {
@@ -421,6 +416,7 @@ class SQLiteManager {
           msg.content,
           msg.tool_invocations || null,
           msg.model_name || null,
+          msg.xml_version_id || null,
           now,
         );
       }

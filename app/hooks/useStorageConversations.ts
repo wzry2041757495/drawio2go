@@ -21,14 +21,12 @@ export function useStorageConversations() {
   /**
    * 创建对话
    *
-   * @param xmlVersionId 关联的 XML 版本 ID
    * @param title 对话标题
    * @param projectUuid 工程 UUID（默认使用 DEFAULT_PROJECT_UUID）
    * @returns 创建的对话
    */
   const createConversation = useCallback(
     async (
-      xmlVersionId: number,
       title: string = "New Chat",
       projectUuid: string = DEFAULT_PROJECT_UUID,
     ): Promise<Conversation> => {
@@ -40,7 +38,6 @@ export function useStorageConversations() {
         const conversation = await storage.createConversation({
           id: uuidv4(),
           project_uuid: projectUuid,
-          xml_version_id: xmlVersionId,
           title,
         });
 
@@ -85,7 +82,7 @@ export function useStorageConversations() {
   const updateConversation = useCallback(
     async (
       id: string,
-      updates: Partial<Pick<Conversation, "title" | "xml_version_id">>,
+      updates: Partial<Pick<Conversation, "title">>,
     ): Promise<void> => {
       setLoading(true);
       setError(null);

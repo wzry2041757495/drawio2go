@@ -80,12 +80,10 @@ export interface PreviewImageData {
 
 /**
  * 对话实体
- * 新增 xml_version_id 字段，关联特定的 XML 版本
  */
 export interface Conversation {
   id: string;
   project_uuid: string;
-  xml_version_id: number; // 关联的 XML 版本 ID
   title: string;
   created_at: number;
   updated_at: number;
@@ -123,6 +121,7 @@ export interface Message {
   content: string;
   tool_invocations?: string; // JSON 序列化的工具调用记录
   model_name?: string | null; // 发送消息时使用的模型
+  xml_version_id?: number; // 关联的 XML 版本 ID
   created_at: number;
 }
 

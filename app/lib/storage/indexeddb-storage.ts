@@ -73,9 +73,6 @@ export class IndexedDBStorage implements StorageAdapter {
             convStore.createIndex("project_uuid", "project_uuid", {
               unique: false,
             });
-            convStore.createIndex("xml_version_id", "xml_version_id", {
-              unique: false,
-            });
           }
 
           // Messages store
@@ -84,6 +81,9 @@ export class IndexedDBStorage implements StorageAdapter {
               keyPath: "id",
             });
             msgStore.createIndex("conversation_id", "conversation_id", {
+              unique: false,
+            });
+            msgStore.createIndex("xml_version_id", "xml_version_id", {
               unique: false,
             });
           }
@@ -282,27 +282,18 @@ export class IndexedDBStorage implements StorageAdapter {
   async deleteXMLVersion(id: number): Promise<void> {
     const db = await this.ensureDB();
 
-    // 级联删除关联的对话和消息
-    const tx = db.transaction(
-      ["xml_versions", "conversations", "messages"],
-      "readwrite",
-    );
+    // 删除 XML 版本（消息中的 xml_version_id 会被设置为 null）
+    const tx = db.transaction(["xml_versions", "messages"], "readwrite");
 
-    const conversations = await tx
-      .objectStore("conversations")
+    // 将关联消息的 xml_version_id 设置为 undefined
+    const messages = await tx
+      .objectStore("messages")
       .index("xml_version_id")
       .getAll(id);
 
-    for (const conv of conversations) {
-      // 删除对话的消息
-      const messages = await tx
-        .objectStore("messages")
-        .index("conversation_id")
-        .getAll(conv.id);
-      for (const msg of messages) {
-        await tx.objectStore("messages").delete(msg.id);
-      }
-      await tx.objectStore("conversations").delete(conv.id);
+    for (const msg of messages) {
+      const updated = { ...msg, xml_version_id: undefined };
+      await tx.objectStore("messages").put(updated);
     }
 
     // 删除 XML 版本
@@ -382,19 +373,6 @@ export class IndexedDBStorage implements StorageAdapter {
       "conversations",
       "project_uuid",
       projectUuid,
-    );
-    // 按更新时间倒序
-    return conversations.sort((a, b) => b.updated_at - a.updated_at);
-  }
-
-  async getConversationsByXMLVersion(
-    xmlVersionId: number,
-  ): Promise<Conversation[]> {
-    const db = await this.ensureDB();
-    const conversations = await db.getAllFromIndex(
-      "conversations",
-      "xml_version_id",
-      xmlVersionId,
     );
     // 按更新时间倒序
     return conversations.sort((a, b) => b.updated_at - a.updated_at);

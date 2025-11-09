@@ -103,6 +103,7 @@ function convertMessageToUIMessage(msg: Message): ChatUIMessage {
 function convertUIMessageToCreateInput(
   uiMsg: ChatUIMessage,
   conversationId: string,
+  xmlVersionId?: number,
 ): CreateMessageInput {
   // 提取所有文本部分
   const textParts = uiMsg.parts.filter((part) => part.type === "text");
@@ -132,6 +133,7 @@ function convertUIMessageToCreateInput(
     content,
     tool_invocations,
     model_name: metadata.modelName ?? null,
+    xml_version_id: xmlVersionId,
   };
 }
 
@@ -286,11 +288,7 @@ export default function ChatSidebar({
 
         // 4. 如果没有对话，创建默认对话
         if (allConversations.length === 0) {
-          const newConv = await createConversation(
-            defaultVersionId,
-            "新对话",
-            currentProjectId,
-          );
+          const newConv = await createConversation("新对话", currentProjectId);
           setConversations([newConv]);
           setActiveConversationId(newConv.id);
           setConversationMessages({ [newConv.id]: [] });
@@ -416,7 +414,11 @@ export default function ChatSidebar({
         const normalizedMessages = finishedMessages.map(ensureMessageMetadata);
 
         const messagesToSave = normalizedMessages.map((msg) =>
-          convertUIMessageToCreateInput(msg, finalSessionId),
+          convertUIMessageToCreateInput(
+            msg,
+            finalSessionId,
+            defaultXmlVersionId ?? undefined,
+          ),
         );
 
         // 批量保存到存储
@@ -476,18 +478,11 @@ export default function ChatSidebar({
     if (!targetSessionId) {
       console.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
 
-      if (!defaultXmlVersionId) {
-        console.error(
-          "[ChatSidebar] 无法发送消息：缺少默认 XML 版本，无法创建对话",
-        );
-        return;
-      }
-
       // 生成临时 ID 用于追踪正在创建的对话
       const tempConversationId = `temp-${Date.now()}`;
 
       // 立即启动异步创建对话，不等待完成
-      const createPromise = createConversation(defaultXmlVersionId, "新对话")
+      const createPromise = createConversation("新对话")
         .then((newConv) => {
           console.log(
             `[ChatSidebar] 异步创建对话完成: ${newConv.id} (标题: 新对话)`,
@@ -552,20 +547,15 @@ export default function ChatSidebar({
   };
 
   const handleNewChat = useCallback(async () => {
-    if (!defaultXmlVersionId) {
-      console.error("[ChatSidebar] 无法创建新对话：没有默认 XML 版本");
-      return;
-    }
-
     try {
-      const newConv = await createConversation(defaultXmlVersionId, "新对话");
+      const newConv = await createConversation("新对话");
       setConversations((prev) => [newConv, ...prev]);
       setActiveConversationId(newConv.id);
       setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
     } catch (error) {
       console.error("[ChatSidebar] 创建新对话失败:", error);
     }
-  }, [defaultXmlVersionId, createConversation]);
+  }, [createConversation]);
 
   const handleHistory = () => {
     setShowSessionMenu(!showSessionMenu);
