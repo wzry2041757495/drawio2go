@@ -1,7 +1,22 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { DrawioSelectionInfo } from "../types/drawio-tools";
+
+// 暴露给父组件的 ref 接口
+export interface DrawioEditorRef {
+  loadDiagram: (xml: string) => void;
+  mergeDiagram: (xml: string) => void;
+  exportDiagram: () => Promise<string>;
+}
 
 interface DrawioEditorNativeProps {
   initialXml?: string;
@@ -65,12 +80,13 @@ function decodeBase64XML(xml: string): string {
   return xml; // 非 base64 格式直接返回
 }
 
-export default function DrawioEditorNative({
-  initialXml,
-  onSave,
-  onSelectionChange,
-  forceReload,
-}: DrawioEditorNativeProps) {
+const DrawioEditorNative = forwardRef<
+  DrawioEditorRef,
+  DrawioEditorNativeProps
+>(function DrawioEditorNative(
+  { initialXml, onSave, onSelectionChange, forceReload },
+  ref,
+) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isReady, setIsReady] = useState(false);
   const previousXmlRef = useRef<string | undefined>(initialXml);
@@ -82,6 +98,8 @@ export default function DrawioEditorNative({
   const autosaveReceivedRef = useRef(false); // 是否收到 autosave 事件
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null); // autosave 监测定时器
   const initializationCompleteRef = useRef(false); // 标记初始化是否完成
+  // 用于 exportDiagram Promise 的 resolve 函数
+  const exportResolveRef = useRef<((xml: string) => void) | null>(null);
 
   // 构建 DrawIO URL
   const drawioUrl = `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=1&noSaveBtn=1&noExitBtn=1`;
@@ -109,19 +127,24 @@ export default function DrawioEditorNative({
     [isReady],
   );
 
-  // 导出当前图表的 XML
-  const exportDiagram = useCallback(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && isReady) {
-      const exportData = {
-        action: "export",
-        format: "xml",
-      };
-      console.log("📤 发送 export 命令");
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify(exportData),
-        "*",
-      );
-    }
+  // 导出当前图表的 XML（返回 Promise）
+  const exportDiagram = useCallback((): Promise<string> => {
+    return new Promise((resolve) => {
+      if (iframeRef.current && iframeRef.current.contentWindow && isReady) {
+        exportResolveRef.current = resolve;
+        const exportData = {
+          action: "export",
+          format: "xml",
+        };
+        console.log("📤 发送 export 命令");
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify(exportData),
+          "*",
+        );
+      } else {
+        resolve(""); // 未就绪时返回空字符串
+      }
+    });
   }, [isReady]);
 
   // 更新图表（使用 merge 动作，保留编辑状态，带超时回退）
@@ -155,6 +178,17 @@ export default function DrawioEditorNative({
       }
     },
     [isReady, loadDiagram],
+  );
+
+  // 暴露方法给父组件
+  useImperativeHandle(
+    ref,
+    () => ({
+      loadDiagram: (xml: string) => loadDiagram(xml),
+      mergeDiagram: (xml: string) => mergeWithFallback(xml),
+      exportDiagram,
+    }),
+    [loadDiagram, mergeWithFallback, exportDiagram],
   );
 
   // 使用 ref 保存最新的函数引用，确保防抖函数始终能访问到最新版本
@@ -232,7 +266,13 @@ export default function DrawioEditorNative({
           const exportedXml = data.xml ? decodeBase64XML(data.xml) : "";
           exportedXmlRef.current = exportedXml;
 
-          // 对比 XML 是否相同
+          // 如果有等待中的 Promise，resolve 它
+          if (exportResolveRef.current) {
+            exportResolveRef.current(exportedXml);
+            exportResolveRef.current = null;
+          }
+
+          // 对比 XML 是否相同（仅在初始化阶段）
           if (!initializationCompleteRef.current) {
             const normalizedExported = exportedXml.trim();
             const normalizedInitial = (initialXml || "").trim();
@@ -404,4 +444,6 @@ export default function DrawioEditorNative({
       )}
     </div>
   );
-}
+});
+
+export default DrawioEditorNative;

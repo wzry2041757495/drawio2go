@@ -28,14 +28,9 @@ const CURRENT_PROJECT_KEY = "currentProjectId";
  * 当前策略：每次保存自动删除旧版本，仅保留最新版本。
  * 这避免了版本管理的复杂性，保持存储简洁。
  *
- * 见 replaceXML() 中的自动清理逻辑。
+ * 见内部保存逻辑中的自动清理。
  */
 const SEMANTIC_VERSION = "latest";
-
-/**
- * 自定义事件名称，用于通知编辑器重新加载
- */
-const UPDATE_EVENT = "drawio-xml-updated";
 
 /**
  * 获取当前活跃项目的 UUID
@@ -151,8 +146,7 @@ async function saveDrawioXMLInternal(decodedXml: string): Promise<void> {
 /**
  * 保存 XML 到 IndexedDB（自动解码 base64）
  *
- * 用于用户手动编辑时的自动保存，不触发 UPDATE_EVENT
- * 避免在用户编辑时触发不必要的 merge 操作
+ * 用于持久化存储 XML 内容，纯粹的存储操作，不触发任何 UI 事件
  *
  * @param xml - XML 内容（可能包含 base64 编码）
  */
@@ -165,25 +159,9 @@ export async function saveDrawioXML(xml: string): Promise<void> {
 
   try {
     await saveDrawioXMLInternal(decodedXml);
-    // 注意：不触发 UPDATE_EVENT，避免用户编辑时触发 merge 循环
   } catch (error) {
     console.error("[DrawIO Tools] 保存 XML 失败:", error);
     throw error;
-  }
-}
-
-/**
- * 触发自定义事件，通知组件 XML 已更新
- *
- * @param xml - 更新后的 XML 内容
- */
-function triggerUpdateEvent(xml: string): void {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent(UPDATE_EVENT, {
-        detail: { xml },
-      }),
-    );
   }
 }
 
@@ -238,14 +216,17 @@ export async function getDrawioXML(): Promise<GetXMLResult> {
 }
 
 /**
- * 覆写 DrawIO XML 内容（仅供 AI 工具调用）
+ * 替换 DrawIO XML 内容（供 AI 工具调用）
  *
- * 会触发 UPDATE_EVENT，通知编辑器重新加载
- * 用于 AI 工具更新图表时，需要编辑器同步显示新内容
+ * 保存新的 XML 内容到存储，并返回成功状态和 XML 内容
+ * 调用方需要自行决定如何更新编辑器（通过 ref 或其他方式）
+ *
+ * @param drawio_xml - 新的 XML 内容
+ * @returns 包含成功状态、消息和 XML 内容的结果
  */
 export async function replaceDrawioXML(
   drawio_xml: string,
-): Promise<ReplaceXMLResult> {
+): Promise<ReplaceXMLResult & { xml?: string }> {
   if (typeof window === "undefined") {
     return {
       success: false,
@@ -267,12 +248,10 @@ export async function replaceDrawioXML(
     const decodedXml = decodeBase64XML(drawio_xml);
     await saveDrawioXMLInternal(decodedXml);
 
-    // 触发 UPDATE_EVENT，通知编辑器 merge 新内容
-    triggerUpdateEvent(decodedXml);
-
     return {
       success: true,
-      message: "XML 内容已成功替换并已通知编辑器重新加载",
+      message: "XML 内容已成功保存",
+      xml: decodedXml,
     };
   } catch (error) {
     return {
@@ -283,4 +262,3 @@ export async function replaceDrawioXML(
   }
 }
 
-export { UPDATE_EVENT };
