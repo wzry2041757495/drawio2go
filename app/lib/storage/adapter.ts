@@ -174,13 +174,6 @@ export interface StorageAdapter {
    */
   getConversationsByProject(projectUuid: string): Promise<Conversation[]>;
 
-  /**
-   * 获取 XML 版本关联的所有对话
-   * @param xmlVersionId XML 版本 ID
-   * @returns 对话数组（按更新时间倒序）
-   */
-  getConversationsByXMLVersion(xmlVersionId: number): Promise<Conversation[]>;
-
   // ==================== Messages ====================
 
   /**

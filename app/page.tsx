@@ -5,17 +5,39 @@ import { useState, useEffect } from "react";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import BottomBar from "./components/BottomBar";
 import UnifiedSidebar from "./components/UnifiedSidebar";
-import { UPDATE_EVENT, saveDrawioXML, getDrawioXML } from "./lib/drawio-tools";
+import ProjectSelector from "./components/ProjectSelector";
 import { useDrawioSocket } from "./hooks/useDrawioSocket";
 import { DrawioSelectionInfo } from "./types/drawio-tools";
 import { useStorageSettings } from "./hooks/useStorageSettings";
+import { useCurrentProject } from "./hooks/useCurrentProject";
+import { useStorageProjects } from "./hooks/useStorageProjects";
+import { useStorageXMLVersions } from "./hooks/useStorageXMLVersions";
+import { useDrawioEditor } from "./hooks/useDrawioEditor";
 
 export default function Home() {
   // 存储 Hook
   const { getDefaultPath } = useStorageSettings();
 
+  // 工程管理 Hook
+  const {
+    currentProject,
+    loading: projectLoading,
+    switchProject,
+  } = useCurrentProject();
+
+  const {
+    projects,
+    createProject,
+    getAllProjects,
+  } = useStorageProjects();
+
+  const { saveXML } = useStorageXMLVersions();
+
+  // DrawIO 编辑器 Hook
+  const { editorRef, loadProjectXml, replaceWithXml } =
+    useDrawioEditor(currentProject?.uuid);
+
   const [diagramXml, setDiagramXml] = useState<string>("");
-  const [currentXml, setCurrentXml] = useState<string>("");
   const [settings, setSettings] = useState({ defaultPath: "" });
   const [activeSidebar, setActiveSidebar] = useState<
     "none" | "settings" | "chat"
@@ -25,30 +47,24 @@ export default function Home() {
     cells: [],
   });
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
-  const [forceReload, setForceReload] = useState<boolean>(false); // 控制是否强制完全重载
+  const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
 
   // 初始化 Socket.IO 连接
   const { isConnected } = useDrawioSocket();
 
-  // 加载保存的图表
+  // 加载当前工程的 XML
+  useEffect(() => {
+    if (currentProject && !projectLoading) {
+      loadProjectXml().catch((error) => {
+        console.error("加载工程 XML 失败:", error);
+      });
+    }
+  }, [currentProject, projectLoading, loadProjectXml]);
+
+  // 初始化环境检测
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsElectronEnv(Boolean(window.electron));
-
-      // 从 IndexedDB 加载图表数据
-      const loadInitialData = async () => {
-        try {
-          const result = await getDrawioXML();
-          if (result.success && result.xml) {
-            setDiagramXml(result.xml);
-            setCurrentXml(result.xml);
-          }
-        } catch (error) {
-          console.error("加载初始图表数据失败:", error);
-        }
-      };
-
-      loadInitialData();
 
       // 加载默认路径设置
       const loadDefaultPath = async () => {
@@ -64,33 +80,30 @@ export default function Home() {
 
       loadDefaultPath();
 
-      // 监听 DrawIO XML 更新事件（由工具函数触发）
-      // 注意：这里只更新 React 状态，实际的 DrawIO 编辑器更新在 DrawioEditorNative 组件内部完成
-      // DrawioEditorNative 会监听 initialXml prop 的变化，并使用 merge 动作增量更新，保留编辑状态
-      const handleXmlUpdate = (event: Event) => {
+      // 监听 AI 工具触发的 XML 替换事件
+      const handleAIXmlReplaced = (event: Event) => {
         const customEvent = event as CustomEvent<{ xml: string }>;
-        if (customEvent.detail?.xml) {
-          console.log("🔄 收到 DrawIO 工具触发的 XML 更新事件，开始更新状态");
-          console.log("🔄 新 XML 长度:", customEvent.detail.xml.length);
-          setDiagramXml(customEvent.detail.xml);
-          setCurrentXml(customEvent.detail.xml);
+        if (customEvent.detail?.xml && editorRef.current) {
+          console.log("🤖 AI 工具更新了 XML，正在加载到编辑器");
+          editorRef.current.loadDiagram(customEvent.detail.xml);
         }
       };
 
-      window.addEventListener(UPDATE_EVENT, handleXmlUpdate);
+      window.addEventListener("ai-xml-replaced", handleAIXmlReplaced);
 
       return () => {
-        window.removeEventListener(UPDATE_EVENT, handleXmlUpdate);
+        window.removeEventListener("ai-xml-replaced", handleAIXmlReplaced);
       };
     }
-  }, [getDefaultPath]);
+  }, [getDefaultPath, editorRef]);
 
-  // 自动保存图表到 IndexedDB（自动解码 base64）
+  // 自动保存图表到统一存储层
   const handleAutoSave = async (xml: string) => {
-    setCurrentXml(xml);
-    if (typeof window !== "undefined") {
+    if (currentProject && typeof window !== "undefined") {
       try {
-        await saveDrawioXML(xml);
+        await saveXML(xml, currentProject.uuid);
+        // 更新 diagramXml 用于手动保存功能
+        setDiagramXml(xml);
       } catch (error) {
         console.error("自动保存失败:", error);
         // 可以在这里添加用户提示，但不中断编辑流程
@@ -106,31 +119,39 @@ export default function Home() {
 
   // 手动保存到文件
   const handleManualSave = async () => {
-    if (!currentXml) {
-      alert("没有可保存的内容");
-      return;
-    }
+    try {
+      // 从编辑器导出当前 XML
+      const currentXml = await editorRef.current?.exportDiagram();
 
-    // 如果在 Electron 环境中,保存到文件系统
-    if (typeof window !== "undefined" && window.electron) {
-      const result = await window.electron.saveDiagram(
-        currentXml,
-        settings.defaultPath,
-      );
-      if (result.success) {
-        alert(`文件已保存到: ${result.filePath}`);
-      } else {
-        alert(`保存失败: ${result.message}`);
+      if (!currentXml) {
+        alert("没有可保存的内容");
+        return;
       }
-    } else {
-      // 浏览器环境下载文件
-      const blob = new Blob([currentXml], { type: "application/xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "diagram.drawio";
-      a.click();
-      URL.revokeObjectURL(url);
+
+      // 如果在 Electron 环境中,保存到文件系统
+      if (typeof window !== "undefined" && window.electron) {
+        const result = await window.electron.saveDiagram(
+          currentXml,
+          settings.defaultPath,
+        );
+        if (result.success) {
+          alert(`文件已保存到: ${result.filePath}`);
+        } else {
+          alert(`保存失败: ${result.message}`);
+        }
+      } else {
+        // 浏览器环境下载文件
+        const blob = new Blob([currentXml], { type: "application/xml" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "diagram.drawio";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error("手动保存失败:", error);
+      alert("保存失败");
     }
   };
 
@@ -139,19 +160,13 @@ export default function Home() {
     if (typeof window !== "undefined" && window.electron) {
       const result = await window.electron.loadDiagram();
       if (result.success && result.xml) {
-        console.log("📂 用户手动加载文件，触发完全重载");
-        setForceReload(true); // 触发完全重载
-        await saveDrawioXML(result.xml);
-
-        // 手动触发 UPDATE_EVENT，确保编辑器更新
-        window.dispatchEvent(
-          new CustomEvent(UPDATE_EVENT, {
-            detail: { xml: result.xml },
-          }),
-        );
-
-        // 重置 forceReload 标志
-        setTimeout(() => setForceReload(false), 100);
+        try {
+          console.log("📂 用户手动加载文件，使用完全重载");
+          await replaceWithXml(result.xml, true); // 使用 load 动作完全重载
+        } catch (error) {
+          console.error("加载文件失败:", error);
+          alert(`加载失败: ${error}`);
+        }
       } else if (result.message !== "用户取消打开") {
         alert(`加载失败: ${result.message}`);
       }
@@ -166,19 +181,13 @@ export default function Home() {
           const reader = new FileReader();
           reader.onload = async (event) => {
             const xml = event.target?.result as string;
-            console.log("📂 用户手动加载文件，触发完全重载");
-            setForceReload(true); // 触发完全重载
-            await saveDrawioXML(xml);
-
-            // 手动触发 UPDATE_EVENT，确保编辑器更新
-            window.dispatchEvent(
-              new CustomEvent(UPDATE_EVENT, {
-                detail: { xml },
-              }),
-            );
-
-            // 重置 forceReload 标志
-            setTimeout(() => setForceReload(false), 100);
+            try {
+              console.log("📂 用户手动加载文件，使用完全重载");
+              await replaceWithXml(xml, true); // 使用 load 动作完全重载
+            } catch (error) {
+              console.error("加载文件失败:", error);
+              alert(`加载失败: ${error}`);
+            }
           };
           reader.readAsText(file);
         }
@@ -200,6 +209,37 @@ export default function Home() {
   // 切换聊天侧栏
   const handleToggleChat = () => {
     setActiveSidebar((prev) => (prev === "chat" ? "none" : "chat"));
+  };
+
+  // 工程选择器处理
+  const handleOpenProjectSelector = () => {
+    setShowProjectSelector(true);
+  };
+
+  const handleCloseProjectSelector = () => {
+    setShowProjectSelector(false);
+  };
+
+  const handleSelectProject = async (projectId: string) => {
+    try {
+      await switchProject(projectId);
+      // 切换工程后会自动触发 useEffect 加载新工程的 XML
+    } catch (error) {
+      console.error("切换工程失败:", error);
+      alert("切换工程失败");
+    }
+  };
+
+  const handleCreateProject = async (name: string, description?: string) => {
+    try {
+      const newProject = await createProject(name, description);
+      await getAllProjects(); // 刷新工程列表
+      await switchProject(newProject.uuid);
+      setShowProjectSelector(false);
+    } catch (error) {
+      console.error("创建工程失败:", error);
+      alert("创建工程失败");
+    }
   };
 
   return (
@@ -229,10 +269,10 @@ export default function Home() {
         className={`editor-container ${activeSidebar !== "none" ? "sidebar-open" : ""}`}
       >
         <DrawioEditorNative
+          ref={editorRef}
           initialXml={diagramXml}
           onSave={handleAutoSave}
           onSelectionChange={handleSelectionChange}
-          forceReload={forceReload}
         />
       </div>
 
@@ -242,6 +282,7 @@ export default function Home() {
         activeSidebar={activeSidebar}
         onClose={() => setActiveSidebar("none")}
         onSettingsChange={handleSettingsChange}
+        currentProjectId={currentProject?.uuid}
       />
 
       {/* 底部工具栏 */}
@@ -251,6 +292,8 @@ export default function Home() {
         onSave={handleManualSave}
         onLoad={handleLoad}
         activeSidebar={activeSidebar}
+        currentProjectName={currentProject?.name}
+        onOpenProjectSelector={handleOpenProjectSelector}
         selectionLabel={
           isElectronEnv
             ? `选中了${selectionInfo.count}个对象${
@@ -265,6 +308,16 @@ export default function Home() {
               }`
             : "网页无法使用该功能"
         }
+      />
+
+      {/* 工程选择器 */}
+      <ProjectSelector
+        isOpen={showProjectSelector}
+        onClose={handleCloseProjectSelector}
+        currentProjectId={currentProject?.uuid || null}
+        onSelectProject={handleSelectProject}
+        projects={projects}
+        onCreateProject={handleCreateProject}
       />
     </main>
   );

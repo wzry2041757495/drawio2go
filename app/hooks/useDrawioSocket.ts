@@ -90,8 +90,18 @@ export function useDrawioSocket() {
               success: boolean;
               error?: string;
               message?: string;
+              xml?: string;
               [key: string]: unknown;
             };
+
+            // 如果替换成功，触发自定义事件通知编辑器更新
+            if (result.success && result.xml) {
+              window.dispatchEvent(
+                new CustomEvent("ai-xml-replaced", {
+                  detail: { xml: result.xml },
+                }),
+              );
+            }
             break;
 
           default:

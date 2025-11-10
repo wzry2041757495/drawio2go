@@ -21,14 +21,14 @@ export function useStorageConversations() {
   /**
    * 创建对话
    *
-   * @param xmlVersionId 关联的 XML 版本 ID
    * @param title 对话标题
+   * @param projectUuid 工程 UUID（默认使用 DEFAULT_PROJECT_UUID）
    * @returns 创建的对话
    */
   const createConversation = useCallback(
     async (
-      xmlVersionId: number,
       title: string = "New Chat",
+      projectUuid: string = DEFAULT_PROJECT_UUID,
     ): Promise<Conversation> => {
       setLoading(true);
       setError(null);
@@ -37,8 +37,7 @@ export function useStorageConversations() {
         const storage = await getStorage();
         const conversation = await storage.createConversation({
           id: uuidv4(),
-          project_uuid: DEFAULT_PROJECT_UUID,
-          xml_version_id: xmlVersionId,
+          project_uuid: projectUuid,
           title,
         });
 
@@ -83,7 +82,7 @@ export function useStorageConversations() {
   const updateConversation = useCallback(
     async (
       id: string,
-      updates: Partial<Pick<Conversation, "title" | "xml_version_id">>,
+      updates: Partial<Pick<Conversation, "title">>,
     ): Promise<void> => {
       setLoading(true);
       setError(null);
@@ -123,24 +122,29 @@ export function useStorageConversations() {
 
   /**
    * 获取所有对话
+   *
+   * @param projectUuid 工程 UUID（默认使用 DEFAULT_PROJECT_UUID）
    */
-  const getAllConversations = useCallback(async (): Promise<Conversation[]> => {
-    setLoading(true);
-    setError(null);
+  const getAllConversations = useCallback(
+    async (projectUuid: string = DEFAULT_PROJECT_UUID): Promise<Conversation[]> => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const storage = await getStorage();
-      const conversations =
-        await storage.getConversationsByProject(DEFAULT_PROJECT_UUID);
-      setLoading(false);
-      return conversations;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      setLoading(false);
-      throw error;
-    }
-  }, []);
+      try {
+        const storage = await getStorage();
+        const conversations =
+          await storage.getConversationsByProject(projectUuid);
+        setLoading(false);
+        return conversations;
+      } catch (err) {
+        const error = err as Error;
+        setError(error);
+        setLoading(false);
+        throw error;
+      }
+    },
+    [],
+  );
 
   /**
    * 获取对话的所有消息
@@ -175,6 +179,7 @@ export function useStorageConversations() {
       role: "user" | "assistant" | "system",
       content: string,
       toolInvocations?: unknown,
+      modelName?: string | null,
     ): Promise<Message> => {
       setLoading(true);
       setError(null);
@@ -189,6 +194,7 @@ export function useStorageConversations() {
           tool_invocations: toolInvocations
             ? JSON.stringify(toolInvocations)
             : undefined,
+          model_name: modelName ?? null,
         });
 
         setLoading(false);

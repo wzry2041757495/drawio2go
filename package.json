@@ -74,9 +74,10 @@
       "electron"
     ],
     "ignoredBuiltDependencies": [
-      "@heroui/shared-utils",
+      "better-sqlite3",
       "electron",
-      "sharp"
+      "sharp",
+      "unrs-resolver"
     ]
   },
   "build": {
