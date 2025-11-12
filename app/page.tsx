@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 // import DrawioEditor from "./components/DrawioEditor";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import BottomBar from "./components/BottomBar";
@@ -13,6 +13,7 @@ import { useCurrentProject } from "./hooks/useCurrentProject";
 import { useStorageProjects } from "./hooks/useStorageProjects";
 import { useStorageXMLVersions } from "./hooks/useStorageXMLVersions";
 import { useDrawioEditor } from "./hooks/useDrawioEditor";
+import { WIP_VERSION } from "./lib/storage/constants";
 
 export default function Home() {
   // 存储 Hook
@@ -27,7 +28,8 @@ export default function Home() {
 
   const { projects, createProject, getAllProjects } = useStorageProjects();
 
-  const { saveXML } = useStorageXMLVersions();
+  const { saveXML, getAllXMLVersions, rollbackToVersion } =
+    useStorageXMLVersions();
 
   // DrawIO 编辑器 Hook
   const { editorRef, loadProjectXml, replaceWithXml } = useDrawioEditor(
@@ -37,7 +39,7 @@ export default function Home() {
   const [diagramXml, setDiagramXml] = useState<string>("");
   const [settings, setSettings] = useState({ defaultPath: "" });
   const [activeSidebar, setActiveSidebar] = useState<
-    "none" | "settings" | "chat"
+    "none" | "settings" | "chat" | "version"
   >("none");
   const [selectionInfo, setSelectionInfo] = useState<DrawioSelectionInfo>({
     count: 0,
@@ -50,14 +52,42 @@ export default function Home() {
   // 初始化 Socket.IO 连接
   const { isConnected } = useDrawioSocket();
 
+  // 确保项目有 WIP 版本
+  const ensureWIPVersion = useCallback(
+    async (projectUuid: string) => {
+      try {
+        const versions = await getAllXMLVersions(projectUuid);
+        const wipVersion = versions.find(
+          (v) => v.semantic_version === WIP_VERSION,
+        );
+
+        if (!wipVersion) {
+          const defaultXml =
+            '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
+          await saveXML(defaultXml, projectUuid);
+          console.log("✅ 已创建 WIP 版本");
+        }
+      } catch (error) {
+        console.error("❌ 创建 WIP 版本失败:", error);
+      }
+    },
+    [getAllXMLVersions, saveXML],
+  );
+
   // 加载当前工程的 XML
   useEffect(() => {
     if (currentProject && !projectLoading) {
+      // 确保 WIP 版本存在
+      ensureWIPVersion(currentProject.uuid).catch((error) => {
+        console.error("初始化 WIP 版本失败:", error);
+      });
+
+      // 加载工程 XML
       loadProjectXml().catch((error) => {
         console.error("加载工程 XML 失败:", error);
       });
     }
-  }, [currentProject, projectLoading, loadProjectXml]);
+  }, [currentProject, projectLoading, loadProjectXml, ensureWIPVersion]);
 
   // 初始化环境检测
   useEffect(() => {
@@ -209,6 +239,31 @@ export default function Home() {
     setActiveSidebar((prev) => (prev === "chat" ? "none" : "chat"));
   };
 
+  // 切换版本侧栏
+  const handleToggleVersion = () => {
+    setActiveSidebar((prev) => (prev === "version" ? "none" : "version"));
+  };
+
+  // 版本回滚处理
+  const handleVersionRestore = async (versionId: string) => {
+    if (!currentProject) return;
+
+    try {
+      console.log(`🔄 开始回滚到版本 ${versionId}`);
+
+      // 执行回滚操作（将历史版本覆盖到 WIP）
+      await rollbackToVersion(currentProject.uuid, versionId);
+
+      // 重新加载 WIP 到编辑器
+      await loadProjectXml();
+
+      console.log("✅ 版本回滚成功");
+    } catch (error) {
+      console.error("❌ 版本回滚失败:", error);
+      alert("版本回滚失败");
+    }
+  };
+
   // 工程选择器处理
   const handleOpenProjectSelector = () => {
     setShowProjectSelector(true);
@@ -281,12 +336,15 @@ export default function Home() {
         onClose={() => setActiveSidebar("none")}
         onSettingsChange={handleSettingsChange}
         currentProjectId={currentProject?.uuid}
+        projectUuid={currentProject?.uuid}
+        onVersionRestore={handleVersionRestore}
       />
 
       {/* 底部工具栏 */}
       <BottomBar
         onToggleSettings={handleToggleSettings}
         onToggleChat={handleToggleChat}
+        onToggleVersion={handleToggleVersion}
         onSave={handleManualSave}
         onLoad={handleLoad}
         activeSidebar={activeSidebar}

@@ -1,14 +1,15 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, History } from "lucide-react";
 
 interface BottomBarProps {
   onToggleSettings?: () => void;
   onToggleChat?: () => void;
+  onToggleVersion?: () => void;
   onSave?: () => void;
   onLoad?: () => void;
-  activeSidebar?: "none" | "settings" | "chat";
+  activeSidebar?: "none" | "settings" | "chat" | "version";
   selectionLabel?: string;
   currentProjectName?: string;
   onOpenProjectSelector?: () => void;
@@ -17,6 +18,7 @@ interface BottomBarProps {
 export default function BottomBar({
   onToggleSettings,
   onToggleChat,
+  onToggleVersion,
   onSave,
   onLoad,
   activeSidebar = "none",
@@ -99,7 +101,7 @@ export default function BottomBar({
         </Button>
       )}
 
-      {(onToggleChat || onToggleSettings) && (
+      {(onToggleChat || onToggleSettings || onToggleVersion) && (
         <div className="button-group">
           {onToggleChat && (
             <Button
@@ -153,6 +155,17 @@ export default function BottomBar({
                 />
               </svg>
               设置
+            </Button>
+          )}
+          {onToggleVersion && (
+            <Button
+              variant={activeSidebar === "version" ? "primary" : "secondary"}
+              size="md"
+              className="bottom-bar-button"
+              onPress={onToggleVersion}
+            >
+              <History className="w-4 h-4" />
+              版本
             </Button>
           )}
         </div>

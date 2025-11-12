@@ -4,14 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ChatSidebar from "./ChatSidebar";
 import SettingsSidebar from "./SettingsSidebar";
+import { VersionSidebar } from "./VersionSidebar";
 import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 
 interface UnifiedSidebarProps {
   isOpen: boolean;
-  activeSidebar: "none" | "settings" | "chat";
+  activeSidebar: "none" | "settings" | "chat" | "version";
   onClose: () => void;
   onSettingsChange?: (settings: { defaultPath: string }) => void;
   currentProjectId?: string;
+  projectUuid?: string | null;
+  onVersionRestore?: (versionId: string) => void;
 }
 
 const MIN_WIDTH = 300;
@@ -25,6 +28,8 @@ export default function UnifiedSidebar({
   onClose,
   onSettingsChange,
   currentProjectId,
+  projectUuid,
+  onVersionRestore,
 }: UnifiedSidebarProps) {
   // 存储 Hook
   const { getSetting, setSetting } = useStorageSettings();
@@ -138,6 +143,12 @@ export default function UnifiedSidebar({
           isOpen={true}
           onClose={onClose}
           currentProjectId={currentProjectId}
+        />
+      )}
+      {activeSidebar === "version" && (
+        <VersionSidebar
+          projectUuid={projectUuid || null}
+          onVersionRestore={onVersionRestore}
         />
       )}
     </div>

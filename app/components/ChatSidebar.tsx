@@ -273,7 +273,7 @@ export default function ChatSidebar({ currentProjectId }: ChatSidebarProps) {
             "默认版本",
             "初始版本",
           );
-          defaultVersionId = defaultXml.id;
+          defaultVersionId = defaultXml;
         } else {
           // 使用最新的 XML 版本
           defaultVersionId = xmlVersions[0].id;
