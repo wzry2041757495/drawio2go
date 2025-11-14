@@ -138,8 +138,12 @@ export function useStorageXMLVersions() {
           return null;
         }
 
-        // 返回最新版本的 XML
-        const latest = versions[0];
+        // 优先返回 WIP 版本（用户最新编辑）
+        // 避免在创建历史快照后错误加载快照而非 WIP
+        const wipVersion = versions.find(
+          (v) => v.semantic_version === WIP_VERSION,
+        );
+        const latest = wipVersion || versions[0];
         setLoading(false);
         const resolved = await materializeVersionXml(latest, (id) =>
           storage.getXMLVersion(id),
