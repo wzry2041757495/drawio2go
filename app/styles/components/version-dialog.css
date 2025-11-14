@@ -50,12 +50,6 @@
   color: var(--text-primary);
 }
 
-.dialog-header .button-icon {
-  min-width: 2rem;
-  min-height: 2rem;
-  padding: 0;
-}
-
 /* ================================
    对话框内容区域
    ================================ */

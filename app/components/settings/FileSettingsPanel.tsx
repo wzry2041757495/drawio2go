@@ -31,12 +31,7 @@ export default function FileSettingsPanel({
             placeholder="/path/to/folder"
             className="flex-1"
           />
-          <Button
-            variant="secondary"
-            size="sm"
-            className="button-small-optimized button-secondary"
-            onPress={onBrowse}
-          >
+          <Button variant="secondary" size="sm" onPress={onBrowse}>
             浏览
           </Button>
         </div>

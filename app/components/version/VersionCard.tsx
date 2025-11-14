@@ -162,10 +162,9 @@ export function VersionCard({
               <div className="version-card__actions">
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="tertiary"
                   onPress={handleExport}
                   isDisabled={isExporting}
-                  className="button-icon"
                   aria-label={`导出 ${versionLabel}`}
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -177,7 +176,6 @@ export function VersionCard({
                     size="sm"
                     variant="secondary"
                     onPress={handleRestore}
-                    className="button-small-optimized"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     回滚

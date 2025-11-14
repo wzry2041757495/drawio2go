@@ -138,7 +138,6 @@ export default function SettingsSidebar({
           <Button
             variant="ghost"
             size="sm"
-            className="sidebar-button"
             onPress={handleCancel}
           >
             取消
@@ -146,7 +145,6 @@ export default function SettingsSidebar({
           <Button
             variant="primary"
             size="sm"
-            className="sidebar-button button-primary"
             onPress={handleSave}
           >
             保存

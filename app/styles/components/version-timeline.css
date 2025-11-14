@@ -360,18 +360,6 @@
   overflow: hidden;
 }
 
-.button-small-optimized {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.65rem;
-  height: auto;
-  min-height: 1.75rem;
-}
-
-.button-small-optimized svg {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
 @media (max-width: 480px) {
   .timeline-header {
     flex-direction: column;

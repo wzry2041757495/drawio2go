@@ -135,7 +135,7 @@ export function VersionSidebar({
             size="sm"
             variant="primary"
             onPress={() => setShowCreateDialog(true)}
-            className="button-primary version-sidebar__cta"
+            className="version-sidebar__cta"
             isDisabled={isLoading}
           >
             <Save className="w-4 h-4" />

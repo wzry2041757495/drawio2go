@@ -75,7 +75,7 @@ export default function ConnectionTester({ config }: ConnectionTesterProps) {
         <Button
           variant="primary"
           size="sm"
-          className="button-primary mt-3 w-full"
+          className="mt-3 w-full"
           onPress={handleTest}
           isDisabled={isTesting}
         >
@@ -107,7 +107,6 @@ export default function ConnectionTester({ config }: ConnectionTesterProps) {
             <Button
               variant="primary"
               size="sm"
-              className="sidebar-button button-primary"
               onPress={handleClose}
               isDisabled={isTesting}
             >

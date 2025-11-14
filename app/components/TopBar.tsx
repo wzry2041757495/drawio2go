@@ -32,7 +32,7 @@ export default function TopBar({
         <Button
           variant="secondary"
           size="sm"
-          className="top-bar-project button-secondary"
+          className="top-bar-project"
           onPress={onOpenProjectSelector}
         >
           <FolderOpen size={16} />
@@ -70,7 +70,7 @@ export default function TopBar({
           <Button
             variant="primary"
             size="sm"
-            className="top-bar-button button-primary"
+            className="top-bar-button"
             onPress={onSave}
           >
             <svg
@@ -93,7 +93,7 @@ export default function TopBar({
 
         <Button
           isIconOnly
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className="top-bar-button"
           aria-label={isSidebarOpen ? "收起侧栏" : "展开侧栏"}

@@ -45,7 +45,7 @@ export default function SystemPromptEditor({
         <Button
           variant="secondary"
           size="sm"
-          className="button-small-optimized button-secondary mt-3 w-full"
+          className="mt-3 w-full"
           onPress={handleOpen}
         >
           编辑系统提示词
@@ -68,23 +68,16 @@ export default function SystemPromptEditor({
             <Button
               variant="ghost"
               size="sm"
-              className="sidebar-button"
               onPress={handleClose}
             >
               取消
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="sidebar-button button-secondary"
-              onPress={handleReset}
-            >
+            <Button variant="secondary" size="sm" onPress={handleReset}>
               恢复默认
             </Button>
             <Button
               variant="primary"
               size="sm"
-              className="sidebar-button button-primary"
               onPress={handleSave}
             >
               保存

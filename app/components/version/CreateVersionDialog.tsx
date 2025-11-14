@@ -196,8 +196,9 @@ export function CreateVersionDialog({
           <Button
             size="sm"
             variant="ghost"
+            isIconOnly
+            aria-label="关闭创建版本对话框"
             onPress={onClose}
-            className="button-icon"
             isDisabled={isCreating}
           >
             <X className="w-4 h-4" />
@@ -221,7 +222,6 @@ export function CreateVersionDialog({
                 size="sm"
                 variant="secondary"
                 onPress={handleRecommend}
-                className="button-small-optimized"
                 isDisabled={isCreating}
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -274,7 +274,11 @@ export function CreateVersionDialog({
 
         {/* 对话框底部 */}
         <div className="dialog-footer">
-          <Button variant="secondary" onPress={onClose} isDisabled={isCreating}>
+          <Button
+            variant="secondary"
+            onPress={onClose}
+            isDisabled={isCreating}
+          >
             取消
           </Button>
           <Button
@@ -286,7 +290,6 @@ export function CreateVersionDialog({
               !!validationError ||
               checkingExists
             }
-            className="button-primary"
           >
             {isCreating ? (
               <>

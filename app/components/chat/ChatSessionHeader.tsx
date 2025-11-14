@@ -57,10 +57,10 @@ export default function ChatSessionHeader({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="danger"
             isIconOnly
+            aria-label="删除会话"
             onPress={onDeleteSession}
-            className="chat-icon-button"
           >
             <svg
               width="16"
@@ -84,10 +84,10 @@ export default function ChatSessionHeader({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="导出当前会话"
             onPress={onExportSession}
-            className="chat-icon-button"
           >
             <svg
               width="16"
@@ -112,10 +112,10 @@ export default function ChatSessionHeader({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="导出所有会话"
             onPress={onExportAllSessions}
-            className="chat-icon-button"
           >
             <svg
               width="16"
@@ -141,10 +141,10 @@ export default function ChatSessionHeader({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="导入会话"
             onPress={onImportSessions}
-            className="chat-icon-button"
           >
             <svg
               width="16"
