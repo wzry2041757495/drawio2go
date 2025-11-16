@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { Skeleton } from "@heroui/react";
+import { Button, Skeleton } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { History } from "lucide-react";
 import { VersionCard } from "./VersionCard";
 import { WIP_VERSION } from "@/app/lib/storage/constants";
 import type { XMLVersion } from "@/app/lib/storage/types";
+import type { VersionPair } from "@/app/hooks/useVersionCompare";
 
 // 虚拟滚动阈值 - 版本数量超过此值时启用虚拟滚动
 const VIRTUAL_SCROLL_THRESHOLD = 50;
@@ -17,6 +18,10 @@ interface VersionTimelineProps {
   onVersionRestore?: (versionId: string) => void;
   onVersionCreated?: () => void;
   isLoading?: boolean;
+  compareMode?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (versionId: string) => void;
+  onQuickCompare?: (pair: VersionPair) => void;
 }
 
 /**
@@ -28,9 +33,25 @@ export function VersionTimeline({
   versions,
   onVersionRestore,
   isLoading = false,
+  compareMode = false,
+  selectedIds = [],
+  onToggleSelect,
+  onQuickCompare,
 }: VersionTimelineProps) {
   const parentRef = React.useRef<HTMLDivElement>(null);
   const skeletonItems = React.useMemo(() => Array.from({ length: 3 }), []);
+  const selectedIdSet = React.useMemo(
+    () => new Set(selectedIds),
+    [selectedIds],
+  );
+  const getCompareOrder = React.useCallback(
+    (id: string) => {
+      if (!compareMode) return null;
+      const index = selectedIds.indexOf(id);
+      return index === -1 ? null : index;
+    },
+    [compareMode, selectedIds],
+  );
 
   // 过滤出历史版本（排除 WIP）并按时间倒序排列
   const historicalVersions = React.useMemo(() => {
@@ -131,6 +152,21 @@ export function VersionTimeline({
                   version={version}
                   isLatest={virtualItem.index === 0}
                   onRestore={onVersionRestore}
+                  compareMode={compareMode}
+                  selected={selectedIdSet.has(version.id)}
+                  compareOrder={getCompareOrder(version.id)}
+                  onToggleSelect={onToggleSelect}
+                  onQuickCompare={(() => {
+                    const previous = historicalVersions[virtualItem.index + 1];
+                    if (!previous || !onQuickCompare) return undefined;
+                    return () => {
+                      const [older, newer] =
+                        previous.created_at <= version.created_at
+                          ? [previous, version]
+                          : [version, previous];
+                      onQuickCompare({ versionA: older, versionB: newer });
+                    };
+                  })()}
                 />
               </div>
             );
@@ -149,6 +185,21 @@ export function VersionTimeline({
           version={version}
           isLatest={index === 0}
           onRestore={onVersionRestore}
+          compareMode={compareMode}
+          selected={selectedIdSet.has(version.id)}
+          compareOrder={getCompareOrder(version.id)}
+          onToggleSelect={onToggleSelect}
+          onQuickCompare={(() => {
+            const previous = historicalVersions[index + 1];
+            if (!previous || !onQuickCompare) return undefined;
+            return () => {
+              const [older, newer] =
+                previous.created_at <= version.created_at
+                  ? [previous, version]
+                  : [version, previous];
+              onQuickCompare({ versionA: older, versionB: newer });
+            };
+          })()}
         />
       ))}
     </div>
@@ -163,11 +214,33 @@ export function VersionTimeline({
           <p className="timeline-description">
             按时间倒序的快照记录
             {enableVirtualScroll && " • 虚拟滚动已启用"}
+            {compareMode && " • 对比模式"}
           </p>
         </div>
-        <span className="timeline-chip">
-          {historicalVersions.length} 个快照
-        </span>
+        <div className="timeline-header__actions">
+          <span className="timeline-chip">
+            {historicalVersions.length} 个快照
+          </span>
+          {compareMode && historicalVersions.length >= 2 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={() => {
+                if (!onQuickCompare) return;
+                const latest = historicalVersions[0];
+                const previous = historicalVersions[1];
+                if (!latest || !previous) return;
+                const [older, newer] =
+                  previous.created_at <= latest.created_at
+                    ? [previous, latest]
+                    : [latest, previous];
+                onQuickCompare({ versionA: older, versionB: newer });
+              }}
+            >
+              最新 vs 上一版本
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 版本列表 - 根据数量选择渲染方式 */}

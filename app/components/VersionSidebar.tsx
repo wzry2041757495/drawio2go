@@ -5,6 +5,8 @@ import { Alert, Button, Skeleton } from "@heroui/react";
 import { WIPIndicator } from "./version/WIPIndicator";
 import { VersionTimeline } from "./version/VersionTimeline";
 import { CreateVersionDialog } from "./version/CreateVersionDialog";
+import { VersionCompare } from "./version/VersionCompare";
+import { useVersionCompare } from "@/app/hooks/useVersionCompare";
 import {
   useStorageXMLVersions,
   type CreateHistoricalVersionResult,
@@ -41,6 +43,43 @@ export function VersionSidebar({
   );
 
   const { getAllXMLVersions } = useStorageXMLVersions();
+  const compare = useVersionCompare();
+  const {
+    isCompareMode,
+    selectedIds,
+    toggleCompareMode,
+    resetSelection,
+    toggleSelection,
+    isDialogOpen,
+    activePair,
+    openDialogWithPair,
+    closeDialog,
+  } = compare;
+
+  const selectedVersions = React.useMemo(
+    () =>
+      selectedIds
+        .map((id) => versions.find((item) => item.id === id))
+        .filter(Boolean) as XMLVersion[],
+    [selectedIds, versions],
+  );
+
+  React.useEffect(() => {
+    if (!selectedIds.length) return;
+    if (selectedVersions.length !== selectedIds.length) {
+      resetSelection();
+    }
+  }, [selectedIds, selectedVersions.length, resetSelection]);
+
+  const comparePair = React.useMemo(() => {
+    if (selectedVersions.length !== 2) return null;
+    const sorted = [...selectedVersions].sort(
+      (a, b) => a.created_at - b.created_at,
+    );
+    return { versionA: sorted[0], versionB: sorted[1] };
+  }, [selectedVersions]);
+
+  const canStartCompare = Boolean(comparePair);
 
   // 加载版本列表
   const loadVersions = React.useCallback(async () => {
@@ -168,6 +207,16 @@ export function VersionSidebar({
           </div>
         </div>
         <div className="sidebar-header__actions">
+          {versions.length > 1 && (
+            <Button
+              size="sm"
+              variant={isCompareMode ? "secondary" : "ghost"}
+              onPress={toggleCompareMode}
+              className="version-sidebar__compare-btn"
+            >
+              {isCompareMode ? "退出对比" : "对比版本"}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="primary"
@@ -212,12 +261,57 @@ export function VersionSidebar({
           </div>
         ) : (
           <>
+            {isCompareMode && (
+              <div className="compare-mode-banner">
+                <div className="compare-mode-banner__info">
+                  <p>
+                    对比模式已开启 · 已选择 {selectedVersions.length}/2 个版本
+                  </p>
+                  <span>
+                    {canStartCompare ? "准备就绪" : "请选择两个历史版本"}
+                  </span>
+                </div>
+                {selectedVersions.length > 0 && (
+                  <div className="compare-mode-chips">
+                    {selectedVersions.map((v, index) => (
+                      <span key={v.id} className="compare-mode-chip">
+                        #{index + 1} · v{v.semantic_version}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="compare-mode-actions">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onPress={() =>
+                      comparePair && openDialogWithPair(comparePair)
+                    }
+                    isDisabled={!canStartCompare}
+                  >
+                    开始对比
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onPress={resetSelection}
+                    isDisabled={!selectedIds.length}
+                  >
+                    清空选择
+                  </Button>
+                </div>
+              </div>
+            )}
             <WIPIndicator projectUuid={projectUuid} versions={versions} />
             <VersionTimeline
               projectUuid={projectUuid}
               versions={versions}
               onVersionRestore={onVersionRestore}
               onVersionCreated={handleVersionCreated}
+              compareMode={isCompareMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelection}
+              onQuickCompare={openDialogWithPair}
             />
           </>
         )}
@@ -231,6 +325,15 @@ export function VersionSidebar({
         onVersionCreated={handleVersionCreated}
         editorRef={editorRef}
       />
+
+      {isDialogOpen && activePair && (
+        <VersionCompare
+          versionA={activePair.versionA}
+          versionB={activePair.versionB}
+          isOpen={isDialogOpen}
+          onClose={closeDialog}
+        />
+      )}
     </div>
   );
 }

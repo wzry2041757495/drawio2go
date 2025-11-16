@@ -3,6 +3,7 @@ export { useStorageSettings } from "./useStorageSettings";
 export { useStorageProjects } from "./useStorageProjects";
 export { useStorageXMLVersions } from "./useStorageXMLVersions";
 export { useStorageConversations } from "./useStorageConversations";
+export { useVersionCompare } from "./useVersionCompare";
 
 // Other Hooks - 其他 Hooks
 export { useDrawioSocket } from "./useDrawioSocket";

@@ -101,6 +101,33 @@ interface VersionTimelineProps {
 - **空状态**: 无历史版本时显示引导信息
 - **降序排列**: 最新版本在顶部
 
+#### version/VersionCompare.tsx - 版本对比弹层（里程碑6）
+
+**并排/叠加对比两个历史版本的多页 SVG** - 支持同步缩放、按键导航、布局切换。
+
+##### Props
+
+```typescript
+interface VersionCompareProps {
+  versionA: XMLVersion; // 旧版本
+  versionB: XMLVersion; // 新版本
+  isOpen: boolean;
+  onClose: () => void;
+}
+```
+
+##### 特性
+
+- **三种布局**: 左右分栏（split）、上下堆叠（stack）、叠加对比（overlay，可调透明度）
+- **同步控制**: 统一缩放/平移、键盘左右切页、Ctrl/Cmd+滚轮缩放、0 重置
+- **缺页提示**: 页面数量不一致或缺少 `pages_svg` 时显示占位和警告文案
+- **页面跳转**: Select 下拉快速跳页，Footer 展示当前页名称与计数
+
+##### 交互提示
+
+- 支持 ESC 关闭、方向键切页、`+/-/0` 控制缩放
+- 叠加模式下可拖动透明度滑杆
+
 #### version/CreateVersionDialog.tsx - 创建版本对话框
 
 **创建新版本的模态对话框** - 输入版本信息并保存快照

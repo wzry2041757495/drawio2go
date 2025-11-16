@@ -558,6 +558,37 @@ import { Button, Card } from '@heroui/react'
 .version-card__chevron.rotated {
   transform: rotate(180deg);
 }
+
+/* 对比模式扩展 */
+.compare-mode-banner {
+  /* 选中提示 Banner */
+}
+.version-card__select-chip {
+  /* 加入对比按钮 */
+}
+.version-card--selected {
+  /* 已选状态强调 */
+}
+.version-compare__overlay {
+  /* VersionCompare 弹层 */
+}
+.version-compare__canvas--overlay {
+  /* 叠加布局 */
+}
+
+/* 多页/对比工具 */
+.page-svg-viewer__* {
+  /* PageSVGViewer 控件 */
+}
+.version-compare__toolbar {
+  /* 缩放/布局控制 */
+}
+.version-compare__placeholder {
+  /* 缺页占位 */
+}
+.version-compare__footer {
+  /* 页码与操作栏 */
+}
 ```
 
 #### 徽章系统规范

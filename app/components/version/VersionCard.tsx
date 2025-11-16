@@ -21,6 +21,8 @@ import {
   LayoutGrid,
   Loader2,
   Maximize2,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
@@ -38,6 +40,11 @@ interface VersionCardProps {
   isLatest?: boolean;
   onRestore?: (versionId: string) => void;
   defaultExpanded?: boolean;
+  compareMode?: boolean;
+  selected?: boolean;
+  compareOrder?: number | null;
+  onToggleSelect?: (versionId: string) => void;
+  onQuickCompare?: () => void;
 }
 
 interface PageThumbnail {
@@ -55,6 +62,11 @@ export function VersionCard({
   isLatest,
   onRestore,
   defaultExpanded = false,
+  compareMode = false,
+  selected = false,
+  compareOrder = null,
+  onToggleSelect,
+  onQuickCompare,
 }: VersionCardProps) {
   const [isExporting, setIsExporting] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
@@ -267,7 +279,7 @@ export function VersionCard({
 
   return (
     <Card.Root
-      className={`version-card${isLatest ? " version-card--latest" : ""}${isExpanded ? " version-card--expanded" : " version-card--collapsed"}`}
+      className={`version-card${isLatest ? " version-card--latest" : ""}${isExpanded ? " version-card--expanded" : " version-card--collapsed"}${compareMode ? " version-card--compare" : ""}${selected ? " version-card--selected" : ""}`}
       variant="secondary"
     >
       <Card.Content className="version-card__content">
@@ -280,6 +292,41 @@ export function VersionCard({
               onClick={() => setIsExpanded(!isExpanded)}
             >
               <div className="version-card__compact-view">
+                {compareMode && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selected}
+                    aria-label={
+                      selected
+                        ? `已选择为对比序号 ${(compareOrder ?? 0) + 1}`
+                        : "选择该版本进行对比"
+                    }
+                    className={`version-card__select-chip${selected ? " version-card__select-chip--active" : ""}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleSelect?.(version.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onToggleSelect?.(version.id);
+                      }
+                    }}
+                  >
+                    {selected ? (
+                      <CheckSquare className="w-3.5 h-3.5" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {selected && compareOrder !== null
+                        ? `#${compareOrder + 1}`
+                        : "加入"}
+                    </span>
+                  </div>
+                )}
                 <div className="version-card__compact-left">
                   <span className="version-number">{versionLabel}</span>
                   {isLatest && <span className="latest-badge">最新</span>}
@@ -296,6 +343,13 @@ export function VersionCard({
                   )}
                 </div>
                 <div className="version-card__compact-right">
+                  {compareMode && selected && (
+                    <span className="version-card__chip">
+                      {compareOrder !== null
+                        ? `第 ${compareOrder + 1} 个`
+                        : "已选"}
+                    </span>
+                  )}
                   <span className="version-card__time">
                     <Clock className="w-3 h-3" />
                     {createdAt}
@@ -488,6 +542,12 @@ export function VersionCard({
               </div>
 
               <div className="version-card__actions">
+                {onQuickCompare && (
+                  <Button size="sm" variant="ghost" onPress={onQuickCompare}>
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    快速对比
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="tertiary"
