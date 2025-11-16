@@ -7,6 +7,7 @@ import {
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
   DEFAULT_FIRST_VERSION,
+  buildPageMetadataFromXml,
 } from "@/app/lib/storage";
 import type { XMLVersion } from "@/app/lib/storage";
 import {
@@ -50,6 +51,8 @@ export function useStorageXMLVersions() {
 
       try {
         const storage = await getStorage();
+        const pageMetadata = buildPageMetadataFromXml(xml);
+        const pageNamesJson = JSON.stringify(pageMetadata.pageNames);
 
         // 始终保存到 WIP 版本
         const payload = await computeVersionPayload({
@@ -86,6 +89,8 @@ export function useStorageXMLVersions() {
             is_keyframe: payload.is_keyframe,
             diff_chain_depth: payload.diff_chain_depth,
             source_version_id: payload.source_version_id,
+            page_count: pageMetadata.pageCount,
+            page_names: pageNamesJson,
             created_at: timestamp,
           });
           versionId = wipVersion.id;
@@ -103,6 +108,8 @@ export function useStorageXMLVersions() {
             is_keyframe: payload.is_keyframe,
             diff_chain_depth: payload.diff_chain_depth,
             source_version_id: payload.source_version_id,
+            page_count: pageMetadata.pageCount,
+            page_names: pageNamesJson,
           });
           versionId = newVersion.id;
         }
@@ -262,6 +269,8 @@ export function useStorageXMLVersions() {
           throw new Error("无法计算历史版本数据");
         }
 
+        const pageMetadata = buildPageMetadataFromXml(wipXml);
+
         // 保存新历史版本
         const newVersion = await storage.createXMLVersion({
           id: uuidv4(),
@@ -275,6 +284,8 @@ export function useStorageXMLVersions() {
           is_keyframe: payload.is_keyframe,
           diff_chain_depth: payload.diff_chain_depth,
           source_version_id: payload.source_version_id,
+          page_count: pageMetadata.pageCount,
+          page_names: JSON.stringify(pageMetadata.pageNames),
         });
 
         setLoading(false);

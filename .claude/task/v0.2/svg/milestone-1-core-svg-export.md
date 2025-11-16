@@ -1,15 +1,18 @@
 # 里程碑1：核心SVG导出功能
 
 ## 🎯 目标
+
 实现 DrawioEditorNative 组件的 SVG 导出功能，为后续的版本保存和展示提供基础能力。
 
 ## 📝 涉及文件
+
 - `app/components/DrawioEditorNative.tsx` - 扩展组件功能
 - `app/lib/svg-export-utils.ts` - 新建工具库
 
 ## ✅ 任务清单
 
 ### 1. 扩展 DrawioEditorNative 组件
+
 - [x] 在 `DrawioEditorRef` 接口中添加 `exportSVG()` 方法签名
 - [x] 实现 `exportSVG()` 方法，使用 postMessage 与 DrawIO iframe 通信
   - 发送 `{ action: "export", format: "svg" }` 消息
@@ -19,6 +22,7 @@
 - [x] 测试单页 SVG 导出功能
 
 ### 2. 创建 SVG 导出工具库
+
 - [x] 创建 `app/lib/svg-export-utils.ts` 文件
 - [x] 实现 `parsePages(xml: string)` 函数
   - 使用 DOMParser 解析 XML
@@ -43,12 +47,14 @@
   - 反序列化为 SVG 数组
 
 ### 3. 单元测试
+
 - [x] 测试 `parsePages` 能正确解析多页面 XML
 - [x] 测试 `createSinglePageXml` 生成的 XML 格式正确
 - [x] 测试 `exportAllPagesSVG` 能导出所有页面
 - [x] 测试序列化/反序列化往返一致性
 
 ## 🎯 验收标准
+
 1. ✅ `DrawioEditorNative` 组件支持 `exportSVG()` 方法
 2. ✅ 能成功导出单页图表的 SVG
 3. ✅ 能成功导出多页图表的所有页面 SVG
@@ -57,10 +63,12 @@
 6. ✅ 序列化/反序列化功能正常，无数据丢失
 
 ## 📌 注意事项
+
 - DrawIO postMessage API 不支持直接切换页面，需要通过重新加载单页 XML 实现
 - 确保 SVG 导出的异步操作正确处理 Promise
 - 多页面导出需要按顺序执行，避免并发加载导致混乱
 - SVG 字符串可能很大，注意内存使用
 
 ## 🔗 依赖关系
+
 - 无前置依赖，这是第一个里程碑

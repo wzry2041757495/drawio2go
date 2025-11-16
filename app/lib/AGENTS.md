@@ -146,6 +146,10 @@ interface XMLVersion {
   diff_chain_depth: number; // 距离最近关键帧的链长
   xml_content: string; // 根据 is_keyframe 存储完整 XML 或 diff 字符串
   metadata: Record<string, unknown> | null; // 预留字段（当前为空）
+  page_count: number; // DrawIO 页面数量，>=1
+  page_names?: string; // JSON 字符串，记录所有页面名称
+  preview_svg?: Blob | Buffer; // 第一页 SVG 预览
+  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化数据
   preview_image?: Blob | Buffer;
   created_at: number; // 创建时间戳
 }

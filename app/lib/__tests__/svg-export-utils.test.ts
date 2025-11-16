@@ -50,7 +50,7 @@ describe("svg-export-utils", () => {
     const singlePage = createSinglePageXml(diagram);
 
     expect(singlePage).toContain("<mxfile");
-    expect(singlePage).toContain("<diagram id=\"page-2\"");
+    expect(singlePage).toContain('<diagram id="page-2"');
     expect(singlePage).not.toContain("page-1");
   });
 

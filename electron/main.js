@@ -464,6 +464,12 @@ ipcMain.handle("storage:createXMLVersion", async (event, version) => {
   if (version.preview_image) {
     version.preview_image = Buffer.from(version.preview_image);
   }
+  if (version.preview_svg) {
+    version.preview_svg = Buffer.from(version.preview_svg);
+  }
+  if (version.pages_svg) {
+    version.pages_svg = Buffer.from(version.pages_svg);
+  }
   return storageManager.createXMLVersion(version);
 });
 
@@ -477,6 +483,12 @@ ipcMain.handle(
 ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
   if (updates?.preview_image) {
     updates.preview_image = Buffer.from(updates.preview_image);
+  }
+  if (updates?.preview_svg) {
+    updates.preview_svg = Buffer.from(updates.preview_svg);
+  }
+  if (updates?.pages_svg) {
+    updates.pages_svg = Buffer.from(updates.pages_svg);
   }
   return storageManager.updateXMLVersion(id, updates);
 });

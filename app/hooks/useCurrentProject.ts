@@ -6,6 +6,7 @@ import {
   getStorage,
   DEFAULT_XML_VERSION,
   ZERO_SOURCE_VERSION_ID,
+  buildPageMetadataFromXml,
 } from "@/app/lib/storage";
 import {
   getStoredCurrentProjectId,
@@ -92,6 +93,8 @@ export function useCurrentProject() {
 </mxfile>`;
 
     const xmlVersionId = uuidv4();
+    const pageMetadata = buildPageMetadataFromXml(emptyXML);
+
     const xmlVersion: CreateXMLVersionInput = {
       id: xmlVersionId,
       project_uuid: uuid,
@@ -103,6 +106,8 @@ export function useCurrentProject() {
       is_keyframe: true,
       diff_chain_depth: 0,
       metadata: null,
+      page_count: pageMetadata.pageCount,
+      page_names: JSON.stringify(pageMetadata.pageNames),
     };
 
     console.log(
@@ -173,9 +178,7 @@ export function useCurrentProject() {
 
         if (allProjects.length === 0) {
           // 3. 没有任何工程，创建默认工程
-          console.log(
-            "🔄 [loadCurrentProject] 步骤 3: 没有工程，创建默认工程",
-          );
+          console.log("🔄 [loadCurrentProject] 步骤 3: 没有工程，创建默认工程");
           const defaultProject = await withTimeout(
             createDefaultProject(),
             10000,
@@ -218,9 +221,7 @@ export function useCurrentProject() {
 
       if (!project) {
         // 工程不存在，创建默认工程
-        console.log(
-          "⚠️ [loadCurrentProject] 步骤 6: 工程不存在，创建默认工程",
-        );
+        console.log("⚠️ [loadCurrentProject] 步骤 6: 工程不存在，创建默认工程");
         const defaultProject = await withTimeout(
           createDefaultProject(),
           10000,
@@ -256,26 +257,23 @@ export function useCurrentProject() {
   /**
    * 切换工程
    */
-  const switchProject = useCallback(
-    async (projectId: string) => {
-      try {
-        const storage = await getStorage();
-        const project = await storage.getProject(projectId);
-        if (!project) {
-          throw new Error(`工程不存在: ${projectId}`);
-        }
-
-        await persistCurrentProjectId(projectId, storage);
-        setCurrentProject(project);
-        return project;
-      } catch (err) {
-        const error = err as Error;
-        setError(error);
-        throw error;
+  const switchProject = useCallback(async (projectId: string) => {
+    try {
+      const storage = await getStorage();
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        throw new Error(`工程不存在: ${projectId}`);
       }
-    },
-    [],
-  );
+
+      await persistCurrentProjectId(projectId, storage);
+      setCurrentProject(project);
+      return project;
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      throw error;
+    }
+  }, []);
 
   /**
    * 刷新当前工程信息

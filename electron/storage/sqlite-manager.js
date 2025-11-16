@@ -86,6 +86,10 @@ class SQLiteManager {
         diff_chain_depth INTEGER NOT NULL DEFAULT 0,
         xml_content TEXT NOT NULL,
         metadata TEXT,
+        page_count INTEGER NOT NULL DEFAULT 1,
+        page_names TEXT,
+        preview_svg BLOB,
+        pages_svg BLOB,
         preview_image BLOB,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
@@ -283,8 +287,8 @@ class SQLiteManager {
       .prepare(
         `
         INSERT INTO xml_versions
-        (id, project_uuid, semantic_version, name, description, source_version_id, is_keyframe, diff_chain_depth, xml_content, metadata, preview_image, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, project_uuid, semantic_version, name, description, source_version_id, is_keyframe, diff_chain_depth, xml_content, metadata, page_count, page_names, preview_svg, pages_svg, preview_image, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       )
       .run(
@@ -298,6 +302,12 @@ class SQLiteManager {
         version.diff_chain_depth || 0,
         version.xml_content,
         metadataString,
+        typeof version.page_count === "number" && version.page_count > 0
+          ? version.page_count
+          : 1,
+        version.page_names || null,
+        version.preview_svg || null,
+        version.pages_svg || null,
         version.preview_image || null, // Buffer for BLOB
         now,
       );
@@ -340,6 +350,28 @@ class SQLiteManager {
         }
         case "preview_image": {
           fields.push("preview_image = ?");
+          values.push(value || null);
+          break;
+        }
+        case "preview_svg": {
+          fields.push("preview_svg = ?");
+          values.push(value || null);
+          break;
+        }
+        case "pages_svg": {
+          fields.push("pages_svg = ?");
+          values.push(value || null);
+          break;
+        }
+        case "page_count": {
+          const nextValue =
+            typeof value === "number" && value >= 1 ? Math.floor(value) : 1;
+          fields.push("page_count = ?");
+          values.push(nextValue);
+          break;
+        }
+        case "page_names": {
+          fields.push("page_names = ?");
           values.push(value || null);
           break;
         }

@@ -216,8 +216,14 @@ pnpm format               # 使用 Prettier 格式化所有代码
 - **相关文件**：
   - `app/hooks/useCurrentProject.ts` - 当前工程管理 Hook
   - `app/lib/storage/current-project.ts` - 工程 ID 持久化
-  - `app/lib/storage/xml-version-engine.ts` - 版本恢复引擎
-  - `app/lib/storage/constants.ts` - 常量定义
+- `app/lib/storage/xml-version-engine.ts` - 版本恢复引擎
+- `app/lib/storage/constants.ts` - 常量定义
+
+### 2025-11-16 SVG 版本存储扩展（里程碑2）
+
+- XMLVersions 新增 SVG 字段：`page_count`（必填）、`page_names`（JSON 字符串）、`preview_svg`、`pages_svg`
+- 新增 `app/lib/storage/page-metadata.ts`，从 XML 提取页面数量和名称
+- WIP / 历史版本写入时自动填充页面元数据
 
 ### 2025-11-14 HeroUI 复杂组件迁移
 

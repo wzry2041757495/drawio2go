@@ -25,6 +25,7 @@ export {
   detectStorageType,
   isStorageInitialized,
 } from "./storage-factory";
+export { buildPageMetadataFromXml } from "./page-metadata";
 
 // ==================== 类型定义 ====================
 
@@ -56,6 +57,7 @@ export {
   DB_NAME,
   DB_VERSION,
   SQLITE_DB_FILE,
+  MAX_SVG_BLOB_BYTES,
   ZERO_SOURCE_VERSION_ID,
   DIFF_KEYFRAME_THRESHOLD,
   MAX_DIFF_CHAIN_LENGTH,

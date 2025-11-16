@@ -107,7 +107,9 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null); // autosave 监测定时器
     const initializationCompleteRef = useRef(false); // 标记初始化是否完成
     const loadResolversRef = useRef<Array<() => void>>([]); // load 回调队列
-    const pendingExportsRef = useRef<Map<string, PendingExportEntry[]>>(new Map()); // export 回调队列
+    const pendingExportsRef = useRef<Map<string, PendingExportEntry[]>>(
+      new Map(),
+    ); // export 回调队列
 
     const settleExport = (format: string, payload: string) => {
       const normalizedFormat = (format || "xml").toLowerCase();
@@ -228,7 +230,10 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       [isReady],
     );
 
-    const exportDiagram = useCallback(() => requestExport("xml"), [requestExport]);
+    const exportDiagram = useCallback(
+      () => requestExport("xml"),
+      [requestExport],
+    );
     const exportSVG = useCallback(() => requestExport("svg"), [requestExport]);
 
     // 更新图表（使用 merge 动作，保留编辑状态，带超时回退）
