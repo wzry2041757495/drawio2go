@@ -1,4 +1,5 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
+import { SVGExportOptions } from "../components/DrawioEditorNative";
 
 export interface DiagramPageInfo {
   id: string;
@@ -24,7 +25,7 @@ export interface SvgExportProgress {
 
 export interface SvgExportAdapter {
   loadDiagram: (xml: string) => Promise<void> | void;
-  exportSVG: () => Promise<string>;
+  exportSVG: (options?: SVGExportOptions) => Promise<string>;
 }
 
 const DEFAULT_WAIT_AFTER_LOAD_MS = 150;
@@ -108,6 +109,7 @@ export async function exportAllPagesSVG(
   options?: {
     onProgress?: (progress: SvgExportProgress) => void;
     waitAfterLoadMs?: number;
+    svgExportOptions?: SVGExportOptions; // SVG 导出选项
   },
 ): Promise<SvgPageExport[]> {
   if (!editor) {
@@ -121,11 +123,12 @@ export async function exportAllPagesSVG(
   const pages = parsePages(fullXml);
 
   if (pages.length === 0) {
-    return [];
+    throw new Error("未能成功分割每一页XML");
   }
 
   const waitAfterLoad = options?.waitAfterLoadMs ?? DEFAULT_WAIT_AFTER_LOAD_MS;
   const handleProgress = options?.onProgress;
+  const svgExportOptions = options?.svgExportOptions; // 获取 SVG 导出选项
   const results: SvgPageExport[] = [];
 
   try {
@@ -140,7 +143,7 @@ export async function exportAllPagesSVG(
       const singlePageXml = createSinglePageXml(page.element);
       await editor.loadDiagram(singlePageXml);
       await delay(waitAfterLoad);
-      const svgContent = await editor.exportSVG();
+      const svgContent = await editor.exportSVG(svgExportOptions); // 传递 SVG 导出选项
 
       if (!svgContent) {
         throw new Error(`导出页面 ${page.name} 的 SVG 失败（结果为空）`);
@@ -153,6 +156,9 @@ export async function exportAllPagesSVG(
         svg: svgContent,
       });
     }
+  } catch (error) {
+    console.error("导出 SVG 时发生错误:", error);
+    throw error;
   } finally {
     await editor.loadDiagram(fullXml);
   }
