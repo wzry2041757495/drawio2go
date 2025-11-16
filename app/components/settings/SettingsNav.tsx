@@ -24,6 +24,8 @@ export default function SettingsNav({
   return (
     <div className="settings-nav">
       <Button
+        variant="tertiary"
+        isIconOnly
         className={`settings-nav-item ${activeTab === "file" ? "active" : ""}`}
         onPress={() => onTabChange("file")}
         aria-label="文件配置"
@@ -31,6 +33,8 @@ export default function SettingsNav({
         <Folder size={24} />
       </Button>
       <Button
+        variant="tertiary"
+        isIconOnly
         className={`settings-nav-item ${activeTab === "llm" ? "active" : ""}`}
         onPress={() => onTabChange("llm")}
         aria-label="LLM 配置"

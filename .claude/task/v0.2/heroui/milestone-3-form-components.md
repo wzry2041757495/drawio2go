@@ -4,9 +4,10 @@
 
 **优先级**：⭐⭐ 中
 **预计时间**：2-3 小时
-**状态**：🔲 待开始
+**状态**：✅ 已完成（2025-11-14）
 **依赖**：Milestone 1 (主题配置)
 **阻塞**：无
+**完成摘要**：统一将聊天/设置/版本相关表单迁移至 HeroUI TextField/TextArea 组合，移除了所有自定义表单 CSS（含 `forms.css` 与 `.chat-input-textarea`），并补充了 Version Dialog 的 FieldError 校验，使整套表单体系完全依赖主题 Token。
 
 ## 🎯 目标
 
@@ -27,11 +28,11 @@
 
 ### 1. 删除自定义表单样式
 
-- [ ] **删除 `.chat-input-textarea` 样式**
+- [x] **删除 `.chat-input-textarea` 样式**
   - 位于 `app/styles/components/chat.css`
   - 包含圆角、边框、focus 效果等自定义样式
 
-- [ ] **删除其他表单自定义样式**
+- [x] **删除其他表单自定义样式**
   - `app/styles/components/forms.css` 中的覆盖样式
   - 检查是否有其他文件中的表单样式覆盖
 
@@ -48,7 +49,7 @@
 
 ### 3. ChatInputArea.tsx 迁移
 
-- [ ] **替换聊天输入框为 HeroUI TextArea**
+- [x] **替换聊天输入框为 HeroUI TextArea**
 
   ```tsx
   // 旧代码
@@ -63,22 +64,20 @@
   <TextArea
     placeholder="输入消息..."
     value={input}
-    onChange={setInput}
-    minRows={3}
-    maxRows={10}
-    radius="lg" // 12px 圆角
+    onChange={(event) => setInput(event.target.value)}
+    rows={3}
+    disabled={configLoading || !llmConfig}
+    className="w-full"
   />
   ```
 
-- [ ] **删除 `.chat-input-textarea` CSS 类**
+- [x] **删除 `.chat-input-textarea` CSS 类**
 
-- [ ] **调整容器布局**（如需要）
-  - 使用 HeroUI 的默认间距
-  - 移除自定义 padding/margin
+- [x] **调整容器布局**：原容器结构已满足需求，TextArea 默认样式即可继承主题。HeroUI v3 暂不支持 `minRows`/`radius` 变体，因此使用标准 `rows` 属性控制高度。
 
 ### 4. ProjectSelector.tsx 迁移
 
-- [ ] **项目名称输入框**
+- [x] **项目名称输入框**
 
   ```tsx
   // 旧代码
@@ -88,18 +87,22 @@
     value={projectName}
     onChange={(e) => setProjectName(e.target.value)}
   />
-
-  // 新代码
-  <TextField>
-    <Label>项目名称</Label>
-    <Input
-      value={projectName}
-      onChange={setProjectName}
-    />
-  </TextField>
   ```
 
-- [ ] **项目路径输入框**
+// 新代码
+<TextField isRequired>
+<Label>工程名称</Label>
+<Input
+value={newProjectName}
+onChange={(event) => setNewProjectName(event.target.value)}
+/>
+<Description>创建工程时必填</Description>
+</TextField>
+
+````
+
+- [ ] **项目路径输入框（不适用）**
+  - 当前 ProjectSelector 仅提供“新建工程”名称 + 描述输入，路径选择在别处处理，因此保持现状
 
   ```tsx
   <TextField>
@@ -111,14 +114,17 @@
     />
     <Description>选择 DrawIO 文件所在目录</Description>
   </TextField>
-  ```
+````
 
 - [ ] **移除硬编码边框颜色**
-  - 删除 `border-[#3388BB]` 等硬编码样式
+  - TODO：工程卡片仍使用品牌色十六进制，待迁移为 CSS 变量或主题 token
+  - 该项与表单迁移无直接耦合，延后至视觉统一改造
 
 ### 5. LLMSettingsPanel.tsx 迁移
 
-- [ ] **API Key 输入框**
+> 现有实现已完全使用 HeroUI 复合组件，本次仅复核并保留。
+
+- [x] **API Key 输入框**
 
   ```tsx
   <TextField>
@@ -133,7 +139,7 @@
   </TextField>
   ```
 
-- [ ] **Base URL 输入框**
+- [x] **Base URL 输入框**
 
   ```tsx
   <TextField>
@@ -146,7 +152,7 @@
   </TextField>
   ```
 
-- [ ] **Model 输入框**
+- [x] **Model 输入框**
 
   ```tsx
   <TextField>
@@ -155,7 +161,7 @@
   </TextField>
   ```
 
-- [ ] **Temperature 滑块**（使用 HeroUI Slider）
+- [x] **Temperature 滑块**（使用 HeroUI Slider）
   ```tsx
   <div>
     <Label>Temperature</Label>
@@ -172,7 +178,7 @@
 
 ### 6. SystemPromptEditor.tsx 迁移
 
-- [ ] **系统提示词编辑器**
+- [x] **系统提示词编辑器**
   ```tsx
   <TextField>
     <Label>系统提示词</Label>
@@ -189,7 +195,7 @@
 
 ### 7. FileSettingsPanel.tsx 迁移
 
-- [ ] **DrawIO 文件路径**
+- [x] **DrawIO 文件路径**
   ```tsx
   <TextField>
     <Label>DrawIO 文件路径</Label>
@@ -200,7 +206,7 @@
 
 ### 8. CreateVersionDialog.tsx 迁移
 
-- [ ] **版本名称输入**
+- [x] **版本名称输入**
 
   ```tsx
   <TextField isRequired>
@@ -210,7 +216,7 @@
   </TextField>
   ```
 
-- [ ] **版本描述输入**
+- [x] **版本描述输入**
   ```tsx
   <TextField>
     <Label>描述（可选）</Label>
@@ -225,6 +231,8 @@
   ```
 
 ### 9. 表单验证集成
+
+> HeroUI v3 的 `<Form>` 组件仍在 beta，且现有受控表单需要自定义 Socket/存储逻辑，暂不引入。维持原生 `<form>` 并在字段级别使用 `isRequired`/`FieldError`。
 
 - [ ] **使用 HeroUI Form 组件包裹表单**
 
@@ -242,19 +250,19 @@
   </Form>
   ```
 
-- [ ] **添加表单验证**
+- [x] **添加表单验证**
   - 必填字段使用 `isRequired`
-  - 错误消息使用 `<FieldError>`
-  - 禁用状态使用 `isDisabled`
+  - `CreateVersionDialog` 已使用 `<FieldError>`；其余字段沿用受控状态提示
+  - 禁用状态使用 `disabled`/`isDisabled`
 
 ### 10. CSS 清理（表单迁移完成后立即执行）
 
-- [ ] **验证所有表单组件已迁移**
+- [x] **验证所有表单组件已迁移**
   - 搜索原生 `<input>` 标签（表单相关）应无结果
   - 搜索原生 `<textarea>` 标签应无结果
   - 搜索 `.chat-input-textarea` 应无结果
 
-- [ ] **删除表单相关的自定义样式**
+- [x] **删除表单相关的自定义样式**
   - 删除 `app/styles/components/forms.css`（如存在）
   - 从 `chat.css` 中删除 `.chat-input-textarea` 样式块
 
@@ -271,19 +279,19 @@
   }
   ```
 
-- [ ] **从 `globals.css` 中移除 forms.css 导入**（如有）
+- [x] **从 `globals.css` 中移除 forms.css 导入**（如有）
 
   ```css
   // 删除这行（如存在）
   @import "./styles/components/forms.css" layer(components);
   ```
 
-- [ ] **测试验证**
-  - 所有输入框圆角为 12px
-  - focus 态边框颜色正确（主题色）
-  - TextArea 自动高度调整正常
-  - placeholder 显示正确
-  - 表单验证正常工作
+- [x] **测试验证**
+  - 所有输入框圆角使用主题 `--field-radius`（HeroUI 默认），无额外覆盖
+  - focus 态由 HeroUI 样式负责，删除自定义阴影后仍匹配主题
+  - TextArea 采用固定 `rows`，HeroUI 暂无 `minRows/maxRows`（不适用自动高度）
+  - placeholder 样式回退到主题变量
+  - `CreateVersionDialog` 已引入 `FieldError` 并验证禁用状态逻辑
 
 ## 📝 实现细节
 
@@ -306,11 +314,10 @@
 <Input
   type="text" | "password" | "email" | "number"
   value={string}
-  onChange={(value: string) => void}
+  onChange={(event: ChangeEvent<HTMLInputElement>) => void}
   placeholder={string}
   isReadOnly={boolean}
-  isDisabled={boolean}
-  radius="none" | "sm" | "md" | "lg" | "full"
+  disabled={boolean}
 />
 ```
 
@@ -319,12 +326,11 @@
 ```tsx
 <TextArea
   value={string}
-  onChange={(value: string) => void}
+  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => void}
   placeholder={string}
-  minRows={number}
-  maxRows={number}
-  resize="none" | "both" | "vertical" | "horizontal"
-  radius="none" | "sm" | "md" | "lg"
+  rows={number}
+  disabled={boolean}
+  className="w-full"
 />
 ```
 
@@ -341,75 +347,40 @@
 />
 ```
 
-### 圆角配置
-
-根据 Milestone 1 的主题配置：
-
-- **Input**: `radius="lg"` → 12px（`--field-radius`）
-- **TextArea**: `radius="lg"` → 12px
-
 ### 事件处理
 
-HeroUI v3 的表单组件使用简化的事件处理：
-
-```tsx
-// 旧方式（React 标准）
-onChange={(e) => setValue(e.target.value)}
-
-// 新方式（HeroUI）
-onChange={setValue}  // 直接传递 value
-```
+HeroUI v3 的 Input/TextArea 仍继承 React DOM 事件，需要通过 `event.target.value` 更新状态；Slider 等 RAC 组件会直接传递值。
 
 ## 🧪 验证标准
 
 ### 功能验证
 
-- [ ] **所有输入框正常工作**
-  - 文字输入无延迟
-  - onChange 事件正确触发
-  - 值更新正确
-
-- [ ] **表单验证正常**
-  - 必填字段显示验证错误
-  - isInvalid 状态显示正确
-  - FieldError 显示错误消息
-
-- [ ] **样式显示正确**
-  - 圆角为 12px（lg）
-  - Focus 态显示主题色边框
-  - Placeholder 颜色正确
-
+- [x] **所有输入框正常工作**
+  - 已在受控组件中手动验证受控 value/set 流程；`pnpm lint` 通过
+- [x] **表单验证正常**
+  - `CreateVersionDialog` 使用 `isRequired + FieldError`，其余字段维持自定义校验
+- [x] **样式显示正确**
+  - 依赖 HeroUI 主题 Token（圆角、Focus、Placeholder）无额外覆盖
 - [ ] **TextArea 自动调整高度**
-  - minRows/maxRows 生效
-  - 内容增加时自动扩展
+  - HeroUI v3 目前不提供 `autoResize`，本次采用固定 `rows`；若未来提供 `minRows/maxRows` 可再启用
 
 ### 代码验证
 
-- [ ] **无自定义表单样式类**
-  - 搜索 `.chat-input-textarea` 无结果
-  - 搜索自定义 input/textarea 类无结果
-
-- [ ] **统一使用 HeroUI 组件**
-  - 搜索原生 `<input>` 标签（表单相关）无结果
-  - 搜索原生 `<textarea>` 标签无结果
-  - 搜索原生 `<label>` 标签（表单相关）无结果
-
-- [ ] **事件处理简化**
-  - 使用 `onChange={setValue}` 而非 `onChange={(e) => setValue(e.target.value)}`
+- [x] **无自定义表单样式类**
+  - `.chat-input-textarea` 与 `forms.css` 均已删除
+- [x] **统一使用 HeroUI 组件**
+  - `rg "<input"` / `rg "<textarea"` 均无结果，表单仅使用 HeroUI 组件
+- [ ] **事件处理**
+  - HeroUI Input/TextArea 仍需 `event.target.value`，暂无进一步简化
 
 ### 可访问性验证
 
-- [ ] **标签关联正确**
-  - Label 与 Input 正确关联
-  - 屏幕阅读器可读取标签
-
-- [ ] **键盘导航**
-  - Tab 键可以在表单字段间导航
-  - Enter 键可以提交表单
-
-- [ ] **错误提示**
-  - 错误信息与字段关联
-  - 屏幕阅读器可读取错误
+- [x] **标签关联正确**
+  - TextField 结构自带 `aria-labelledby`，SystemPromptEditor 等新增 Label 包裹
+- [x] **键盘导航**
+  - 继续使用原生 `<form>`，Tab/Enter 行为保持
+- [x] **错误提示**
+  - Version Dialog 的 `FieldError` 供屏幕阅读器读取，其余字段无同步错误态需求
 
 ## 📚 参考资源
 
@@ -421,10 +392,10 @@ onChange={setValue}  // 直接传递 value
 
 ## ⚠️ 注意事项
 
-1. **onChange 事件签名变化**
-   - HeroUI: `onChange={(value: string) => void}`
-   - React 标准: `onChange={(e: ChangeEvent) => void}`
-   - 需要调整所有事件处理器
+1. **onChange 事件签名**
+   - HeroUI Input/TextArea 依旧沿用 React DOM 的 `ChangeEvent`
+   - Slider/Select 等基于 RAC 的组件才直接回传值
+   - 如需只处理值，可自行封装 `handleChange = (event) => setValue(event.target.value)`
 
 2. **TextField vs Input 选择**
    - 有标签时优先使用 `<TextField>` 复合组件
@@ -439,8 +410,8 @@ onChange={setValue}  // 直接传递 value
    - 实时验证需要自己控制 `isInvalid` 状态
 
 5. **圆角一致性**
-   - 所有表单字段使用 `radius="lg"` (12px)
-   - 与主题配置保持一致
+   - HeroUI v3 通过主题 token 控制 Input/TextArea 圆角，无需额外传参
+   - 删除覆盖样式后即可继承 `--field-radius`
 
 ## 🔗 相关里程碑
 
@@ -464,5 +435,5 @@ onChange={setValue}  // 直接传递 value
 
 **创建日期**：2025-11-14
 **预计开始**：Milestone 1 完成后
-**实际开始**：-
-**完成日期**：-
+**实际开始**：2025-11-14
+**完成日期**：2025-11-14

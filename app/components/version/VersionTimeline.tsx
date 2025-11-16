@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Skeleton } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { History } from "lucide-react";
 import { VersionCard } from "./VersionCard";
@@ -15,6 +16,7 @@ interface VersionTimelineProps {
   versions: XMLVersion[];
   onVersionRestore?: (versionId: string) => void;
   onVersionCreated?: () => void;
+  isLoading?: boolean;
 }
 
 /**
@@ -25,8 +27,10 @@ interface VersionTimelineProps {
 export function VersionTimeline({
   versions,
   onVersionRestore,
+  isLoading = false,
 }: VersionTimelineProps) {
   const parentRef = React.useRef<HTMLDivElement>(null);
+  const skeletonItems = React.useMemo(() => Array.from({ length: 3 }), []);
 
   // 过滤出历史版本（排除 WIP）并按时间倒序排列
   const historicalVersions = React.useMemo(() => {
@@ -42,16 +46,38 @@ export function VersionTimeline({
 
   // 是否启用虚拟滚动
   const enableVirtualScroll =
-    historicalVersions.length > VIRTUAL_SCROLL_THRESHOLD;
+    !isLoading && historicalVersions.length > VIRTUAL_SCROLL_THRESHOLD;
 
   // 配置虚拟滚动器
   const virtualizer = useVirtualizer({
     count: historicalVersions.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 70, // 折叠状态的估计高度 (12px padding + 40px content + 18px gap)
-    overscan: 5, // 预渲染额外的5个项目
+    estimateSize: () => 70,
+    overscan: 5,
     enabled: enableVirtualScroll,
   });
+
+  if (isLoading) {
+    return (
+      <div className="version-timeline">
+        <div className="timeline-header">
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32 rounded-lg" />
+            <Skeleton className="h-3 w-48 rounded-lg" />
+          </div>
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+        <div className="timeline-list timeline-list--skeleton">
+          {skeletonItems.map((_, index) => (
+            <Skeleton
+              key={`timeline-skeleton-${index}`}
+              className="h-20 rounded-xl"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // 如果没有历史版本，显示空状态
   if (historicalVersions.length === 0) {

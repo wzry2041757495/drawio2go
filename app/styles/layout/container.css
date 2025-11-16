@@ -36,11 +36,12 @@
   height: 100%;
 }
 
-/* 顶栏布局 */
+/* 顶栏布局 - 使用 Grid 三列布局实现真正居中 */
 .top-bar {
   height: var(--top-bar-height);
   min-height: var(--top-bar-height);
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--spacing-compact-md);
   padding: 0 var(--spacing-lg);
@@ -59,19 +60,28 @@
 .top-bar-selection {
   font-size: var(--font-size-compact-sm);
   color: var(--text-secondary);
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  padding: 0.125rem 0.5rem;
-  max-width: 240px;
+  border-radius: var(--radius);
+  padding: 0 0.5rem;
+  height: 32px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  width: fit-content;
 }
 
 .dark .top-bar-selection {
-  background: rgba(51, 136, 187, 0.2);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.top-bar-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .top-bar-project {
@@ -86,9 +96,23 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-compact-sm);
+  justify-self: end;
 }
 
 .top-bar-button {
   gap: 0.35rem;
   min-width: auto;
+}
+
+/* 统一顶栏按钮背景色 - 与状态显示器一致 */
+/* 使用双重选择器提高优先级，覆盖 HeroUI 默认样式 */
+.top-bar-project.top-bar-project[data-variant="secondary"],
+.top-bar-button.top-bar-button[data-variant="secondary"] {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.top-bar-project.top-bar-project[data-variant="secondary"]:hover,
+.top-bar-button.top-bar-button[data-variant="secondary"]:hover {
+  background: var(--bg-hover);
 }

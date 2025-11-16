@@ -52,6 +52,7 @@ export function VersionCard({
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
   });
 
   // 处理回滚按钮点击
@@ -162,10 +163,9 @@ export function VersionCard({
               <div className="version-card__actions">
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="tertiary"
                   onPress={handleExport}
                   isDisabled={isExporting}
-                  className="button-icon"
                   aria-label={`导出 ${versionLabel}`}
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -173,12 +173,7 @@ export function VersionCard({
                 </Button>
 
                 {onRestore && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onPress={handleRestore}
-                    className="button-small-optimized"
-                  >
+                  <Button size="sm" variant="secondary" onPress={handleRestore}>
                     <RotateCcw className="w-3.5 h-3.5" />
                     回滚
                   </Button>

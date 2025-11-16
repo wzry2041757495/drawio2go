@@ -1,6 +1,11 @@
 "use client";
 
-import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
+import {
+  Button,
+  TooltipContent,
+  TooltipRoot,
+  type ButtonProps,
+} from "@heroui/react";
 
 interface ChatInputActionsProps {
   isSendDisabled: boolean;
@@ -21,6 +26,17 @@ export default function ChatInputActions({
   onVersionControl,
   onFileUpload,
 }: ChatInputActionsProps) {
+  const canCancel = Boolean(isChatStreaming && onCancel);
+  const sendButtonVariant: ButtonProps["variant"] = canCancel
+    ? "danger"
+    : "primary";
+  const sendButtonType = canCancel ? undefined : "submit";
+  const sendButtonDisabled = canCancel
+    ? false
+    : isChatStreaming
+      ? true
+      : isSendDisabled;
+
   return (
     <div className="chat-input-actions">
       {/* 左侧按钮组 */}
@@ -28,10 +44,10 @@ export default function ChatInputActions({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="新建聊天"
             onPress={onNewChat}
-            className="chat-icon-button"
           >
             <svg
               width="18"
@@ -55,10 +71,10 @@ export default function ChatInputActions({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="历史对话"
             onPress={onHistory}
-            className="chat-icon-button"
           >
             <svg
               width="18"
@@ -86,10 +102,10 @@ export default function ChatInputActions({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="版本管理"
             onPress={onVersionControl}
-            className="chat-icon-button"
           >
             <svg
               width="18"
@@ -115,10 +131,10 @@ export default function ChatInputActions({
         <TooltipRoot delay={0}>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
             isIconOnly
+            aria-label="文件上传"
             onPress={onFileUpload}
-            className="chat-icon-button"
           >
             <svg
               width="18"
@@ -139,14 +155,13 @@ export default function ChatInputActions({
         </TooltipRoot>
 
         <Button
-          type={isChatStreaming ? undefined : "submit"}
-          variant="primary"
+          type={sendButtonType}
+          variant={sendButtonVariant}
           size="sm"
-          isDisabled={isChatStreaming ? false : isSendDisabled}
-          onPress={isChatStreaming ? onCancel : undefined}
-          className="chat-send-button button-primary"
+          isDisabled={sendButtonDisabled}
+          onPress={canCancel ? onCancel : undefined}
         >
-          {isChatStreaming ? (
+          {canCancel ? (
             // 取消图标（X）
             <svg
               width="18"
@@ -178,7 +193,7 @@ export default function ChatInputActions({
               <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
             </svg>
           )}
-          {isChatStreaming ? "取消" : "发送"}
+          {canCancel ? "取消" : "发送"}
         </Button>
       </div>
     </div>

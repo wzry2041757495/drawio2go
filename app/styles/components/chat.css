@@ -152,41 +152,6 @@
   gap: 0.5rem;
 }
 
-/* 圆角矩形边框输入框 */
-.chat-input-textarea {
-  width: 100%;
-  resize: vertical;
-  min-height: 60px;
-  max-height: 150px;
-  padding: 0.75rem;
-  border: 1.5px solid var(--border-primary);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-  font-family: inherit;
-  line-height: 1.6;
-  background: var(--background, #ffffff);
-  color: var(--foreground, #000000);
-  outline: none;
-  transition: all 0.25s var(--ease-out-cubic);
-}
-
-.chat-input-textarea:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px rgba(51, 136, 187, 0.12);
-  transform: translateY(-1px);
-}
-
-.chat-input-textarea::placeholder {
-  color: var(--foreground-secondary, #9ca3af);
-  opacity: 0.7;
-}
-
-.dark .chat-input-textarea {
-  background: var(--background, #1a1a1a);
-  color: var(--foreground, #ffffff);
-  border-color: rgba(51, 136, 187, 0.4);
-}
-
 /* 按钮组布局 */
 .chat-input-actions {
   display: flex;

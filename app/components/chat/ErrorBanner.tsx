@@ -1,5 +1,7 @@
 "use client";
 
+import { Alert, Button } from "@heroui/react";
+
 interface ErrorBannerProps {
   error: string | null;
 }
@@ -9,20 +11,22 @@ export default function ErrorBanner({ error }: ErrorBannerProps) {
     return null;
   }
 
+  const handleReload = () => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  };
+
   return (
-    <div className="error-banner">
-      <span className="error-icon">⚠️</span>
-      <div className="error-content">
-        <div className="error-title">无法发送请求</div>
-        <div className="error-message">{error}</div>
-        <button
-          className="error-retry"
-          type="button"
-          onClick={() => window.location.reload()}
-        >
-          刷新页面
-        </button>
-      </div>
-    </div>
+    <Alert status="danger" className="mb-3">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Title>无法发送请求</Alert.Title>
+        <Alert.Description>{error}</Alert.Description>
+      </Alert.Content>
+      <Button size="sm" variant="danger" onPress={handleReload}>
+        刷新页面
+      </Button>
+    </Alert>
   );
 }

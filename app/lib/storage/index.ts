@@ -61,6 +61,14 @@ export {
   MAX_DIFF_CHAIN_LENGTH,
 } from "./constants";
 
+// ==================== 当前工程工具 ====================
+export {
+  CURRENT_PROJECT_SETTING_KEY,
+  getStoredCurrentProjectId,
+  persistCurrentProjectId,
+  resolveCurrentProjectUuid,
+} from "./current-project";
+
 // ==================== 内部实现（仅用于测试） ====================
 
 /**

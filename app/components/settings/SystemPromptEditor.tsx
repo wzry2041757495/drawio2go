@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Popover, Label, Description, TextArea } from "@heroui/react";
+import {
+  Button,
+  Popover,
+  Label,
+  Description,
+  TextArea,
+  TextField,
+} from "@heroui/react";
 import { DEFAULT_SYSTEM_PROMPT } from "@/app/lib/config-utils";
 
 interface SystemPromptEditorProps {
@@ -45,7 +52,7 @@ export default function SystemPromptEditor({
         <Button
           variant="secondary"
           size="sm"
-          className="button-small-optimized button-secondary mt-3 w-full"
+          className="mt-3 w-full"
           onPress={handleOpen}
         >
           编辑系统提示词
@@ -57,36 +64,24 @@ export default function SystemPromptEditor({
           <Popover.Heading className="modal-title">
             编辑系统提示词
           </Popover.Heading>
-          <TextArea
-            value={tempValue}
-            onChange={(e) => setTempValue(e.target.value)}
-            placeholder="输入系统提示词..."
-            className="prompt-textarea"
-            rows={15}
-          />
+          <TextField className="w-full">
+            <Label>系统提示词内容</Label>
+            <TextArea
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              placeholder="输入系统提示词..."
+              className="prompt-textarea"
+              rows={15}
+            />
+          </TextField>
           <div className="modal-actions">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="sidebar-button"
-              onPress={handleClose}
-            >
+            <Button variant="ghost" size="sm" onPress={handleClose}>
               取消
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="sidebar-button button-secondary"
-              onPress={handleReset}
-            >
+            <Button variant="secondary" size="sm" onPress={handleReset}>
               恢复默认
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              className="sidebar-button button-primary"
-              onPress={handleSave}
-            >
+            <Button variant="primary" size="sm" onPress={handleSave}>
               保存
             </Button>
           </div>

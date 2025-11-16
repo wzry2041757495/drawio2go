@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { Skeleton } from "@heroui/react";
 import { type LLMConfig, type ChatUIMessage } from "@/app/types/chat";
 import EmptyState from "./EmptyState";
 import MessageItem from "./MessageItem";
@@ -27,6 +28,7 @@ export default function MessageList({
   onThinkingBlockToggle,
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const skeletonItems = Array.from({ length: 3 });
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -40,7 +42,19 @@ export default function MessageList({
 
   // 渲染空状态
   if (configLoading) {
-    return <EmptyState type="loading" />;
+    return (
+      <div className="messages-scroll-area">
+        {skeletonItems.map((_, index) => (
+          <div key={`message-skeleton-${index}`} className="flex gap-3">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4 rounded-lg" />
+              <Skeleton className="h-4 w-1/2 rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (!llmConfig) {

@@ -9,6 +9,7 @@ import {
   Label,
   Description,
   Spinner,
+  FieldError,
 } from "@heroui/react";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 import { X, Sparkles } from "lucide-react";
@@ -196,8 +197,9 @@ export function CreateVersionDialog({
           <Button
             size="sm"
             variant="ghost"
+            isIconOnly
+            aria-label="关闭创建版本对话框"
             onPress={onClose}
-            className="button-icon"
             isDisabled={isCreating}
           >
             <X className="w-4 h-4" />
@@ -207,7 +209,11 @@ export function CreateVersionDialog({
         {/* 对话框内容 */}
         <div className="dialog-content">
           {/* 版本号输入 */}
-          <TextField className="w-full">
+          <TextField
+            className="w-full"
+            isRequired
+            isInvalid={!!validationError}
+          >
             <Label>版本号 *</Label>
             <div className="flex gap-2 mt-2">
               <Input
@@ -221,7 +227,6 @@ export function CreateVersionDialog({
                 size="sm"
                 variant="secondary"
                 onPress={handleRecommend}
-                className="button-small-optimized"
                 isDisabled={isCreating}
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -234,9 +239,7 @@ export function CreateVersionDialog({
                 正在检查版本号...
               </Description>
             ) : validationError ? (
-              <Description className="mt-2 text-red-600">
-                {validationError}
-              </Description>
+              <FieldError className="mt-2">{validationError}</FieldError>
             ) : versionNumber.trim() ? (
               <Description className="mt-2 text-green-600">
                 ✓ 版本号可用
@@ -286,7 +289,6 @@ export function CreateVersionDialog({
               !!validationError ||
               checkingExists
             }
-            className="button-primary"
           >
             {isCreating ? (
               <>

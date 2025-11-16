@@ -66,7 +66,11 @@ app/
 │       ├── indexeddb-storage.ts # IndexedDB 实现（Web）
 │       ├── sqlite-storage.ts    # SQLite 实现（Electron）
 │       ├── storage-factory.ts   # 存储实例工厂
-│       └── types.ts             # 存储层类型定义
+│       ├── current-project.ts   # 当前工程 ID 持久化工具
+│       ├── xml-version-engine.ts # XML 版本恢复引擎（Diff 重放）
+│       ├── constants.ts         # 常量定义（WIP_VERSION 等）
+│       ├── types.ts             # 存储层类型定义
+│       └── index.ts             # 统一导出
 ├── types/              # 类型定义 [详细文档 → app/types/AGENTS.md]
 │   ├── chat.ts                  # 聊天相关类型
 │   ├── drawio-tools.ts          # DrawIO 工具类型
@@ -76,6 +80,7 @@ app/
 │   ├── useDrawioSocket.ts       # Socket.IO 通讯 Hook
 │   ├── useStorageSettings.ts    # 设置持久化 Hook
 │   ├── useStorageProjects.ts    # 项目管理 Hook
+│   ├── useCurrentProject.ts     # 当前工程管理 Hook（超时保护 + 自动兜底）
 │   ├── useStorageConversations.ts   # 会话管理 Hook
 │   └── useStorageXMLVersions.ts     # XML 版本管理 Hook
 ├── api/                # API 路由
@@ -188,6 +193,45 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 ## 最近更新
 
+### 2025-11-16 WIP 草稿独立存储强化与工程管理优化
+
+#### WIP 草稿独立存储强化
+
+- **草稿隔离**：WIP (0.0.0) 永远视为关键帧，不会被纳入关键帧 + Diff 链路，也不会作为计算 Diff 的源版本
+- **时间戳实时更新**：每次自动保存或 AI 工具写入 WIP 时都会刷新 `created_at`，确保侧栏的"最后更新"时间实时反映当前草稿状态
+- **AI 工具对齐**：`drawio-tools.ts` 的保存/替换 API 直接写入 WIP 草稿，不再生成额外的 `latest` 版本号，行为与统一存储 Hook 保持一致
+- **跨端一致性**：IndexedDB/Electron (SQLite) 均支持更新 WIP 的 `created_at`，Electron 端补齐了 `updateXMLVersion` IPC 能力
+
+#### 工程管理优化
+
+- **useCurrentProject Hook 增强**：
+  - 添加超时保护（3-10秒），防止异步操作无限等待
+  - React 严格模式兼容，使用 ref 防止双重挂载导致的重复加载
+  - 详细的控制台日志，便于调试工程加载流程
+  - 自动创建默认工程时同时设置 `active_xml_version_id` 指向 WIP 版本
+- **存储层新增工具**：
+  - `storage/current-project.ts`：当前工程 ID 持久化工具（读取/写入 `settings` 表）
+  - `storage/xml-version-engine.ts`：XML 版本恢复引擎（通过 Diff 链重放恢复历史版本）
+  - `storage/constants.ts`：统一管理常量（WIP_VERSION、ZERO_SOURCE_VERSION_ID 等）
+- **相关文件**：
+  - `app/hooks/useCurrentProject.ts` - 当前工程管理 Hook
+  - `app/lib/storage/current-project.ts` - 工程 ID 持久化
+  - `app/lib/storage/xml-version-engine.ts` - 版本恢复引擎
+  - `app/lib/storage/constants.ts` - 常量定义
+
+### 2025-11-14 HeroUI 复杂组件迁移
+
+- **HeroUI Alert**：聊天输入区的 `ErrorBanner` 改为 HeroUI `Alert` 复合组件，移除自定义 `.error-banner` 样式并提供刷新按钮操作。
+- **Skeleton 占位**：ProjectSelector、MessageList、Version Timeline/WIP 等加载态统一接入 HeroUI `Skeleton`，避免再显示纯文字的 loading EmptyState。
+- **统一侧栏 Tabs**：`UnifiedSidebar` 切换至 HeroUI `Tabs` 结构，`sidebar-tabs` 自定义样式删除，新增 `sidebar-tab-strip/sidebar-tab-item` 等类来适配 HeroUI 复合组件。
+- **版本侧边栏体验**：版本时间线在加载阶段展示骨架屏，卡片列表与 Header 样式保持一致。
+- **相关文件**：
+  - `app/components/chat/ErrorBanner.tsx`, `app/components/chat/MessageList.tsx`
+  - `app/components/ProjectSelector.tsx`, `app/components/UnifiedSidebar.tsx`
+  - `app/components/VersionSidebar.tsx`, `app/components/version/VersionTimeline.tsx`
+  - `app/styles/layout/sidebar.css`, `app/styles/components/version-timeline.css`, `app/styles/utilities/components.css`
+  - `.claude/task/v0.2/heroui/milestone-4-complex-components.md`
+
 ### 2025-11-13 顶栏与侧栏交互重构
 
 - **顶栏统一操作区**:
@@ -195,11 +239,11 @@ pnpm format               # 使用 Prettier 格式化所有代码
   - 工程切换按钮置于中间并支持全宽点击区域
   - 加载/保存按钮靠右，新增图标按钮可一键收起/展开侧栏
 - **统一侧栏多 Tab 化**:
-  - 聊天/设置/版本切换采用紧凑 Tab，固定在侧栏顶部
+  - 聊天/设置/版本切换采用紧凑 Tab，固定在侧栏顶部（2025-11-14 起基于 HeroUI `Tabs` 实现）
   - 侧栏宽度记忆与拖拽逻辑保持不变，可在 Tabs 间即时切换
 - **布局同步**:
   - 左侧工作区在侧栏展开时自动预留宽度，顶栏与编辑器对齐
-  - 相关样式迁移到 `top-bar` 与 `sidebar-tabs` 新类，移除底栏布局
+  - 相关样式已迁移到 `top-bar` 与新版 `sidebar-tab-*` 类，移除底栏布局
 - **相关文件**:
   - `app/components/TopBar.tsx`
   - `app/components/UnifiedSidebar.tsx`
@@ -315,4 +359,4 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 ---
 
-_最后更新: 2025-11-13_
+_最后更新: 2025-11-14_

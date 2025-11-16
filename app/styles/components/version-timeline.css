@@ -71,6 +71,14 @@
   border-radius: 999px;
 }
 
+.timeline-list--skeleton {
+  padding-left: 0;
+}
+
+.timeline-list--skeleton::before {
+  display: none;
+}
+
 /* ================================
    时间线空状态
    ================================ */
@@ -113,7 +121,7 @@
   height: 2.5rem;
   margin: 0 auto var(--spacing-sm);
   border-radius: 999px;
-  background: rgba(51, 136, 187, 0.12);
+  background: var(--bg-secondary);
   color: var(--primary-color);
   display: flex;
   align-items: center;
@@ -358,18 +366,6 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.button-small-optimized {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.65rem;
-  height: auto;
-  min-height: 1.75rem;
-}
-
-.button-small-optimized svg {
-  width: 0.875rem;
-  height: 0.875rem;
 }
 
 @media (max-width: 480px) {

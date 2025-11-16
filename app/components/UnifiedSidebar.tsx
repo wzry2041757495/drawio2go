@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type Key } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { Tabs } from "@heroui/react";
 import { History, MessageSquare, Settings } from "lucide-react";
 import ChatSidebar from "./ChatSidebar";
 import SettingsSidebar from "./SettingsSidebar";
@@ -52,6 +53,9 @@ export default function UnifiedSidebar({
   const [sidebarWidth, setSidebarWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarWidthRef = useRef(sidebarWidth);
+  const handleTabSelection = (key: Key) => {
+    onTabChange(key as SidebarTab);
+  };
 
   const applySidebarWidth = (width: number) => {
     setSidebarWidth(width);
@@ -145,42 +149,46 @@ export default function UnifiedSidebar({
         onPointerCancel={handlePointerUp}
       />
 
-      <div className="sidebar-tabs">
-        {TAB_ITEMS.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            type="button"
-            className={`sidebar-tab ${activeTab === key ? "active" : ""}`}
-            onClick={() => onTabChange(key)}
-          >
-            <Icon size={16} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        aria-label="侧栏导航"
+        selectedKey={activeTab}
+        onSelectionChange={handleTabSelection}
+        className="sidebar-tabs-shell"
+      >
+        <Tabs.ListContainer className="sidebar-tab-strip">
+          <Tabs.List aria-label="侧栏选项" className="sidebar-tab-list">
+            {TAB_ITEMS.map(({ key, label, Icon }) => (
+              <Tabs.Tab key={key} id={key} className="sidebar-tab-item">
+                <Icon size={16} />
+                <span>{label}</span>
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs.ListContainer>
 
-      <div className="sidebar-panel-wrapper">
-        {activeTab === "settings" && (
-          <SettingsSidebar
-            isOpen={true}
-            onClose={onClose}
-            onSettingsChange={onSettingsChange}
-          />
-        )}
-        {activeTab === "chat" && (
+        <Tabs.Panel id="chat" className="sidebar-panel">
           <ChatSidebar
             isOpen={true}
             onClose={onClose}
             currentProjectId={currentProjectId}
           />
-        )}
-        {activeTab === "version" && (
+        </Tabs.Panel>
+
+        <Tabs.Panel id="settings" className="sidebar-panel">
+          <SettingsSidebar
+            isOpen={true}
+            onClose={onClose}
+            onSettingsChange={onSettingsChange}
+          />
+        </Tabs.Panel>
+
+        <Tabs.Panel id="version" className="sidebar-panel">
           <VersionSidebar
             projectUuid={projectUuid || null}
             onVersionRestore={onVersionRestore}
           />
-        )}
-      </div>
+        </Tabs.Panel>
+      </Tabs>
     </div>
   );
 }

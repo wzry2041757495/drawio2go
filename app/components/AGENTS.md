@@ -166,7 +166,8 @@ interface DrawioEditorNativeProps {
 - **可调整宽度**: 拖拽左边缘调整 (300-800px)
 - **持久化**: 宽度保存到统一存储层（Settings 表）
 - **CSS 变量**: `--sidebar-width` 动态更新，并驱动主容器 padding-right
-- **多 Tab 导航**: 聊天 / 设置 / 版本 Tab 固定在顶部，点击后立即切换内容
+- **HeroUI Tabs 导航**: 聊天 / 设置 / 版本 Tab 采用 HeroUI `Tabs` + `Tabs.Panel` 复合结构，`selectedKey` 受控于父级的 `activeTab`
+- **样式约定**: `sidebar-tabs-shell` 包裹整套 Tabs，`sidebar-tab-strip` 负责顶部粘性背景，`sidebar-tab-item` 使用 `data-selected` 状态切换
 - **两段式布局**: Tab 区与内容区分层，内容区高度 = `100% - var(--sidebar-tabs-height)`
 
 #### Props
@@ -254,7 +255,7 @@ interface ChatSidebarProps {
 #### 辅助组件
 
 - **EmptyState**: 空状态展示组件
-- **ErrorBanner**: 错误提示横幅组件
+- **ErrorBanner**: 基于 HeroUI `Alert` 的错误提示横幅，带刷新按钮
 - **ToolCallCard**: 工具调用状态卡片组件
 - **ThinkingBlock**: AI 思考框组件（展示推理过程）
 
@@ -293,6 +294,32 @@ interface TopBarProps {
 - 顶栏高度控制在 `var(--top-bar-height)`，使用 Material 扁平边框，滚动时 `position: sticky`
 - **Electron 环境**: 选区文本实时显示 `选中了X个对象`
 - **浏览器环境**: 安全限制下固定文案 `网页无法使用该功能`
+
+### 7. ProjectSelector.tsx
+
+**工程选择模态** - 选择当前工程或新建工程的集中入口
+
+#### Props
+
+```typescript
+interface ProjectSelectorProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentProjectId: string | null;
+  onSelectProject: (projectId: string) => void;
+  projects: Project[];
+  isLoading: boolean; // 加载工程列表时触发 Skeleton 占位
+  onCreateProject: (name: string, description?: string) => void;
+}
+```
+
+#### 行为说明
+
+- **Skeleton 加载态**: `isLoading` 为 `true` 时渲染 3 个 HeroUI `Skeleton` 卡片，不展示真实列表
+- **空状态**: 无工程时显示 `empty-state-card` 引导用户新建工程
+- **卡片样式**: 使用 `Card.Root` + `Card.Content`，激活项加粗边框 / Lucide `Check` 图标
+- **表单重置**: 模态关闭时重置输入框，避免残留
+- **按钮规范**: 交互按钮统一使用 HeroUI `Button` 并通过 `onPress` 处理
 
 ## HeroUI v3 使用规范
 

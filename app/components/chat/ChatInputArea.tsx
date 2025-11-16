@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent } from "react";
+import { TextArea } from "@heroui/react";
 import { type LLMConfig } from "@/app/types/chat";
 import ErrorBanner from "./ErrorBanner";
 import ChatInputActions from "./ChatInputActions";
@@ -60,14 +61,14 @@ export default function ChatInputArea({
 
       <form onSubmit={onSubmit} className="chat-input-container">
         {/* 多行文本输入框 */}
-        <textarea
+        <TextArea
           placeholder="描述你想要对图表进行的修改，或上传（粘贴）图像来复制图表..."
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          className="chat-input-textarea"
           rows={3}
           disabled={configLoading || !llmConfig}
           onKeyDown={handleKeyDown}
+          className="w-full"
         />
 
         {/* 按钮组 */}
