@@ -19,6 +19,7 @@ import {
   Loader2,
   RotateCcw,
   Rows,
+  Sparkles,
   SplitSquareHorizontal,
   X,
   ZoomIn,
@@ -27,6 +28,10 @@ import {
 import type { XMLVersion } from "@/app/lib/storage/types";
 import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
 import { createBlobFromSource, type BinarySource } from "./version-utils";
+import {
+  generateSmartDiffSvg,
+  type SmartDiffResult,
+} from "@/app/lib/svg-smart-diff";
 
 interface VersionCompareProps {
   versionA: XMLVersion;
@@ -47,9 +52,10 @@ interface PagePair {
   name: string;
   left?: PageRenderState;
   right?: PageRenderState;
+  smartDiff?: SmartDiffResult;
 }
 
-type CompareLayout = "split" | "stack" | "overlay";
+type CompareLayout = "split" | "stack" | "overlay" | "smart";
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
@@ -215,7 +221,11 @@ export function VersionCompare({
           throw new Error("未解析到有效的 SVG 页面数据");
         }
 
-        setPagePairs(pairs);
+        const pairsWithDiff = pairs.map((pair) => ({
+          ...pair,
+          smartDiff: generateSmartDiffSvg(pair.left?.svg, pair.right?.svg),
+        }));
+        setPagePairs(pairsWithDiff);
         setCurrentIndex(0);
         setOffset({ x: 0, y: 0 });
       } catch (err) {
@@ -310,6 +320,9 @@ export function VersionCompare({
   const changeLayout = (next: CompareLayout) => {
     setLayout(next);
     setOffset({ x: 0, y: 0 });
+    if (next === "smart") {
+      setScale(1);
+    }
   };
 
   // 键盘操作
@@ -342,6 +355,16 @@ export function VersionCompare({
       document.body.style.overflow = previous;
     };
   }, [isOpen]);
+
+  const currentSmartStats = currentPair?.smartDiff?.stats;
+  const currentSmartWarnings = currentPair?.smartDiff?.warnings ?? [];
+  const smartDiffCoverageLabel = currentSmartStats
+    ? `${Math.round(currentSmartStats.coverage * 1000) / 10}%`
+    : null;
+  const smartDiffImageSrc =
+    layout === "smart" && currentPair?.smartDiff?.svg
+      ? createSvgUrl(currentPair.smartDiff.svg)
+      : null;
 
   if (!isOpen || !isPortalReady) return null;
 
@@ -443,6 +466,13 @@ export function VersionCompare({
               >
                 <SplitSquareHorizontal className="w-4 h-4" /> 叠加
               </Button>
+              <Button
+                size="sm"
+                variant={layout === "smart" ? "primary" : "ghost"}
+                onPress={() => changeLayout("smart")}
+              >
+                <Sparkles className="w-4 h-4" /> 智能
+              </Button>
             </div>
 
             {layout === "overlay" && (
@@ -481,15 +511,23 @@ export function VersionCompare({
             {!loading && !error && currentPair && (
               <div
                 className={`version-compare__canvas version-compare__canvas--${layout}${isPanning ? " version-compare__canvas--panning" : ""}`}
-                style={{
-                  transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={stopPan}
-                onPointerLeave={stopPan}
-                onPointerCancel={stopPan}
-                onWheel={handleWheel}
+                style={
+                  layout === "smart"
+                    ? undefined
+                    : {
+                        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                      }
+                }
+                {...(layout === "smart"
+                  ? {}
+                  : {
+                      onPointerDown: handlePointerDown,
+                      onPointerMove: handlePointerMove,
+                      onPointerUp: stopPan,
+                      onPointerLeave: stopPan,
+                      onPointerCancel: stopPan,
+                      onWheel: handleWheel,
+                    })}
               >
                 {layout === "split" && (
                   <>
@@ -594,6 +632,116 @@ export function VersionCompare({
                     )}
                   </div>
                 )}
+
+                {layout === "smart" && (
+                  <div className="smart-diff__panel">
+                    <div className="smart-diff__visual">
+                      <div
+                        className={`smart-diff__visual-inner${isPanning ? " smart-diff__visual-inner--panning" : ""}`}
+                        style={{
+                          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                        }}
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={stopPan}
+                        onPointerLeave={stopPan}
+                        onPointerCancel={stopPan}
+                        onWheel={handleWheel}
+                      >
+                        {smartDiffImageSrc ? (
+                          <img
+                            src={smartDiffImageSrc || undefined}
+                            alt="智能差异高亮结果"
+                            className="smart-diff__image"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="version-compare__placeholder">
+                            <Loader2 className="w-5 h-5" />
+                            <span>暂无可生成的智能差异图</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="smart-diff__insights">
+                      <div className="smart-diff__insights-header">
+                        <h3>智能匹配统计</h3>
+                        {smartDiffCoverageLabel && (
+                          <span className="smart-diff__coverage-value">
+                            覆盖率 {smartDiffCoverageLabel}
+                          </span>
+                        )}
+                      </div>
+                      {currentSmartStats && (
+                        <div className="smart-diff__progress">
+                          <div className="smart-diff__progress-track">
+                            <div
+                              className="smart-diff__progress-value"
+                              style={{
+                                width: `${Math.max(
+                                  0,
+                                  Math.min(
+                                    100,
+                                    currentSmartStats.coverage * 100,
+                                  ),
+                                ).toFixed(1)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <div className="smart-diff__stat-grid">
+                        <div className="smart-diff__stat smart-diff__stat--match">
+                          <span>匹配元素</span>
+                          <strong>{currentSmartStats?.matched ?? 0}</strong>
+                        </div>
+                        <div className="smart-diff__stat smart-diff__stat--changed">
+                          <span>内容变更</span>
+                          <strong>{currentSmartStats?.changed ?? 0}</strong>
+                        </div>
+                        <div className="smart-diff__stat smart-diff__stat--removed">
+                          <span>仅存在于版本 A</span>
+                          <strong>{currentSmartStats?.onlyA ?? 0}</strong>
+                        </div>
+                        <div className="smart-diff__stat smart-diff__stat--added">
+                          <span>仅存在于版本 B</span>
+                          <strong>{currentSmartStats?.onlyB ?? 0}</strong>
+                        </div>
+                      </div>
+
+                      <div className="smart-diff__legend">
+                        <div>
+                          <span className="smart-diff__swatch smart-diff__swatch--match" />
+                          已对齐（透明灰）
+                        </div>
+                        <div>
+                          <span className="smart-diff__swatch smart-diff__swatch--added" />
+                          版本 B 新增（绿色）
+                        </div>
+                        <div>
+                          <span className="smart-diff__swatch smart-diff__swatch--removed" />
+                          版本 A 独有（红色）
+                        </div>
+                        <div>
+                          <span className="smart-diff__swatch smart-diff__swatch--changed" />
+                          内容变更（黄色）
+                        </div>
+                      </div>
+
+                      {currentSmartWarnings.length > 0 && (
+                        <div className="smart-diff__warnings">
+                          <AlertTriangle className="w-4 h-4" />
+                          <ul>
+                            {currentSmartWarnings.map((msg, index) => (
+                              <li key={`${msg}-${index}`}>{msg}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -665,9 +813,16 @@ export function VersionCompare({
               {versionA.semantic_version} vs {versionB.semantic_version} · 共{" "}
               {pagePairs.length} 页
             </p>
-            {warning && (
-              <span className="version-compare__pill">{warning}</span>
-            )}
+            <div className="version-compare__summary-pills">
+              {layout === "smart" && currentSmartStats && (
+                <span className="version-compare__pill version-compare__pill--smart">
+                  智能覆盖 {smartDiffCoverageLabel}
+                </span>
+              )}
+              {warning && (
+                <span className="version-compare__pill">{warning}</span>
+              )}
+            </div>
           </div>
 
           <Button variant="secondary" onPress={onClose}>

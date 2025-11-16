@@ -239,10 +239,11 @@ pnpm format               # 使用 Prettier 格式化所有代码
 ### 2025-11-16 版本对比可视化（里程碑6）
 
 - **VersionCompare 组件上线**：全屏对比弹层支持左右、上下、叠加三种布局，提供同步缩放/平移、滚轮缩放、按键快捷键与页面快速跳转能力。
+- **智能差异对齐模式**：新增 `smart` 视图，归一化不同尺寸 SVG，按 `data-cell-id` 最大匹配叠加渲染，自动高亮新增/删除/变更元素并输出覆盖率与统计。
 - **对比模式选择器**：版本侧栏新增“对比版本”模式，可多选两个历史快照，Banner 实时显示已选版本并支持一键清空/开始对比。
 - **快速对比入口**：VersionTimeline 提供“最新 vs 上一版本”快捷按钮，VersionCard 操作区也支持与上一版本直接对比。
 - **警告与占位**：页面数量不一致或缺少 `pages_svg` 时展示提示，并用灰色占位层描述缺失页面。
-- **相关文件**：`app/components/version/VersionCompare.tsx`, `app/components/VersionSidebar.tsx`, `app/components/version/VersionTimeline.tsx`, `app/components/version/VersionCard.tsx`, `app/hooks/useVersionCompare.ts`, `app/styles/components/version-timeline.css`。
+- **相关文件**：`app/components/version/VersionCompare.tsx`, `app/components/VersionSidebar.tsx`, `app/components/version/VersionTimeline.tsx`, `app/components/version/VersionCard.tsx`, `app/hooks/useVersionCompare.ts`, `app/lib/svg-smart-diff.ts`, `app/styles/components/version-timeline.css`。
 
 ### 2025-11-16 SVG 版本存储扩展（里程碑2）
 
