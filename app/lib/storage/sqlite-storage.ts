@@ -12,6 +12,7 @@ import type {
   Message,
   CreateMessageInput,
 } from "./types";
+import { MAX_SVG_BLOB_BYTES } from "./constants";
 
 function parseMetadata(value: unknown): Record<string, unknown> | null {
   if (value == null) return null;
@@ -29,13 +30,53 @@ function parseMetadata(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function normalizePreview(
+function normalizeBlobField(
   preview: Blob | Buffer | ArrayBuffer | null | undefined,
 ): Blob | undefined {
   if (!preview) return undefined;
   if (preview instanceof Blob) return preview;
   const buffer = preview as ArrayBuffer;
   return new Blob([buffer]);
+}
+
+function assertValidPageCount(value: number | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
+    throw new Error("page_count 必须是大于等于 1 的数字");
+  }
+}
+
+function assertValidPageNames(value: string | undefined | null) {
+  if (value == null) return;
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      throw new Error("page_names 不是数组");
+    }
+    parsed.forEach((item, index) => {
+      if (typeof item !== "string") {
+        throw new Error(`page_names[${index}] 不是字符串`);
+      }
+    });
+  } catch (error) {
+    throw new Error(`page_names 必须是 JSON 字符串: ${error}`);
+  }
+}
+
+function assertValidSvgBlob(
+  blob?: Blob | ArrayBuffer | ArrayBufferView | null,
+) {
+  if (!blob) return;
+  let size = 0;
+  if (blob instanceof Blob) {
+    size = blob.size;
+  } else if (blob instanceof ArrayBuffer) {
+    size = blob.byteLength;
+  } else if (ArrayBuffer.isView(blob)) {
+    size = blob.byteLength;
+  }
+  if (size > MAX_SVG_BLOB_BYTES) {
+    throw new Error("SVG 数据体积超过 8MB 限制");
+  }
 }
 
 /**
@@ -53,16 +94,29 @@ export class SQLiteStorage implements StorageAdapter {
 
   private normalizeVersion(
     version:
-      | (XMLVersion & { metadata?: unknown; preview_image?: unknown })
+      | (XMLVersion & {
+          metadata?: unknown;
+          preview_image?: unknown;
+          preview_svg?: unknown;
+          pages_svg?: unknown;
+        })
       | null,
   ): XMLVersion | null {
     if (!version) return null;
     return {
       ...version,
       metadata: parseMetadata((version as { metadata?: unknown }).metadata),
-      preview_image: normalizePreview(
+      preview_image: normalizeBlobField(
         (version as { preview_image?: Blob | Buffer | ArrayBuffer | null })
           .preview_image,
+      ),
+      preview_svg: normalizeBlobField(
+        (version as { preview_svg?: Blob | Buffer | ArrayBuffer | null })
+          .preview_svg,
+      ),
+      pages_svg: normalizeBlobField(
+        (version as { pages_svg?: Blob | Buffer | ArrayBuffer | null })
+          .pages_svg,
       ),
     };
   }
@@ -140,6 +194,20 @@ export class SQLiteStorage implements StorageAdapter {
       versionToCreate.preview_image =
         (await version.preview_image.arrayBuffer()) as unknown as Blob;
     }
+    if (version.preview_svg instanceof Blob) {
+      versionToCreate.preview_svg =
+        (await version.preview_svg.arrayBuffer()) as unknown as Blob;
+    }
+    if (version.pages_svg instanceof Blob) {
+      versionToCreate.pages_svg =
+        (await version.pages_svg.arrayBuffer()) as unknown as Blob;
+    }
+
+    assertValidPageCount(versionToCreate.page_count);
+    assertValidPageNames(versionToCreate.page_names);
+    assertValidSvgBlob(version.preview_svg);
+    assertValidSvgBlob(version.pages_svg);
+
     const result =
       await window.electronStorage!.createXMLVersion(versionToCreate);
     return this.normalizeVersion(result)!;
@@ -165,6 +233,24 @@ export class SQLiteStorage implements StorageAdapter {
       updatesToSend.preview_image =
         (await updates.preview_image.arrayBuffer()) as unknown as Blob;
     }
+    if (updates.preview_svg instanceof Blob) {
+      updatesToSend.preview_svg =
+        (await updates.preview_svg.arrayBuffer()) as unknown as Blob;
+    }
+    if (updates.pages_svg instanceof Blob) {
+      updatesToSend.pages_svg =
+        (await updates.pages_svg.arrayBuffer()) as unknown as Blob;
+    }
+
+    if (updates.page_count !== undefined) {
+      assertValidPageCount(updates.page_count);
+    }
+    if (updates.page_names !== undefined) {
+      assertValidPageNames(updates.page_names);
+    }
+    assertValidSvgBlob(updates.preview_svg as Blob);
+    assertValidSvgBlob(updates.pages_svg as Blob);
+
     await window.electronStorage!.updateXMLVersion(id, updatesToSend);
   }
 

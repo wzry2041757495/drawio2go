@@ -18,7 +18,42 @@ import {
   DB_VERSION,
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
+  MAX_SVG_BLOB_BYTES,
 } from "./constants";
+import { buildPageMetadataFromXml } from "./page-metadata";
+
+function assertValidPageCount(value: number | undefined): asserts value {
+  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
+    throw new Error("page_count 必须是 >= 1 的数字");
+  }
+}
+
+function normalizePageNames(names: string | undefined | null) {
+  if (names == null) return undefined;
+  try {
+    const parsed = JSON.parse(names);
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed.map((n, idx) => String(n ?? `Page ${idx + 1}`));
+  } catch {
+    return undefined;
+  }
+}
+
+function assertValidPageNames(value: string | undefined | null) {
+  if (value == null) return;
+  const parsed = normalizePageNames(value);
+  if (!parsed) {
+    throw new Error("page_names 必须是 JSON 数组字符串");
+  }
+}
+
+function assertValidSvgBlob(blob: unknown) {
+  if (!(blob instanceof Blob)) return;
+  const size = blob.size;
+  if (size > MAX_SVG_BLOB_BYTES) {
+    throw new Error("SVG 数据过大，已超过 8MB 限制");
+  }
+}
 
 /**
  * IndexedDB 存储实现（Web 环境）
@@ -60,17 +95,18 @@ export class IndexedDBStorage implements StorageAdapter {
           }
 
           // XMLVersions store
-          if (!db.objectStoreNames.contains("xml_versions")) {
-            const xmlStore = db.createObjectStore("xml_versions", {
-              keyPath: "id",
-            });
-            xmlStore.createIndex("project_uuid", "project_uuid", {
-              unique: false,
-            });
-            xmlStore.createIndex("source_version_id", "source_version_id", {
-              unique: false,
-            });
+          if (db.objectStoreNames.contains("xml_versions")) {
+            db.deleteObjectStore("xml_versions");
           }
+          const xmlStore = db.createObjectStore("xml_versions", {
+            keyPath: "id",
+          });
+          xmlStore.createIndex("project_uuid", "project_uuid", {
+            unique: false,
+          });
+          xmlStore.createIndex("source_version_id", "source_version_id", {
+            unique: false,
+          });
 
           // Conversations store
           if (!db.objectStoreNames.contains("conversations")) {
@@ -264,8 +300,21 @@ export class IndexedDBStorage implements StorageAdapter {
   async createXMLVersion(version: CreateXMLVersionInput): Promise<XMLVersion> {
     const db = await this.ensureDB();
     const now = Date.now();
+
+    const meta = buildPageMetadataFromXml(version.xml_content);
+    const pageCount = version.page_count ?? meta.pageCount;
+    const pageNames =
+      version.page_names ?? JSON.stringify(meta.pageNames.slice(0, pageCount));
+
+    assertValidPageCount(pageCount);
+    assertValidPageNames(pageNames);
+    assertValidSvgBlob(version.preview_svg as Blob);
+    assertValidSvgBlob(version.pages_svg as Blob);
+
     const fullVersion: XMLVersion = {
       ...version,
+      page_count: pageCount,
+      page_names: pageNames,
       created_at: now,
     };
 
@@ -298,9 +347,23 @@ export class IndexedDBStorage implements StorageAdapter {
     const targetSemanticVersion =
       updates.semantic_version ?? existing.semantic_version;
 
+    const nextXml = updates.xml_content ?? (existing as XMLVersion).xml_content;
+    const meta = buildPageMetadataFromXml(nextXml);
+    const mergedPageCount = updates.page_count ?? meta.pageCount;
+    const mergedPageNames =
+      updates.page_names ??
+      JSON.stringify(meta.pageNames.slice(0, mergedPageCount));
+
+    assertValidPageCount(mergedPageCount);
+    assertValidPageNames(mergedPageNames);
+    assertValidSvgBlob(updates.preview_svg as Blob);
+    assertValidSvgBlob(updates.pages_svg as Blob);
+
     const updated: XMLVersion = {
       ...existing,
       ...updates,
+      page_count: mergedPageCount,
+      page_names: mergedPageNames,
       id: existing.id, // 确保 id 不被覆盖
       created_at:
         updates.created_at ??

@@ -1,18 +1,26 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import type { RefObject } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   getStorage,
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
   DEFAULT_FIRST_VERSION,
+  buildPageMetadataFromXml,
 } from "@/app/lib/storage";
 import type { XMLVersion } from "@/app/lib/storage";
+import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import {
   computeVersionPayload,
   materializeVersionXml,
 } from "@/app/lib/storage/xml-version-engine";
+import {
+  exportAllPagesSVG,
+  serializeSVGsToBlob,
+  type SvgExportProgress,
+} from "@/app/lib/svg-export-utils";
 
 /**
  * XML 版本管理 Hook
@@ -20,6 +28,16 @@ import {
  * 临时实现：固定使用 semantic_version="1.0.0"
  * 未来扩展：支持多版本管理
  */
+export type CreateHistoricalVersionOptions = {
+  onExportProgress?: (progress: SvgExportProgress) => void;
+};
+
+export type CreateHistoricalVersionResult = {
+  versionId: string;
+  pageCount: number;
+  svgAttached: boolean;
+};
+
 export function useStorageXMLVersions() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -50,6 +68,8 @@ export function useStorageXMLVersions() {
 
       try {
         const storage = await getStorage();
+        const pageMetadata = buildPageMetadataFromXml(xml);
+        const pageNamesJson = JSON.stringify(pageMetadata.pageNames);
 
         // 始终保存到 WIP 版本
         const payload = await computeVersionPayload({
@@ -86,6 +106,8 @@ export function useStorageXMLVersions() {
             is_keyframe: payload.is_keyframe,
             diff_chain_depth: payload.diff_chain_depth,
             source_version_id: payload.source_version_id,
+            page_count: pageMetadata.pageCount,
+            page_names: pageNamesJson,
             created_at: timestamp,
           });
           versionId = wipVersion.id;
@@ -103,6 +125,8 @@ export function useStorageXMLVersions() {
             is_keyframe: payload.is_keyframe,
             diff_chain_depth: payload.diff_chain_depth,
             source_version_id: payload.source_version_id,
+            page_count: pageMetadata.pageCount,
+            page_names: pageNamesJson,
           });
           versionId = newVersion.id;
         }
@@ -224,13 +248,14 @@ export function useStorageXMLVersions() {
       projectUuid: string,
       semanticVersion: string,
       description?: string,
-    ): Promise<string> => {
+      editorRef?: RefObject<DrawioEditorRef | null>,
+      options?: CreateHistoricalVersionOptions,
+    ): Promise<CreateHistoricalVersionResult> => {
       setLoading(true);
       setError(null);
 
       try {
         const storage = await getStorage();
-
         // 获取当前 WIP 版本的内容
         const versions = await storage.getXMLVersionsByProject(projectUuid);
         const wipVersion = versions.find(
@@ -241,8 +266,23 @@ export function useStorageXMLVersions() {
           throw new Error("WIP 版本不存在，无法创建快照");
         }
 
-        // 恢复 WIP 的完整 XML（WIP 始终是关键帧，直接使用）
-        const wipXml = wipVersion.xml_content;
+        // 优先从编辑器实时导出最新 XML，若不可用则回退到存储中的 WIP XML
+        let wipXml = wipVersion.xml_content;
+        try {
+          if (editorRef?.current) {
+            const exportedXml = await editorRef.current.exportDiagram();
+            if (exportedXml && exportedXml.trim().length > 0) {
+              wipXml = exportedXml;
+            } else {
+              console.warn("⚠️ 实时导出 XML 为空，改用存储的 WIP XML");
+            }
+          }
+        } catch (exportErr) {
+          console.error(
+            "SVG 导出前导出 XML 失败，使用存储的 WIP XML",
+            exportErr,
+          );
+        }
 
         // 获取最后一个历史版本作为 source_version
         const historicalVersions = versions
@@ -262,6 +302,48 @@ export function useStorageXMLVersions() {
           throw new Error("无法计算历史版本数据");
         }
 
+        // 默认的页面元数据（从 XML 解析）
+        const pageMetadata = buildPageMetadataFromXml(wipXml);
+
+        // 导出 SVG（可选，失败则降级为仅 XML 存储）
+        let previewSvg: Blob | undefined;
+        let pagesSvgBlob: Blob | undefined;
+        let svgPageNames: string[] | null = null;
+        let exportError: Error | null = null;
+
+        if (editorRef?.current) {
+          try {
+            const svgPages = await exportAllPagesSVG(
+              editorRef.current,
+              wipXml,
+              {
+                onProgress: options?.onExportProgress,
+              },
+            );
+
+            if (svgPages.length > 0) {
+              previewSvg = new Blob([svgPages[0].svg], {
+                type: "image/svg+xml",
+              });
+              pagesSvgBlob = serializeSVGsToBlob(svgPages);
+              svgPageNames = svgPages.map((p) => p.name);
+            }
+          } catch (err) {
+            exportError = err as Error;
+            console.warn(
+              "⚠️ 导出 SVG 失败，已降级为仅存储 XML，错误:",
+              exportError,
+            );
+          }
+        }
+
+        const finalPageNames = svgPageNames ?? pageMetadata.pageNames;
+        const finalPageCount = svgPageNames?.length ?? pageMetadata.pageCount;
+
+        if (!finalPageCount || finalPageCount < 1) {
+          throw new Error("未能解析到有效的页面数据，无法创建版本");
+        }
+
         // 保存新历史版本
         const newVersion = await storage.createXMLVersion({
           id: uuidv4(),
@@ -269,16 +351,28 @@ export function useStorageXMLVersions() {
           semantic_version: semanticVersion,
           xml_content: payload.xml_content,
           preview_image: undefined,
+          preview_svg: previewSvg,
+          pages_svg: pagesSvgBlob,
           name: semanticVersion, // name 使用版本号
           description,
           metadata: null,
           is_keyframe: payload.is_keyframe,
           diff_chain_depth: payload.diff_chain_depth,
           source_version_id: payload.source_version_id,
+          page_count: finalPageCount,
+          page_names: JSON.stringify(finalPageNames),
         });
 
         setLoading(false);
-        return newVersion.id;
+        if (exportError) {
+          // 将 SVG 导出失败视为软错误，仅记录日志
+          console.info("已完成版本创建，但 SVG 未包含在记录中（导出失败）");
+        }
+        return {
+          versionId: newVersion.id,
+          pageCount: finalPageCount,
+          svgAttached: Boolean(previewSvg && pagesSvgBlob),
+        };
       } catch (err) {
         const error = err as Error;
         setError(error);

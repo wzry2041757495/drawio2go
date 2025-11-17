@@ -8,6 +8,7 @@ import ChatSidebar from "./ChatSidebar";
 import SettingsSidebar from "./SettingsSidebar";
 import { VersionSidebar } from "./VersionSidebar";
 import { useStorageSettings } from "@/app/hooks/useStorageSettings";
+import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 
 export type SidebarTab = "chat" | "settings" | "version";
 
@@ -20,6 +21,7 @@ interface UnifiedSidebarProps {
   currentProjectId?: string;
   projectUuid?: string | null;
   onVersionRestore?: (versionId: string) => void;
+  editorRef: React.RefObject<DrawioEditorRef | null>;
 }
 
 const MIN_WIDTH = 300;
@@ -46,6 +48,7 @@ export default function UnifiedSidebar({
   currentProjectId,
   projectUuid,
   onVersionRestore,
+  editorRef,
 }: UnifiedSidebarProps) {
   // 存储 Hook
   const { getSetting, setSetting } = useStorageSettings();
@@ -186,6 +189,7 @@ export default function UnifiedSidebar({
           <VersionSidebar
             projectUuid={projectUuid || null}
             onVersionRestore={onVersionRestore}
+            editorRef={editorRef}
           />
         </Tabs.Panel>
       </Tabs>

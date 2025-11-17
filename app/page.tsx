@@ -78,6 +78,12 @@ export default function Home() {
     [getAllXMLVersions, saveXML],
   );
 
+  // 同步 XML 到 diagramXml 状态
+  const syncDiagramXml = useCallback(async () => {
+    const xml = await loadProjectXml();
+    setDiagramXml(xml);
+  }, [loadProjectXml]);
+
   // 加载当前工程的 XML
   useEffect(() => {
     if (currentProject && !projectLoading) {
@@ -85,14 +91,14 @@ export default function Home() {
         try {
           // 先确保 WIP 版本存在
           await ensureWIPVersion(currentProject.uuid);
-          // 然后加载工程 XML 到编辑器
-          await loadProjectXml();
+          // 然后加载工程 XML 到编辑器并同步状态
+          await syncDiagramXml();
         } catch (error) {
           console.error("初始化工程失败:", error);
         }
       })();
     }
-  }, [currentProject, projectLoading, loadProjectXml, ensureWIPVersion]);
+  }, [currentProject, projectLoading, syncDiagramXml, ensureWIPVersion]);
 
   // 初始化环境检测
   useEffect(() => {
@@ -257,8 +263,8 @@ export default function Home() {
       // 执行回滚操作（将历史版本覆盖到 WIP）
       await rollbackToVersion(currentProject.uuid, versionId);
 
-      // 重新加载 WIP 到编辑器
-      await loadProjectXml();
+      // 重新加载 WIP 到编辑器并同步状态
+      await syncDiagramXml();
 
       // 触发版本更新事件
       window.dispatchEvent(new Event("version-updated"));
@@ -485,6 +491,7 @@ export default function Home() {
         currentProjectId={currentProject?.uuid}
         projectUuid={currentProject?.uuid}
         onVersionRestore={handleVersionRestore}
+        editorRef={editorRef}
       />
 
       {/* 工程选择器 */}

@@ -12,3 +12,5 @@ export { WIPIndicator } from "./WIPIndicator";
 export { VersionCard } from "./VersionCard";
 export { VersionTimeline } from "./VersionTimeline";
 export { CreateVersionDialog } from "./CreateVersionDialog";
+export { PageSVGViewer } from "./PageSVGViewer";
+export { VersionCompare } from "./VersionCompare";

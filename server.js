@@ -5,9 +5,14 @@ const { Server } = require("socket.io");
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
-const port = 3000;
+const port = parseInt(process.env.PORT, 10) || 3000;
 
-const app = next({ dev, hostname, port });
+const app = next({
+  dev,
+  hostname,
+  port,
+  turbo: dev,
+});
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
@@ -25,7 +30,7 @@ app.prepare().then(() => {
   // 创建 Socket.IO 服务器
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "*" : "http://localhost:3000",
+      origin: dev ? "*" : `http://${hostname}:${port}`,
       methods: ["GET", "POST"],
     },
   });

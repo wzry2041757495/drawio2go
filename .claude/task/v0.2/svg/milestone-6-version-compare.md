@@ -1,9 +1,11 @@
 # 里程碑6：版本对比可视化
 
 ## 🎯 目标
+
 实现基于 SVG 的版本对比功能，支持并排显示两个版本的图表，逐页对比差异。
 
 ## 📝 涉及文件
+
 - `app/components/version/VersionCompare.tsx` - 新建版本对比组件
 - `app/components/version/VersionList.tsx` - 添加对比入口
 - `app/hooks/useVersionCompare.ts` - 新建对比逻辑 Hook（可选）
@@ -12,12 +14,13 @@
 ## ✅ 任务清单
 
 ### 1. 创建 VersionCompare 组件
+
 - [ ] 创建 `app/components/version/VersionCompare.tsx`
 - [ ] 定义组件接口
   ```typescript
   interface VersionCompareProps {
-    versionA: XMLVersion;  // 旧版本
-    versionB: XMLVersion;  // 新版本
+    versionA: XMLVersion; // 旧版本
+    versionB: XMLVersion; // 新版本
     isOpen: boolean;
     onClose: () => void;
   }
@@ -28,7 +31,9 @@
   - 显示版本信息（版本号、时间、描述）
 
 ### 2. 加载两个版本的 SVG 数据
+
 - [ ] 分别加载两个版本的 `pages_svg`
+
   ```typescript
   const [pagesA, setPagesA] = useState<PageSVG[] | null>(null);
   const [pagesB, setPagesB] = useState<PageSVG[] | null>(null);
@@ -45,12 +50,14 @@
     }
   }, [versionA, versionB, isOpen]);
   ```
+
 - [ ] 处理页面数量不一致的情况
   - 显示警告提示（如"版本A有3页，版本B有5页"）
   - 对齐页面索引（按名称或索引）
 - [ ] 添加加载状态
 
 ### 3. 实现并排 SVG 显示
+
 - [ ] 创建左右分栏布局
   ```typescript
   <div className="compare-container">
@@ -73,6 +80,7 @@
 - [ ] 支持同步滚动（可选，拖拽一侧时另一侧同步）
 
 ### 4. 实现页面同步切换
+
 - [ ] 添加页面切换器（类似里程碑5）
 - [ ] 切换页面时同时更新两侧显示
 - [ ] 显示当前对比的页面名称
@@ -81,6 +89,7 @@
   - 或仅显示共同的页面
 
 ### 5. 添加差异高亮（可选，进阶功能）
+
 - [ ] 分析两个 SVG 的差异
   - 可以使用像素级对比（Canvas）
   - 或 SVG DOM 结构对比
@@ -90,6 +99,7 @@
 - [ ] 添加"下一个差异"/"上一个差异"导航
 
 ### 6. 添加对比工具栏
+
 - [ ] 缩放控制（同步缩放）
   - 放大
   - 缩小
@@ -104,6 +114,7 @@
   - 导出为图片
 
 ### 7. 集成到版本列表
+
 - [ ] 在 `VersionList.tsx` 中添加"选择版本对比"模式
   ```typescript
   const [compareMode, setCompareMode] = useState(false);
@@ -124,6 +135,7 @@
 - [ ] 添加快速对比按钮（如"与上一版本对比"）
 
 ### 8. 优化用户体验
+
 - [ ] 添加版本信息对比
   - 版本号
   - 创建时间
@@ -137,6 +149,7 @@
 - [ ] 优化性能（懒加载、虚拟化）
 
 ### 9. 样式设计
+
 - [ ] 设计对比界面布局
   - 响应式设计
   - 移动端适配（可能需要切换为上下布局）
@@ -145,6 +158,7 @@
 - [ ] 添加过渡动画
 
 ### 10. 测试
+
 - [ ] 测试相同页面数的版本对比
 - [ ] 测试不同页面数的版本对比
 - [ ] 测试单页版本对比
@@ -156,6 +170,7 @@
 - [ ] 测试移动端显示
 
 ## 🎯 验收标准
+
 1. ✅ 能打开版本对比界面
 2. ✅ 能并排显示两个版本的 SVG
 3. ✅ 能同步切换页面
@@ -166,6 +181,7 @@
 8. ✅ 移动端显示正常
 
 ## 📌 注意事项
+
 - **性能**：同时加载两组 SVG 数据，注意内存占用
 - **页面对齐**：页面数量不同时的处理逻辑要清晰
 - **差异高亮**：这是进阶功能，可以放到后续迭代
@@ -173,6 +189,7 @@
 - **同步滚动**：如果 SVG 很大需要滚动，考虑同步滚动位置
 
 ## 🔗 依赖关系
+
 - 依赖 **里程碑2** 完成（数据库包含 SVG 数据）
 - 依赖 **里程碑3** 完成（版本已保存 SVG）
 - 依赖 **里程碑5** 完成（可复用 SVG 显示逻辑）

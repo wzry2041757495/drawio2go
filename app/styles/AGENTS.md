@@ -202,6 +202,14 @@ app/styles/
     └── tool-calls.css
 ```
 
+### 版本卡片 SVG 预览规范
+
+- `version-preview`/`version-preview__image`：固定 16:10 比例的缩略容器，边框 `var(--border-light)`、阴影 `var(--shadow-1)`，`object-fit: contain` 避免拉伸。
+- `version-preview--placeholder`：缺失 `preview_svg` 时的降级，使用 `ImageOff` 图标 + 说明文字，颜色引用 `var(--text-tertiary)`。
+- `version-page-badge`：显示 `page_count`，背景 `var(--bg-secondary)`，边框 `var(--border-primary)`，可与 `TooltipRoot` 组合展示 `page_names`。
+- `version-pages-grid`：懒加载 `pages_svg` 后展示所有页面，外层采用虚线边框提示附加信息，内部 `repeat(auto-fit, minmax(120px, 1fr))` 栅格，缩略容器 `version-pages-grid__thumb` 使用 `var(--bg-primary)`。
+- 状态样式：`version-pages-grid__status--error` 与 `--empty` 分别使用 `var(--error-color)`、`var(--text-secondary)`，`version-pages-grid__spinner` 复用 `animations.css` 的 `spin`。
+
 ### 导入顺序（globals.css）
 
 ```css
@@ -549,6 +557,37 @@ import { Button, Card } from '@heroui/react'
 
 .version-card__chevron.rotated {
   transform: rotate(180deg);
+}
+
+/* 对比模式扩展 */
+.compare-mode-banner {
+  /* 选中提示 Banner */
+}
+.version-card__select-chip {
+  /* 加入对比按钮 */
+}
+.version-card--selected {
+  /* 已选状态强调 */
+}
+.version-compare__overlay {
+  /* VersionCompare 弹层 */
+}
+.version-compare__canvas--overlay {
+  /* 叠加布局 */
+}
+
+/* 多页/对比工具 */
+.page-svg-viewer__* {
+  /* PageSVGViewer 控件 */
+}
+.version-compare__toolbar {
+  /* 缩放/布局控制 */
+}
+.version-compare__placeholder {
+  /* 缺页占位 */
+}
+.version-compare__footer {
+  /* 页码与操作栏 */
 }
 ```
 

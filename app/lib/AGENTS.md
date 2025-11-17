@@ -10,10 +10,78 @@
 - **drawio-xml-service.ts**: 服务端 XML 转接层，负责 XPath 查询与批量编辑
 - **drawio-ai-tools.ts**: AI 工具定义（`drawio_read` / `drawio_edit_batch`）
 - **tool-executor.ts**: 工具执行路由器，通过 Socket.IO 与前端通讯
+- **svg-export-utils.ts**: DrawIO 多页面 SVG 导出工具（页面拆分、单页 XML 重建、结果序列化）
+- **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id 的元素级匹配与视觉高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
-- **storage/**: 统一存储抽象层（适配器模式）
-  - **current-project.ts**: 当前工程 ID 持久化工具
-  - **xml-version-engine.ts**: XML 版本恢复引擎（Diff 重放）
+
+### svg-export-utils.ts
+
+- `parsePages(xml)`: 解析 `<diagram>` 列表，返回 `{ id, name, index, xmlContent, element }`
+- `createSinglePageXml(diagram)`: 复制 diagram 并生成完整 mxfile 字符串，保持 host/agent 等元数据
+- `exportAllPagesSVG(editor, fullXml, options)`: 顺序执行 `loadDiagram → exportSVG` 并可接收 `onProgress`，结束后自动恢复原始 XML
+- `serializeSVGsToBlob` / `deserializeSVGsFromBlob`: 用 JSON Blob 存储/读取多页 SVG 结果
+
+### svg-smart-diff.ts
+
+**SVG 智能差异对比引擎** - 基于 `data-cell-id` 的元素级匹配与视觉高亮
+
+#### 核心功能
+
+- **元素级匹配**: 通过 `data-cell-id` 自动匹配两个 SVG 版本中的对应元素
+- **差异分类**:
+  - **匹配元素** (`matched`): 两个版本中完全相同的元素
+  - **变更元素** (`changed`): ID 相同但内容不同的元素
+  - **仅 A 存在** (`onlyA`): 被删除的元素
+  - **仅 B 存在** (`onlyB`): 新增的元素
+- **视觉归一化**: 自动缩放和居中对齐不同尺寸的 SVG
+- **智能高亮**: 使用混合模式和滤镜高亮差异元素
+
+#### 主要函数
+
+```typescript
+export function generateSmartDiffSvg(
+  leftSvg?: string,
+  rightSvg?: string,
+): SmartDiffResult;
+```
+
+**返回类型**:
+
+```typescript
+interface SmartDiffResult {
+  svg: string | null; // 生成的差异高亮 SVG
+  stats: SmartDiffStats; // 匹配统计信息
+  warnings: string[]; // 警告信息
+}
+
+interface SmartDiffStats {
+  matched: number; // 匹配元素数量
+  changed: number; // 变更元素数量
+  onlyA: number; // 仅 A 存在的元素数量
+  onlyB: number; // 仅 B 存在的元素数量
+  coverage: number; // 匹配覆盖率 (matched / total)
+}
+```
+
+#### 视觉样式
+
+- **匹配元素**: 低透明度 (32%)，去饱和度，multiply 混合模式
+- **删除元素**: 红色发光效果 (`--smart-diff-removed`)
+- **新增元素**: 绿色发光效果 (`--smart-diff-added`)
+- **变更元素**: 黄色发光效果，同时显示新旧版本
+
+#### 使用场景
+
+- `VersionCompare` 组件的 `smart` 对比模式
+- 自动生成版本差异可视化
+- 提供详细的差异统计信息
+
+### storage/
+
+统一存储抽象层（适配器模式）
+
+- **current-project.ts**: 当前工程 ID 持久化工具
+- **xml-version-engine.ts**: XML 版本恢复引擎（Diff 重放）
 
 ## DrawIO Socket.IO 调用流程
 
@@ -137,6 +205,10 @@ interface XMLVersion {
   diff_chain_depth: number; // 距离最近关键帧的链长
   xml_content: string; // 根据 is_keyframe 存储完整 XML 或 diff 字符串
   metadata: Record<string, unknown> | null; // 预留字段（当前为空）
+  page_count: number; // DrawIO 页面数量，>=1
+  page_names?: string; // JSON 字符串，记录所有页面名称
+  preview_svg?: Blob | Buffer; // 第一页 SVG 预览
+  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化数据
   preview_image?: Blob | Buffer;
   created_at: number; // 创建时间戳
 }

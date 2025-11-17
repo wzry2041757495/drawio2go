@@ -62,6 +62,10 @@ export interface XMLVersion {
   diff_chain_depth: number; // 距离最近关键帧的差异链长度
   xml_content: string; // 关键帧: 完整 XML; Diff: diff-match-patch 字符串
   metadata: Record<string, unknown> | null;
+  page_count: number;
+  page_names?: string | null; // JSON 字符串，序列化的页面名称数组
+  preview_svg?: Blob | Buffer; // 第一页 SVG 预览
+  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化
   preview_image?: Blob | Buffer; // 预览图（Web: Blob, Electron: Buffer）
   created_at: number;
 }

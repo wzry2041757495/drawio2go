@@ -54,13 +54,16 @@ app/
 │       ├── WIPIndicator.tsx      # WIP 工作区指示器
 │       ├── VersionCard.tsx       # 版本卡片（折叠式）
 │       ├── VersionTimeline.tsx   # 版本时间线
-│       └── CreateVersionDialog.tsx # 创建版本对话框
+│       ├── CreateVersionDialog.tsx # 创建版本对话框
+│       └── PageSVGViewer.tsx     # 多页 SVG 查看器
 ├── lib/                # 工具库 [详细文档 → app/lib/AGENTS.md]
 │   ├── drawio-tools.ts          # DrawIO XML 操作工具集
 │   ├── drawio-ai-tools.ts       # DrawIO AI 工具调用接口
 │   ├── drawio-xml-service.ts    # DrawIO XML 转接层（XPath 查询）
 │   ├── tool-executor.ts         # 工具执行路由器
-│   ├── llm-config.ts            # LLM 配置工具（已废弃）
+│   ├── svg-export-utils.ts      # 多页面 SVG 导出工具
+│   ├── svg-smart-diff.ts        # SVG 智能差异对比引擎
+│   ├── config-utils.ts          # LLM 配置规范化工具
 │   └── storage/                 # 统一存储抽象层
 │       ├── adapter.ts           # 存储适配器抽象类
 │       ├── indexeddb-storage.ts # IndexedDB 实现（Web）
@@ -68,6 +71,7 @@ app/
 │       ├── storage-factory.ts   # 存储实例工厂
 │       ├── current-project.ts   # 当前工程 ID 持久化工具
 │       ├── xml-version-engine.ts # XML 版本恢复引擎（Diff 重放）
+│       ├── page-metadata.ts     # 页面元数据提取工具
 │       ├── constants.ts         # 常量定义（WIP_VERSION 等）
 │       ├── types.ts             # 存储层类型定义
 │       └── index.ts             # 统一导出
@@ -82,7 +86,9 @@ app/
 │   ├── useStorageProjects.ts    # 项目管理 Hook
 │   ├── useCurrentProject.ts     # 当前工程管理 Hook（超时保护 + 自动兜底）
 │   ├── useStorageConversations.ts   # 会话管理 Hook
-│   └── useStorageXMLVersions.ts     # XML 版本管理 Hook
+│   ├── useStorageXMLVersions.ts     # XML 版本管理 Hook
+│   ├── useVersionCompare.ts     # 版本对比状态管理 Hook
+│   └── useDrawioEditor.ts       # DrawIO 编辑器操作封装 Hook
 ├── api/                # API 路由
 │   ├── chat/                    # 聊天 API 路由
 │   └── test/                    # 测试 API 路由
@@ -193,170 +199,81 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 ## 最近更新
 
-### 2025-11-16 WIP 草稿独立存储强化与工程管理优化
+### 核心架构（2025-11）
 
-#### WIP 草稿独立存储强化
+**统一存储系统**
 
-- **草稿隔离**：WIP (0.0.0) 永远视为关键帧，不会被纳入关键帧 + Diff 链路，也不会作为计算 Diff 的源版本
-- **时间戳实时更新**：每次自动保存或 AI 工具写入 WIP 时都会刷新 `created_at`，确保侧栏的"最后更新"时间实时反映当前草稿状态
-- **AI 工具对齐**：`drawio-tools.ts` 的保存/替换 API 直接写入 WIP 草稿，不再生成额外的 `latest` 版本号，行为与统一存储 Hook 保持一致
-- **跨端一致性**：IndexedDB/Electron (SQLite) 均支持更新 WIP 的 `created_at`，Electron 端补齐了 `updateXMLVersion` IPC 能力
+- 适配器模式统一 SQLite（Electron）和 IndexedDB（Web）接口
+- 版本控制：UUID 主键 + 关键帧/Diff 混合存储（diff-match-patch）
+- WIP 草稿独立管理：永久关键帧，时间戳实时更新，独立于 Diff 链路
+- 工程管理增强：超时保护、严格模式兼容、自动兜底机制
 
-#### 工程管理优化
+**Socket.IO 工具调用架构**
 
-- **useCurrentProject Hook 增强**：
-  - 添加超时保护（3-10秒），防止异步操作无限等待
-  - React 严格模式兼容，使用 ref 防止双重挂载导致的重复加载
-  - 详细的控制台日志，便于调试工程加载流程
-  - 自动创建默认工程时同时设置 `active_xml_version_id` 指向 WIP 版本
-- **存储层新增工具**：
-  - `storage/current-project.ts`：当前工程 ID 持久化工具（读取/写入 `settings` 表）
-  - `storage/xml-version-engine.ts`：XML 版本恢复引擎（通过 Diff 链重放恢复历史版本）
-  - `storage/constants.ts`：统一管理常量（WIP_VERSION、ZERO_SOURCE_VERSION_ID 等）
-- **相关文件**：
-  - `app/hooks/useCurrentProject.ts` - 当前工程管理 Hook
-  - `app/lib/storage/current-project.ts` - 工程 ID 持久化
-  - `app/lib/storage/xml-version-engine.ts` - 版本恢复引擎
-  - `app/lib/storage/constants.ts` - 常量定义
+- 双向通讯：AI 工具调用 → Socket.IO 转发前端 → 返回结果
+- 30秒超时机制，详细错误追溯
 
-### 2025-11-14 HeroUI 复杂组件迁移
+**LLM 集成**
 
-- **HeroUI Alert**：聊天输入区的 `ErrorBanner` 改为 HeroUI `Alert` 复合组件，移除自定义 `.error-banner` 样式并提供刷新按钮操作。
-- **Skeleton 占位**：ProjectSelector、MessageList、Version Timeline/WIP 等加载态统一接入 HeroUI `Skeleton`，避免再显示纯文字的 loading EmptyState。
-- **统一侧栏 Tabs**：`UnifiedSidebar` 切换至 HeroUI `Tabs` 结构，`sidebar-tabs` 自定义样式删除，新增 `sidebar-tab-strip/sidebar-tab-item` 等类来适配 HeroUI 复合组件。
-- **版本侧边栏体验**：版本时间线在加载阶段展示骨架屏，卡片列表与 Header 样式保持一致。
-- **相关文件**：
-  - `app/components/chat/ErrorBanner.tsx`, `app/components/chat/MessageList.tsx`
-  - `app/components/ProjectSelector.tsx`, `app/components/UnifiedSidebar.tsx`
-  - `app/components/VersionSidebar.tsx`, `app/components/version/VersionTimeline.tsx`
-  - `app/styles/layout/sidebar.css`, `app/styles/components/version-timeline.css`, `app/styles/utilities/components.css`
-  - `.claude/task/v0.2/heroui/milestone-4-complex-components.md`
+- OpenAI Compatible 支持（Reasoning 模型 o1/o3、LM Studio、DeepSeek）
+- 聊天消息带模型标记（`model_name` 字段）
 
-### 2025-11-13 顶栏与侧栏交互重构
+### 版本管理系统（2025-11-12 ~ 2025-11-17）
 
-- **顶栏统一操作区**:
-  - 选区指示器移至最左侧，实时展示对象数量
-  - 工程切换按钮置于中间并支持全宽点击区域
-  - 加载/保存按钮靠右，新增图标按钮可一键收起/展开侧栏
-- **统一侧栏多 Tab 化**:
-  - 聊天/设置/版本切换采用紧凑 Tab，固定在侧栏顶部（2025-11-14 起基于 HeroUI `Tabs` 实现）
-  - 侧栏宽度记忆与拖拽逻辑保持不变，可在 Tabs 间即时切换
-- **布局同步**:
-  - 左侧工作区在侧栏展开时自动预留宽度，顶栏与编辑器对齐
-  - 相关样式已迁移到 `top-bar` 与新版 `sidebar-tab-*` 类，移除底栏布局
-- **相关文件**:
-  - `app/components/TopBar.tsx`
-  - `app/components/UnifiedSidebar.tsx`
-  - `app/page.tsx`
-  - `app/styles/layout/container.css`, `app/styles/layout/sidebar.css`
+**UI 现代化**
 
-### 2025-11-13 版本管理 UI 现代化外观升级
+- Material Design 规范：4/8/12px 圆角、4 层阴影系统、4px 基准间距
+- 扁平化设计：移除渐变、干扰性动画（脉冲/浮动）
+- 紧凑化布局：折叠式版本卡片、时间线视觉优化
+- 文本语义化变量：`--text-primary/secondary/tertiary`
 
-- **版本侧边栏现代化**:
-  - 新增信息描述区：History 图标 + 标题 + 副标题说明
-  - 空状态卡片优化：History 图标 + 引导文案
-  - 悬浮 CTA 按钮：Save 图标 + "保存版本" 主色按钮
-  - 顶部 Header 采用信息区 + 操作按钮分栏布局
-- **WIP 指示器卡片式升级**:
-  - 卡片式信息区：Activity 图标 + WIP 徽章 + 版本号
-  - 元数据行：实时保存状态 + 最后更新时间
-  - 三段式布局：`wip-indicator__body/top/meta` 结构
-- **历史版本时间线优化**:
-  - 主轴 + 节点视觉：CSS `::before` 绘制时间线
-  - 紧凑折叠卡片：默认折叠显示版本号+徽章+时间
-  - 版本卡片分栏：操作按钮右上排列，底部元信息展示
-  - Disclosure 折叠组件：点击展开查看完整信息
-- **文本语义化变量**:
-  - 新增 `--text-primary/secondary/tertiary` 颜色变量
-  - 统一全局文本色彩引用规范
-- **相关文件**:
-  - `app/components/VersionSidebar.tsx` - 版本侧边栏主组件
-  - `app/components/version/WIPIndicator.tsx` - WIP 指示器
-  - `app/components/version/VersionCard.tsx` - 版本卡片
-  - `app/components/version/VersionTimeline.tsx` - 版本时间线
-  - `app/styles/components/version-*.css` - 版本管理样式
+**多页面 SVG 支持**
 
-### 2025-11-12 版本管理 UI Material Design 优化
+- 存储扩展：`page_count`、`page_names`、`preview_svg`、`pages_svg` 字段
+- 全屏查看器：懒加载、键盘快捷键、滚轮缩放、拖拽平移
+- 可访问性：`role="button"`、键盘 Enter/Space 支持
 
-- **设计系统规范化**:
-  - 统一圆角至 4px/8px/12px 三档标准
-  - 建立 Material Design 标准阴影层级（4层：1/2/4/8）
-  - 添加标准间距系统（4px 基准）
-  - 修正动画变量命名（duration 替代错误的 transition-slow）
-- **版本组件优化**:
-  - 移除干扰性动画（脉冲、浮动、上移效果）
-  - 统一徽章样式规范（Latest/关键帧/差异）
-  - 扁平化背景设计，去除渐变效果
-  - 对话框使用 Material Design 标准背景模糊（4px）
-- **样式系统文档**:
-  - 创建 `app/styles/AGENTS.md` 完整设计系统文档
-  - 记录所有设计令牌、使用场景和最佳实践
-  - 包含 Tailwind CSS v4 + HeroUI v3 集成指南
-- **相关文件**:
-  - `app/styles/base/variables.css` - 核心设计令牌
-  - `app/styles/components/version-*.css` - 版本管理组件样式
+**版本对比可视化**
 
-### 2025-11 统一存储架构重构
+- 智能差异模式（`smart` 视图）：基于 `data-cell-id` 自动匹配差异元素
+  - 自动分类：匹配/变更/删除/新增
+  - 视觉归一化：自动缩放对齐不同尺寸 SVG
+  - 混合模式高亮：`mix-blend-mode` + `filter` 实现差异可视化
+  - 覆盖率统计：匹配元素百分比
+- 全屏对比弹层：左右/上下/叠加三种布局，同步缩放/平移
+- 快速对比入口：最新 vs 上一版本快捷按钮
 
-- **适配器模式**: 抽象存储接口，自动适配 SQLite（Electron）和 IndexedDB（Web）
-- **核心文件**:
-  - `app/lib/storage/adapter.ts` - 存储适配器抽象类
-  - `app/lib/storage/sqlite-storage.ts` - SQLite 实现
-  - `app/lib/storage/indexeddb-storage.ts` - IndexedDB 实现
-  - `app/lib/storage/storage-factory.ts` - 存储工厂（运行时检测环境）
-- **统一 Hooks**: `useStorageSettings`、`useStorageProjects`、`useStorageConversations`、`useStorageXMLVersions`
-- **表结构**: Projects、XMLVersions、Conversations、Settings
-- **迁移策略**: 从 localStorage 迁移到统一存储层，保持向后兼容
+**版本操作增强**
 
-### 2025-11 Socket.IO 工具调用架构
+- 版本动态切换：侧栏直接切换到历史版本编辑
+- SVG 导出增强：自定义选项、多页面导出优化
 
-- **通讯机制**: Socket.IO 双向通讯，后端同步等待前端执行结果
-- **执行流程**: AI 调用工具 → Socket.IO 转发到前端 → 前端执行 → 返回结果给 AI
-- **核心文件**:
-  - `server.js` - Socket.IO 服务器
-  - `app/lib/tool-executor.ts` - 工具路由
-  - `app/hooks/useDrawioSocket.ts` - 前端 Hook
+### 界面交互优化（2025-11-13 ~ 2025-11-14）
 
-### 2025-11 顶栏选区状态显示
+**顶栏与侧栏重构**
 
-- **Electron**: 主进程向 DrawIO iframe 注入监听器，实时通过 postMessage 回传选中对象数量，顶栏左侧状态区域展示为 `选中了X个对象`
-- **Web**: 受浏览器沙箱限制，顶栏状态文案显示 `网页无法使用该功能`
-- **相关文件**:
-  - `electron/main.js`、`electron/preload.js` - 注入与 IPC 通道
-  - `app/components/DrawioEditorNative.tsx` - 处理选区消息
-  - `app/components/TopBar.tsx` - 显示状态文案
-  - `app/page.tsx` - 组合状态数据
+- 顶栏统一操作区：选区指示器（左）+ 工程切换（中）+ 保存/侧栏切换（右）
+- 统一侧栏多 Tab：聊天/设置/版本切换（HeroUI `Tabs` 实现）
+- 选区状态显示：Electron 实时显示选中对象数量（Web 受限）
 
-### 2025-11 聊天组件模块化架构
+**HeroUI v3 组件迁移**
 
-- 将大型 `ChatSidebar.tsx` 重构为 12 个独立组件
-- 统一导出通过 `app/components/chat/index.ts`
-- 职责单一，便于测试和维护
+- Alert 组件：聊天错误提示标准化
+- Skeleton 占位：统一加载状态（ProjectSelector、MessageList、Version Timeline）
+- Tabs 组件：侧栏标签页切换
 
-### 2025-11 聊天界面与模型标记
+**聊天界面优化**
 
-- 聊天消息新增模型信息：`messages` 表增加 `model_name` 字段，Web IndexedDB 版本固定为 2（需要手动清空旧数据），SQLite 直接假设新结构（无自动迁移）
-- `ChatSidebar` 在消息层面写入 `model_name` 元数据，确保用户消息与 AI 回复都能追溯到当时的模型
-- AI 回复区域改为全宽布局，无底色覆盖整个侧边栏；用户消息仍保持气泡样式
-- 新增左上角信息条（Lucide 图标 + 模型名 + 时间戳），与工具调用卡片共用全宽布局
+- 组件模块化：拆分为 12 个独立组件（`app/components/chat/`）
+- 全宽 AI 回复布局 + 气泡式用户消息
+- 模型信息条：Lucide 图标 + 模型名 + 时间戳
 
-### 2025-11 版本控制重构
+### 关键修复（2025-11-16）
 
-- `xml_versions` 表主键从自增 ID 改为 UUID，`source_version_id` 同步使用 UUID
-- 引入关键帧 + Diff 混合存储：`diff-match-patch` 字符串保存差异，差异率 >70% 或链长 >10 自动刷新关键帧
-- `metadata` JSON 预留字段已加入（当前写入 `null`，供后续扩展）
-- 首版本统一使用 `00000000-0000-0000-0000-000000000000` 作为父版本标记
+**DrawIO 初始化加载**
 
-### 2025-11 OpenAI Compatible 支持
+- 修复 iframe 加载阻塞问题（e33efb5 之后）
+- 新增 `pendingLoadQueue`：iframe 未 ready 时缓存请求，`init` 后自动回放
+- 状态对齐：`loadProjectXml` 返回已加载 XML，保证保存/回滚场景一致性
 
-- 支持 OpenAI Reasoning 模型（o1/o3）
-- 支持通用 OpenAI 兼容服务（LM Studio、本地模型等）
-- 支持 DeepSeek API
-
-## 项目仓库
-
-**GitHub**: https://github.com/Menghuan1918/drawio2go
-
----
-
-_最后更新: 2025-11-14_
+_最后更新: 2025-11-17_

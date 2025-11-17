@@ -14,6 +14,7 @@ import type {
 } from "../types/drawio-tools";
 import { getStorage } from "./storage/storage-factory";
 import { WIP_VERSION } from "./storage/constants";
+import { buildPageMetadataFromXml } from "./storage";
 import {
   computeVersionPayload,
   materializeVersionXml,
@@ -90,6 +91,8 @@ function decodeBase64XML(xml: string): string {
 async function saveDrawioXMLInternal(decodedXml: string): Promise<void> {
   const storage = await getStorage();
   const projectUuid = await resolveCurrentProjectUuid(storage);
+  const pageMetadata = buildPageMetadataFromXml(decodedXml);
+  const pageNamesJson = JSON.stringify(pageMetadata.pageNames);
 
   // 检查项目是否存在
   const project = await storage.getProject(projectUuid);
@@ -123,6 +126,8 @@ async function saveDrawioXMLInternal(decodedXml: string): Promise<void> {
       is_keyframe: payload.is_keyframe,
       diff_chain_depth: payload.diff_chain_depth,
       metadata: null,
+      page_count: pageMetadata.pageCount,
+      page_names: pageNamesJson,
       created_at: Date.now(),
     });
     return;
@@ -137,6 +142,8 @@ async function saveDrawioXMLInternal(decodedXml: string): Promise<void> {
     is_keyframe: payload.is_keyframe,
     diff_chain_depth: payload.diff_chain_depth,
     metadata: null,
+    page_count: pageMetadata.pageCount,
+    page_names: pageNamesJson,
   });
 }
 

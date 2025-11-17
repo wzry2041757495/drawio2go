@@ -18,6 +18,7 @@
 interface VersionSidebarProps {
   projectUuid: string | null; // 项目 UUID
   onVersionRestore?: (versionId: string) => void; // 版本回滚回调
+  editorRef: React.RefObject<DrawioEditorRef | null>; // 透传原生编辑器实例，供创建版本时导出 SVG
 }
 ```
 
@@ -27,6 +28,7 @@ interface VersionSidebarProps {
 - **空状态卡片**: 未选择项目时显示引导信息
 - **自动刷新**: 监听 `version-updated` 事件自动重新加载版本列表
 - **错误处理**: 加载失败时显示错误状态和重试按钮
+- **版本反馈**: 成功创建版本后显示 HeroUI `Alert`，提示页数与 SVG 导出结果（4 秒自动消失）
 
 #### version/WIPIndicator.tsx - WIP 工作区指示器
 
@@ -69,6 +71,9 @@ interface VersionCardProps {
 - **展开视图**: 显示完整信息（名称、描述、元数据、操作按钮）
 - **Disclosure 组件**: 使用 HeroUI v3 Disclosure 实现折叠展开
 - **操作按钮**: 导出 DrawIO 文件 + 回滚到此版本
+- **SVG 预览**: 将 `preview_svg` 转为 ObjectURL，展示 16:10 缩略图；缺失数据时显示占位提示
+- **页面信息**: 解析 `page_count`/`page_names`，展示“共 X 页”徽章并提供 Tooltip 列出页面名称
+- **多页入口**: 展开视图内可展开缩略图栅格，点击缩略图或“全屏浏览”按钮唤起 PageSVGViewer
 - **徽章系统**:
   - 最新徽章（绿色）
   - 关键帧徽章（黄色，Key 图标）
@@ -96,6 +101,47 @@ interface VersionTimelineProps {
 - **空状态**: 无历史版本时显示引导信息
 - **降序排列**: 最新版本在顶部
 
+#### version/VersionCompare.tsx - 版本对比弹层（里程碑6）
+
+**并排/叠加对比两个历史版本的多页 SVG** - 支持同步缩放、按键导航、布局切换、智能差异高亮。
+
+##### Props
+
+```typescript
+interface VersionCompareProps {
+  versionA: XMLVersion; // 旧版本
+  versionB: XMLVersion; // 新版本
+  versions: XMLVersion[]; // 所有版本列表，用于快速切换对比版本
+  isOpen: boolean;
+  onClose: () => void;
+}
+```
+
+##### 特性
+
+- **四种布局模式**:
+  - **split（左右分栏）**: 经典并排对比，适合整体对比
+  - **stack（上下堆叠）**: 垂直排列，适合细节对比
+  - **overlay（叠加对比）**: 可调透明度，适合位置对齐检查
+  - **smart（智能差异）**: 基于 `data-cell-id` 自动匹配元素并高亮差异
+- **智能差异模式**（2025-11-17 新增）:
+  - 自动匹配两个版本中的对应元素（基于 `data-cell-id`）
+  - 差异分类：匹配/变更/删除/新增元素
+  - 视觉归一化：自动缩放和居中对齐不同尺寸的 SVG
+  - 混合模式高亮：匹配元素去饱和、删除元素红色发光、新增元素绿色发光
+  - 统计信息：显示匹配数/变更数/删除数/新增数/覆盖率
+- **版本快速切换**: 顶部 Header 提供版本选择器，可快速切换对比的版本对
+- **同步控制**: 统一缩放/平移、键盘左右切页、Ctrl/Cmd+滚轮缩放、0 重置
+- **缺页提示**: 页面数量不一致或缺少 `pages_svg` 时显示占位和警告文案
+- **页面跳转**: Select 下拉快速跳页，Footer 展示当前页名称与计数
+- **全屏弹层**: 通过 React Portal 挂载到 `document.body`，弹层覆盖整个页面，不再受侧边栏宽度限制
+
+##### 交互提示
+
+- 支持 ESC 关闭、方向键切页、`+/-/0` 控制缩放
+- 叠加模式下可拖动透明度滑杆
+- Smart 模式自动加载并显示差异统计信息
+
 #### version/CreateVersionDialog.tsx - 创建版本对话框
 
 **创建新版本的模态对话框** - 输入版本信息并保存快照
@@ -107,17 +153,43 @@ interface CreateVersionDialogProps {
   projectUuid: string;
   isOpen: boolean;
   onClose: () => void;
-  onVersionCreated?: () => void;
+  onVersionCreated?: (result: CreateHistoricalVersionResult) => void; // 返回版本 ID、页数、SVG 状态
+  editorRef: React.RefObject<DrawioEditorRef | null>; // 必填，提供导出 XML/SVG 能力
 }
 ```
 
 ##### 特性
 
-- **模态对话框**: HeroUI v3 Modal 组件
-- **表单验证**: 版本号、名称、描述输入
+- **模态对话框**: HeroUI v3 Modal 组件，导出期间禁止关闭
+- **表单验证**: 版本号实时校验 + 节流重名检查
 - **自动版本号**: 基于现有版本自动建议下一个版本号
-- **异步保存**: 调用存储层 API 创建版本快照
-- **事件通知**: 创建成功后触发 `version-updated` 事件
+- **SVG 进度**: 通过 `editorRef` + `exportAllPagesSVG` 显示“第 X/Y 页”进度，禁用提交直到完成
+- **异步保存**: 调用存储层 API 创建版本快照并写入 `preview_svg/pages_svg`
+- **成功提示**: 展示页数 + SVG 状态的成功文案，1.4 秒后自动关闭对话框
+
+#### version/PageSVGViewer.tsx - 多页面 SVG 查看器
+
+**历史版本多页面预览器** - 全屏/半屏模式渲染 `pages_svg` 中的每一页 SVG。
+
+##### Props
+
+```typescript
+interface PageSVGViewerProps {
+  version: XMLVersion;
+  isOpen: boolean;
+  onClose: () => void;
+  defaultPageIndex?: number;
+}
+```
+
+##### 特性
+
+- **懒加载处理**: 打开时解析 `version.pages_svg`，失败回退到错误提示
+- **多种导航**: 上/下一页按钮、页码选择器、键盘左右键，Top Bar 显示当前页信息
+- **缩放/平移**: Ctrl/Cmd + 滚轮缩放、按钮放大/缩小、重置/适应窗口、放大后可拖拽平移
+- **导出能力**: 支持导出当前页 SVG，或者导出所有页的 JSON（可供后续批量处理）
+- **全屏/半屏切换**: 一键进入全屏体验，自动锁定 body 滚动，Esc 快捷关闭
+- **可访问性**: `role="dialog"` + 键盘快捷键（Esc 关闭、0 重置、± 缩放）
 
 ---
 
@@ -131,15 +203,18 @@ interface CreateVersionDialogProps {
 - **通信协议**: PostMessage API
 - **安全检查**: 验证 `event.origin.includes('diagrams.net')`
 - **状态管理**: useRef 追踪 XML 变化
+- **导出能力**: 支持 `exportDiagram()` (XML) 与 `exportSVG()` (SVG)，均通过 postMessage 的 `{ action: 'export', format }` 调用
 
 #### 消息协议
 
 ```typescript
 // 发送消息
 {action: 'load', xml: string, autosave: true}
+{action: 'merge', xml: string}
+{action: 'export', format: 'xml' | 'svg'}
 
 // 接收消息
-{event: 'init'|'save'|'autosave'|'export', ...}
+{event: 'init'|'save'|'autosave'|'export'|'merge'|'load'|'drawio-selection', ...}
 ```
 
 #### Props
@@ -149,6 +224,13 @@ interface DrawioEditorNativeProps {
   initialXml?: string; // 初始 XML 数据
   onSave?: (xml: string) => void; // 保存回调
 }
+
+#### Ref API
+
+- `loadDiagram(xml: string): Promise<void>`：向 iframe 发送 `load`，并在收到 `load` 事件后 resolve（用于多页面导出等需要顺序等待的场景）
+- `mergeDiagram(xml: string)`：发送 `merge`，10s 超时自动回退为 `load`
+- `exportDiagram(): Promise<string>`：导出 XML
+- `exportSVG(): Promise<string>`：导出 SVG，内部维护 Promise 队列避免多个导出响应串扰
 ```
 
 ### 2. DrawioEditor.tsx

@@ -109,3 +109,9 @@ export const DB_VERSION = 1;
  * 存储在用户数据目录（app.getPath('userData')）
  */
 export const SQLITE_DB_FILE = "drawio2go.db";
+
+/**
+ * SVG Blob 存储大小上限（字节）
+ * 约 8MB，用于限制 preview_svg/pages_svg 的体积，避免 IndexedDB/SQLite 过载
+ */
+export const MAX_SVG_BLOB_BYTES = 8 * 1024 * 1024;
