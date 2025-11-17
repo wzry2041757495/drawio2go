@@ -71,6 +71,15 @@ export interface XMLVersion {
 }
 
 /**
+ * XML 版本的 SVG 数据（大字段按需加载）
+ */
+export interface XMLVersionSVGData {
+  id: string;
+  preview_svg?: Blob | Buffer | null;
+  pages_svg?: Blob | Buffer | null;
+}
+
+/**
  * 创建 XML 版本时的输入类型
  */
 export type CreateXMLVersionInput = Omit<XMLVersion, "created_at">;

@@ -210,9 +210,25 @@ class SQLiteManager {
   getXMLVersionsByProject(projectUuid) {
     return this.db
       .prepare(
-        "SELECT * FROM xml_versions WHERE project_uuid = ? ORDER BY created_at DESC",
+        `
+        SELECT
+          * EXCLUDE (preview_svg, pages_svg)
+        FROM xml_versions
+        WHERE project_uuid = ?
+        ORDER BY created_at DESC
+      `,
       )
       .all(projectUuid);
+  }
+
+  getXMLVersionSVGData(id) {
+    return (
+      this.db
+        .prepare(
+          `SELECT id, preview_svg, pages_svg FROM xml_versions WHERE id = ?`,
+        )
+        .get(id) || null
+    );
   }
 
   updateXMLVersion(id, updates = {}) {

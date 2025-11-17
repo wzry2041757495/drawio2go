@@ -480,6 +480,10 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle("storage:getXMLVersionSVGData", async (event, id) => {
+  return storageManager.getXMLVersionSVGData(id);
+});
+
 ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
   if (updates?.preview_image) {
     updates.preview_image = Buffer.from(updates.preview_image);

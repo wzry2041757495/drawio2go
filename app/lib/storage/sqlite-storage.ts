@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -189,7 +190,30 @@ export class SQLiteStorage implements StorageAdapter {
       await window.electronStorage!.getXMLVersionsByProject(projectUuid);
     return results
       .map((version) => this.normalizeVersion(version))
-      .filter((v): v is XMLVersion => !!v);
+      .filter((v): v is XMLVersion => !!v)
+      .map((version) => {
+        const {
+          preview_svg: _ignoredPreview,
+          pages_svg: _ignoredPages,
+          ...rest
+        } = version;
+        return rest as XMLVersion;
+      });
+  }
+
+  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+    await this.ensureElectron();
+    const svgData = await window.electronStorage!.getXMLVersionSVGData(id);
+    if (!svgData) return null;
+
+    const normalize = (value: Blob | Buffer | ArrayBuffer | null | undefined) =>
+      normalizeBlobField(value) ?? null;
+
+    return {
+      id: svgData.id,
+      preview_svg: normalize(svgData.preview_svg),
+      pages_svg: normalize(svgData.pages_svg),
+    };
   }
 
   async updateXMLVersion(

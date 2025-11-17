@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { RefObject } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -10,7 +10,7 @@ import {
   DEFAULT_FIRST_VERSION,
   buildPageMetadataFromXml,
 } from "@/app/lib/storage";
-import type { XMLVersion } from "@/app/lib/storage";
+import type { XMLVersion, XMLVersionSVGData } from "@/app/lib/storage";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import {
   computeVersionPayload,
@@ -42,6 +42,12 @@ export type CreateHistoricalVersionResult = {
 export function useStorageXMLVersions() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  /**
+   * SVG 数据缓存上限：防止 Map 无限增长导致内存泄漏
+   * 采用简单 LRU：命中时更新顺序，超限时淘汰最旧记录
+   */
+  const MAX_SVG_CACHE_SIZE = 50;
+  const svgCacheRef = useRef<Map<string, XMLVersionSVGData>>(new Map());
 
   /**
    * 保存 XML 到 WIP 版本（活跃工作区）
@@ -234,6 +240,51 @@ export function useStorageXMLVersions() {
       }
     },
     [],
+  );
+
+  const getXMLVersionSVGData = useCallback(
+    async (id: string): Promise<XMLVersionSVGData | null> => {
+      const cached = svgCacheRef.current.get(id);
+      if (cached) {
+        // 命中后移到队尾，维持 LRU 顺序
+        svgCacheRef.current.delete(id);
+        svgCacheRef.current.set(id, cached);
+        return cached;
+      }
+
+      try {
+        const storage = await getStorage();
+        const svgData = await storage.getXMLVersionSVGData(id);
+        if (svgData) {
+          svgCacheRef.current.set(id, svgData);
+          if (svgCacheRef.current.size > MAX_SVG_CACHE_SIZE) {
+            const oldestKey = svgCacheRef.current.keys().next().value;
+            if (oldestKey) {
+              svgCacheRef.current.delete(oldestKey);
+            }
+          }
+        }
+        return svgData;
+      } catch (err) {
+        const error = err as Error;
+        setError(error);
+        throw error;
+      }
+    },
+    [],
+  );
+
+  /**
+   * 获取指定版本的 SVG 大字段并与版本对象合并
+   */
+  const loadVersionSVGFields = useCallback(
+    async (version: XMLVersion): Promise<XMLVersion> => {
+      if (version.preview_svg || version.pages_svg) return version;
+      const svgData = await getXMLVersionSVGData(version.id);
+      if (!svgData) return version;
+      return { ...version, ...svgData } as XMLVersion;
+    },
+    [getXMLVersionSVGData],
   );
 
   /**
@@ -564,6 +615,8 @@ export function useStorageXMLVersions() {
     getCurrentXML,
     getAllXMLVersions,
     getXMLVersion,
+    getXMLVersionSVGData,
+    loadVersionSVGFields,
     createHistoricalVersion,
     rollbackToVersion,
     getRecommendedVersion,

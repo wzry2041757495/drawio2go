@@ -6,6 +6,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -252,8 +253,31 @@ export class IndexedDBStorage implements StorageAdapter {
       "project_uuid",
       projectUuid,
     );
-    // 按创建时间倒序
-    return versions.sort((a, b) => b.created_at - a.created_at);
+    // 按创建时间倒序，移除大字段
+    return versions
+      .map((version) => {
+        const {
+          preview_svg: _ignoredPreview,
+          pages_svg: _ignoredPages,
+          ...rest
+        } = version as XMLVersion;
+        return rest as XMLVersion;
+      })
+      .sort((a, b) => b.created_at - a.created_at);
+  }
+
+  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+    const db = await this.ensureDB();
+    const version = await db.get("xml_versions", id);
+    if (!version) {
+      return null;
+    }
+
+    return {
+      id: version.id,
+      preview_svg: version.preview_svg ?? null,
+      pages_svg: version.pages_svg ?? null,
+    };
   }
 
   async updateXMLVersion(

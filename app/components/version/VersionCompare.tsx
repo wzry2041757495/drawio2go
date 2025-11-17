@@ -34,6 +34,7 @@ import {
   generateSmartDiffSvg,
   type SmartDiffResult,
 } from "@/app/lib/svg-smart-diff";
+import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 
 interface VersionCompareProps {
   versionA: XMLVersion;
@@ -120,6 +121,7 @@ export function VersionCompare({
     offsetX: number;
     offsetY: number;
   } | null>(null);
+  const { loadVersionSVGFields } = useStorageXMLVersions();
 
   React.useEffect(() => {
     setIsPortalReady(true);
@@ -170,15 +172,27 @@ export function VersionCompare({
       try {
         const loadPages = async (
           version: XMLVersion,
-        ): Promise<PageRenderState[]> => {
-          if (!version.pages_svg) return [];
+        ): Promise<{ pages: PageRenderState[]; hasPagesSvg: boolean }> => {
+          let working = version;
+          let hasPagesSvg = Boolean(working.pages_svg);
+          if (!hasPagesSvg) {
+            working = await loadVersionSVGFields(version);
+            hasPagesSvg = Boolean(working.pages_svg);
+          }
+
+          if (!working.pages_svg) {
+            return { pages: [], hasPagesSvg: false };
+          }
+
           const blob = createBlobFromSource(
-            version.pages_svg as BinarySource,
+            working.pages_svg as BinarySource,
             "application/json",
           );
-          if (!blob) return [];
+          if (!blob) {
+            return { pages: [], hasPagesSvg };
+          }
           const parsed = await deserializeSVGsFromBlob(blob);
-          return parsed
+          const pages = parsed
             .map((item, idx) => ({
               id: item.id ?? `page-${idx + 1}`,
               name:
@@ -189,12 +203,15 @@ export function VersionCompare({
               svg: item.svg,
             }))
             .sort((a, b) => a.index - b.index);
+          return { pages, hasPagesSvg };
         };
 
-        const [pagesA, pagesB] = await Promise.all([
+        const [resultA, resultB] = await Promise.all([
           loadPages(currentVersionA),
           loadPages(currentVersionB),
         ]);
+        const pagesA = resultA.pages;
+        const pagesB = resultB.pages;
 
         if (cancelled) return;
 
@@ -221,10 +238,10 @@ export function VersionCompare({
         });
 
         const warnings: string[] = [];
-        if (!currentVersionA.pages_svg) {
+        if (!resultA.hasPagesSvg) {
           warnings.push("版本 A 缺少多页 SVG 数据");
         }
-        if (!currentVersionB.pages_svg) {
+        if (!resultB.hasPagesSvg) {
           warnings.push("版本 B 缺少多页 SVG 数据");
         }
         if (pagesA.length !== pagesB.length) {
@@ -267,7 +284,12 @@ export function VersionCompare({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, currentVersionA, currentVersionB]);
+  }, [
+    isOpen,
+    currentVersionA,
+    currentVersionB,
+    loadVersionSVGFields,
+  ]);
 
   const currentName = React.useMemo(() => {
     if (!currentPair) return "-";

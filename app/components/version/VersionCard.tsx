@@ -82,27 +82,59 @@ export function VersionCard({
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerInitialPage, setViewerInitialPage] = React.useState(0);
   const pageObjectUrlsRef = React.useRef<string[]>([]);
-  const { getXMLVersion } = useStorageXMLVersions();
+  const { getXMLVersion, loadVersionSVGFields } = useStorageXMLVersions();
+  const [resolvedVersion, setResolvedVersion] =
+    React.useState<XMLVersion>(version);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setResolvedVersion(version);
+
+    const needsPreview = !version.preview_svg;
+    const needsPages = (version.page_count ?? 0) > 1 && !version.pages_svg;
+    if (!needsPreview && !needsPages) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const enriched = await loadVersionSVGFields(version);
+        if (!cancelled) {
+          setResolvedVersion(enriched);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("加载版本 SVG 数据失败", error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [version, loadVersionSVGFields]);
   const effectiveExpanded = isWIP ? false : isExpanded;
 
   const versionLabel = isWIP ? "WIP" : `v${version.semantic_version}`;
   const diffLabel = isWIP
     ? "当前画布内容"
-    : version.is_keyframe
+    : resolvedVersion.is_keyframe
       ? "关键帧快照"
-      : `Diff 链 +${version.diff_chain_depth}`;
-  const diffIcon = isWIP ? null : version.is_keyframe ? (
+      : `Diff 链 +${resolvedVersion.diff_chain_depth}`;
+  const diffIcon = isWIP ? null : resolvedVersion.is_keyframe ? (
     <Key className="w-3.5 h-3.5" />
   ) : (
     <GitBranch className="w-3.5 h-3.5" />
   );
 
   const pageNames = React.useMemo(
-    () => parsePageNames(version.page_names),
-    [version.page_names],
+    () => parsePageNames(resolvedVersion.page_names),
+    [resolvedVersion.page_names],
   );
 
-  const hasMultiplePages = (version.page_count ?? 0) > 1;
+  const hasMultiplePages = (resolvedVersion.page_count ?? 0) > 1;
 
   // WIP 卡片保持折叠状态
   React.useEffect(() => {
@@ -154,17 +186,20 @@ export function VersionCard({
   );
 
   // 格式化创建时间
-  const createdAtFull = new Date(version.created_at).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const createdAtFull = new Date(resolvedVersion.created_at).toLocaleString(
+    "zh-CN",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    },
+  );
 
   // 紧凑格式时间（折叠状态）
-  const createdAtCompact = new Date(version.created_at).toLocaleString(
+  const createdAtCompact = new Date(resolvedVersion.created_at).toLocaleString(
     "zh-CN",
     {
       month: "2-digit",
@@ -180,13 +215,13 @@ export function VersionCard({
     let objectUrl: string | null = null;
 
     (async () => {
-      if (!version.preview_svg) {
+      if (!resolvedVersion.preview_svg) {
         setPreviewUrl(null);
         return;
       }
 
       const compressedBlob = createBlobFromSource(
-        version.preview_svg as BinarySource,
+        resolvedVersion.preview_svg as BinarySource,
         "application/octet-stream",
       );
 
@@ -219,7 +254,7 @@ export function VersionCard({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [version.id, version.preview_svg]);
+  }, [resolvedVersion.id, resolvedVersion.preview_svg]);
 
   const cleanupPageUrls = React.useCallback(() => {
     pageObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -252,7 +287,7 @@ export function VersionCard({
       return;
     }
 
-    if (!version.pages_svg) {
+    if (!resolvedVersion.pages_svg) {
       setPagesError("暂无多页 SVG 数据");
       setPageThumbs([]);
       return;
@@ -266,7 +301,7 @@ export function VersionCard({
     (async () => {
       try {
         const blob = createBlobFromSource(
-          version.pages_svg as BinarySource,
+          resolvedVersion.pages_svg as BinarySource,
           "application/json",
         );
         if (!blob) {
@@ -314,7 +349,12 @@ export function VersionCard({
       cancelled = true;
       cleanupPageUrls();
     };
-  }, [cleanupPageUrls, showAllPages, version.id, version.pages_svg]);
+  }, [
+    cleanupPageUrls,
+    showAllPages,
+    resolvedVersion.id,
+    resolvedVersion.pages_svg,
+  ]);
 
   // 处理回滚按钮点击
   const handleRestore = () => {
@@ -710,7 +750,7 @@ export function VersionCard({
         </Disclosure>
       </Card.Content>
       <PageSVGViewer
-        version={version}
+        version={resolvedVersion}
         isOpen={viewerOpen}
         onClose={() => setViewerOpen(false)}
         defaultPageIndex={viewerInitialPage}

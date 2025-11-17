@@ -26,6 +26,7 @@ import {
 import type { XMLVersion } from "@/app/lib/storage/types";
 import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
 import { createBlobFromSource, type BinarySource } from "./version-utils";
+import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 
 interface PageSVGViewerProps {
   version: XMLVersion;
@@ -68,8 +69,10 @@ export function PageSVGViewer({
     width: number;
     height: number;
   } | null>(null);
+  const { loadVersionSVGFields } = useStorageXMLVersions();
+  const [resolvedVersion, setResolvedVersion] =
+    React.useState<XMLVersion>(version);
 
-  // 打开时加载 pages_svg
   React.useEffect(() => {
     if (!isOpen) {
       setPages(null);
@@ -79,21 +82,45 @@ export function PageSVGViewer({
       setOffset({ x: 0, y: 0 });
       setIsFullscreen(false);
       setIsPanning(false);
+      setResolvedVersion(version);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPages(null);
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+    setResolvedVersion(version);
 
     (async () => {
       try {
+        let targetVersion = version;
+
         if (!version.pages_svg) {
+          try {
+            const enriched = await loadVersionSVGFields(version);
+            if (cancelled) return;
+            targetVersion = enriched;
+          } catch (err) {
+            if (!cancelled) {
+              console.warn("加载 PageSVG 数据失败", err);
+              throw new Error("加载多页 SVG 数据失败");
+            }
+          }
+        }
+
+        if (!targetVersion.pages_svg) {
           throw new Error("该版本未包含多页 SVG 数据");
         }
 
+        if (cancelled) return;
+        setResolvedVersion(targetVersion);
+
         const blob = createBlobFromSource(
-          version.pages_svg as BinarySource,
+          targetVersion.pages_svg as BinarySource,
           "application/json",
         );
 
@@ -140,7 +167,7 @@ export function PageSVGViewer({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, version.id, version.pages_svg, defaultPageIndex]);
+  }, [isOpen, version, defaultPageIndex, loadVersionSVGFields]);
 
   const currentPage = React.useMemo(() => {
     if (!pages || pages.length === 0) return null;
@@ -256,10 +283,10 @@ export function PageSVGViewer({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `version-${version.semantic_version}-pages.json`;
+    a.download = `version-${resolvedVersion.semantic_version}-pages.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [pages, version.semantic_version]);
+  }, [pages, resolvedVersion.semantic_version]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isPannable) return;
