@@ -279,7 +279,7 @@
 
 /* 展开状态样式 */
 .version-card--expanded .version-card__content {
-  padding: var(--card-padding-compact);
+  padding: var(--card-padding-compact-expanded);
 }
 
 .version-card__content {

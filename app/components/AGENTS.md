@@ -103,7 +103,7 @@ interface VersionTimelineProps {
 
 #### version/VersionCompare.tsx - 版本对比弹层（里程碑6）
 
-**并排/叠加对比两个历史版本的多页 SVG** - 支持同步缩放、按键导航、布局切换。
+**并排/叠加对比两个历史版本的多页 SVG** - 支持同步缩放、按键导航、布局切换、智能差异高亮。
 
 ##### Props
 
@@ -111,6 +111,7 @@ interface VersionTimelineProps {
 interface VersionCompareProps {
   versionA: XMLVersion; // 旧版本
   versionB: XMLVersion; // 新版本
+  versions: XMLVersion[]; // 所有版本列表，用于快速切换对比版本
   isOpen: boolean;
   onClose: () => void;
 }
@@ -118,7 +119,18 @@ interface VersionCompareProps {
 
 ##### 特性
 
-- **三种布局**: 左右分栏（split）、上下堆叠（stack）、叠加对比（overlay，可调透明度）
+- **四种布局模式**:
+  - **split（左右分栏）**: 经典并排对比，适合整体对比
+  - **stack（上下堆叠）**: 垂直排列，适合细节对比
+  - **overlay（叠加对比）**: 可调透明度，适合位置对齐检查
+  - **smart（智能差异）**: 基于 `data-cell-id` 自动匹配元素并高亮差异
+- **智能差异模式**（2025-11-17 新增）:
+  - 自动匹配两个版本中的对应元素（基于 `data-cell-id`）
+  - 差异分类：匹配/变更/删除/新增元素
+  - 视觉归一化：自动缩放和居中对齐不同尺寸的 SVG
+  - 混合模式高亮：匹配元素去饱和、删除元素红色发光、新增元素绿色发光
+  - 统计信息：显示匹配数/变更数/删除数/新增数/覆盖率
+- **版本快速切换**: 顶部 Header 提供版本选择器，可快速切换对比的版本对
 - **同步控制**: 统一缩放/平移、键盘左右切页、Ctrl/Cmd+滚轮缩放、0 重置
 - **缺页提示**: 页面数量不一致或缺少 `pages_svg` 时显示占位和警告文案
 - **页面跳转**: Select 下拉快速跳页，Footer 展示当前页名称与计数
@@ -128,6 +140,7 @@ interface VersionCompareProps {
 
 - 支持 ESC 关闭、方向键切页、`+/-/0` 控制缩放
 - 叠加模式下可拖动透明度滑杆
+- Smart 模式自动加载并显示差异统计信息
 
 #### version/CreateVersionDialog.tsx - 创建版本对话框
 

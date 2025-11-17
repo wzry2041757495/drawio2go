@@ -114,6 +114,30 @@ export function VersionCard({
     [openViewer],
   );
 
+  const handleCardAreaClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+
+      if (target?.closest(".version-card__trigger")) {
+        return;
+      }
+
+      if (!isExpanded) {
+        setIsExpanded(true);
+        return;
+      }
+
+      const isInExpandedContent = Boolean(
+        target?.closest(".version-card__expanded-content"),
+      );
+
+      if (!isInExpandedContent) {
+        setIsExpanded(false);
+      }
+    },
+    [isExpanded],
+  );
+
   // 格式化创建时间
   const createdAtFull = new Date(version.created_at).toLocaleString("zh-CN", {
     year: "numeric",
@@ -292,6 +316,7 @@ export function VersionCard({
     <Card.Root
       className={`version-card${isLatest ? " version-card--latest" : ""}${isExpanded ? " version-card--expanded" : " version-card--collapsed"}${compareMode ? " version-card--compare" : ""}${selected ? " version-card--selected" : ""}`}
       variant="secondary"
+      onClick={handleCardAreaClick}
     >
       <Card.Content className="version-card__content">
         <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
@@ -351,8 +376,8 @@ export function VersionCard({
                   ) : (
                     <TooltipRoot>
                       <span className="diff-badge">
-                        <GitBranch className="w-3 h-3" />
-                        +{version.diff_chain_depth}
+                        <GitBranch className="w-3 h-3" />+
+                        {version.diff_chain_depth}
                       </span>
                       <TooltipContent>
                         差异链深度 +{version.diff_chain_depth}
