@@ -69,7 +69,17 @@
 }
 
 .tool-call-status-icon {
-  font-size: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.dark .tool-call-status-icon {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .tool-call-chevron {

@@ -96,7 +96,7 @@
   font-size: var(--font-size-compact-sm);
   color: var(--text-secondary);
   min-height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   background: transparent;
   padding: 0.35rem 0.5rem;
@@ -109,6 +109,7 @@
   border-color: var(--border-primary);
   background: var(--bg-primary);
   font-weight: 600;
+  border-radius: var(--radius-lg);
 }
 
 .dark .sidebar-tab-item[data-selected="true"] {
@@ -118,11 +119,21 @@
 .sidebar-panel {
   height: calc(100% - var(--sidebar-tabs-height));
   overflow: hidden;
+  margin: 0; /* 去除顶部残余边距，内容与 Tab 紧贴 */
+  padding: 0; /* 移除子分页外围留白，内容贴边呈现 */
 }
 
 .sidebar-panel > * {
   height: 100%;
   display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-panel [data-slot="panel"],
+.sidebar-panel [role="tabpanel"] {
+  margin: 0;
+  padding: 0;
 }
 
 /* 侧栏内容区域 */
@@ -191,12 +202,15 @@
 /* 新版设置界面 - 左右分栏布局 */
 .settings-sidebar-new {
   padding: 0;
+  gap: 0;
 }
 
 .settings-layout {
   display: flex;
   height: 100%;
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 左侧图标导航栏 */
@@ -265,9 +279,51 @@
   flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
+  padding-bottom: calc(var(--spacing-xl) + var(--spacing-sm));
 }
 
 /* 设置面板 */
 .settings-panel {
   padding: 1rem;
+}
+
+.settings-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-light);
+  background: var(--surface, #ffffff);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  gap: var(--spacing-md);
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 -4px 16px color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.dark .settings-action-bar {
+  background: var(--surface, #101418);
+  box-shadow: 0 -4px 16px color-mix(in oklch, var(--accent) 16%, transparent);
+}
+
+.settings-action-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.875rem;
+  color: var(--foreground-secondary);
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--warning);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--warning) 25%, transparent);
+}
+
+.settings-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }

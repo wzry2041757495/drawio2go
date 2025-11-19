@@ -110,6 +110,20 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     const previousXmlRef = useRef<string | undefined>(initialXml);
     const isFirstLoadRef = useRef(true);
 
+    // 检测初始主题（用于设置 DrawIO URL 参数）
+    // 优先读取 localStorage 中的用户偏好，回退到系统主题
+    const [initialTheme] = useState<"light" | "dark">(() => {
+      if (typeof window === "undefined") return "light";
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark" || savedTheme === "light") {
+        return savedTheme;
+      }
+      // 回退到系统主题
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    });
+
     // 新增：export 和 merge 相关的 ref
     const exportedXmlRef = useRef<string | undefined>(undefined); // 存储 export 获取的 XML
     const mergeTimeoutRef = useRef<NodeJS.Timeout | null>(null); // merge 超时定时器
@@ -162,8 +176,10 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       pendingLoadQueueRef.current = [];
     };
 
-    // 构建 DrawIO URL
-    const drawioUrl = `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=1&noSaveBtn=1&noExitBtn=1`;
+    // 构建 DrawIO URL（包含主题参数）
+    // dark=1 表示深色模式，dark=0 表示浅色模式
+    // 运行时切换主题时，DrawIO 会通过 prefers-color-scheme 自动跟随，无需重载 iframe
+    const drawioUrl = `https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=1&noSaveBtn=1&noExitBtn=1&dark=${initialTheme === "dark" ? "1" : "0"}`;
 
     // 已发送等待响应的 load 回调队列（与 pendingLoadQueueRef 分开管理）
     const sentLoadResolversRef = useRef<Array<() => void>>([]);

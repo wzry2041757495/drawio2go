@@ -51,7 +51,6 @@ app/
 │   ├── chat/                     # 聊天组件模块化架构（12个子组件）
 │   ├── settings/                 # 设置相关子组件
 │   └── version/                  # 版本管理子组件
-│       ├── WIPIndicator.tsx      # WIP 工作区指示器
 │       ├── VersionCard.tsx       # 版本卡片（折叠式）
 │       ├── VersionTimeline.tsx   # 版本时间线
 │       ├── CreateVersionDialog.tsx # 创建版本对话框
@@ -231,6 +230,7 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 - 存储扩展：`page_count`、`page_names`、`preview_svg`、`pages_svg` 字段
 - 全屏查看器：懒加载、键盘快捷键、滚轮缩放、拖拽平移
+- 缩略图全屏查看：所有版本（单页/多页）的缩略图均可点击放大，悬停显示放大图标
 - 可访问性：`role="button"`、键盘 Enter/Space 支持
 
 **版本对比可视化**
@@ -247,6 +247,12 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 - 版本动态切换：侧栏直接切换到历史版本编辑
 - SVG 导出增强：自定义选项、多页面导出优化
+
+### 智能对比算法（2025-11-17）
+
+- `app/lib/svg-smart-diff.ts` 现会收集所有匹配/变更的 `data-cell-id` 元素，通过临时挂载到 DOM 后的 `getBBox()` 汇总真实包围盒。
+- 基于包围盒尺寸动态计算等比缩放因子（0.25x ~ 4x），以保持两侧差异视图在统一坐标系内尽量重叠。
+- 在统一的归一化画布上根据包围盒中心点求取平均目标中心，对两个版本分别添加平移补偿，将核心差异区域自动对齐。
 
 ### 界面交互优化（2025-11-13 ~ 2025-11-14）
 
@@ -275,5 +281,11 @@ pnpm format               # 使用 Prettier 格式化所有代码
 - 修复 iframe 加载阻塞问题（e33efb5 之后）
 - 新增 `pendingLoadQueue`：iframe 未 ready 时缓存请求，`init` 后自动回放
 - 状态对齐：`loadProjectXml` 返回已加载 XML，保证保存/回滚场景一致性
+
+### 统一存储层更新（2025-11-17）
+
+- **对话 API**：`getConversationsByXMLVersion` 全面下线，所有会话按 `project_uuid` 维度查询，前端 Hook 与 Electron IPC 均已同步。
+- **页面元数据校验**：新增 `app/lib/storage/page-metadata-validators.ts`，统一 `page_count`、`page_names` 解析规则与 SVG Blob（8MB）体积校验，IndexedDB/SQLite 复用同一逻辑。
+- **迁移体系**：IndexedDB 初始化通过 `storage/migrations/indexeddb/v1.ts` 执行幂等迁移，SQLite 主进程通过 `electron/storage/migrations/` 自动执行 v1 迁移并更新 `user_version`，禁止再删除/重建存储。
 
 _最后更新: 2025-11-17_

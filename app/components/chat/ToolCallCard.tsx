@@ -20,6 +20,7 @@ export default function ToolCallCard({
 }: ToolCallCardProps) {
   const title = getToolTitle(part.type);
   const meta = getToolStatusMeta(part.state);
+  const StatusIcon = meta.Icon;
 
   const showInput = Boolean(part.input);
   const showOutput = Boolean(part.output);
@@ -34,7 +35,7 @@ export default function ToolCallCard({
         <div className="tool-call-title">{title}</div>
         <div className="tool-call-status">
           <span className="tool-call-status-icon" aria-hidden>
-            {meta.icon}
+            <StatusIcon size={16} />
           </span>
           <span className="tool-call-status-label">{meta.label}</span>
           <svg

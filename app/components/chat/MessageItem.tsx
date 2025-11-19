@@ -57,7 +57,11 @@ export default function MessageItem({
           isUser ? "message-body--user" : "message-body--assistant"
         }`}
       >
-        <div className="message-content">
+        <div
+          className={`message-content ${
+            isUser ? "" : "message-content--assistant"
+          }`}
+        >
           <MessageContent
             message={message}
             status={status}

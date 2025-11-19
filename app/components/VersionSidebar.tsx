@@ -2,8 +2,10 @@
 
 import React from "react";
 import { Alert, Button, Skeleton } from "@heroui/react";
-import { WIPIndicator } from "./version/WIPIndicator";
-import { VersionTimeline } from "./version/VersionTimeline";
+import {
+  VersionTimeline,
+  type VersionTimelineViewMode,
+} from "./version/VersionTimeline";
 import { CreateVersionDialog } from "./version/CreateVersionDialog";
 import { VersionCompare } from "./version/VersionCompare";
 import { useVersionCompare } from "@/app/hooks/useVersionCompare";
@@ -41,6 +43,8 @@ export function VersionSidebar({
   const feedbackTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const [timelineViewMode, setTimelineViewMode] =
+    React.useState<VersionTimelineViewMode>({ type: "main" });
 
   const { getAllXMLVersions } = useStorageXMLVersions();
   const compare = useVersionCompare();
@@ -80,6 +84,29 @@ export function VersionSidebar({
   }, [selectedVersions]);
 
   const canStartCompare = Boolean(comparePair);
+  const activeParentVersion =
+    timelineViewMode.type === "sub"
+      ? timelineViewMode.parentVersion
+      : undefined;
+
+  const handleTimelineViewModeChange = React.useCallback(
+    (mode: VersionTimelineViewMode) => {
+      setTimelineViewMode(mode);
+    },
+    [setTimelineViewMode],
+  );
+
+  const handleNavigateToSubVersions = React.useCallback(
+    (parentVersion: string) => {
+      setTimelineViewMode((prev) => {
+        if (prev.type === "sub" && prev.parentVersion === parentVersion) {
+          return prev;
+        }
+        return { type: "sub", parentVersion };
+      });
+    },
+    [setTimelineViewMode],
+  );
 
   // 加载版本列表
   const loadVersions = React.useCallback(async () => {
@@ -110,8 +137,11 @@ export function VersionSidebar({
     };
 
     window.addEventListener("version-updated", handleVersionUpdate);
-    return () =>
+    window.addEventListener("wip-updated", handleVersionUpdate);
+    return () => {
       window.removeEventListener("version-updated", handleVersionUpdate);
+      window.removeEventListener("wip-updated", handleVersionUpdate);
+    };
   }, [loadVersions]);
 
   React.useEffect(() => {
@@ -121,6 +151,10 @@ export function VersionSidebar({
       }
     };
   }, []);
+
+  React.useEffect(() => {
+    setTimelineViewMode({ type: "main" });
+  }, [projectUuid, setTimelineViewMode]);
 
   // 版本创建后重新加载列表
   const handleVersionCreated = React.useCallback(
@@ -257,6 +291,9 @@ export function VersionSidebar({
               onVersionRestore={onVersionRestore}
               onVersionCreated={handleVersionCreated}
               isLoading
+              viewMode={timelineViewMode}
+              onViewModeChange={handleTimelineViewModeChange}
+              onNavigateToSubVersions={handleNavigateToSubVersions}
             />
           </div>
         ) : (
@@ -302,7 +339,6 @@ export function VersionSidebar({
                 </div>
               </div>
             )}
-            <WIPIndicator projectUuid={projectUuid} versions={versions} />
             <VersionTimeline
               projectUuid={projectUuid}
               versions={versions}
@@ -312,6 +348,9 @@ export function VersionSidebar({
               selectedIds={selectedIds}
               onToggleSelect={toggleSelection}
               onQuickCompare={openDialogWithPair}
+              viewMode={timelineViewMode}
+              onViewModeChange={handleTimelineViewModeChange}
+              onNavigateToSubVersions={handleNavigateToSubVersions}
             />
           </>
         )}
@@ -324,6 +363,7 @@ export function VersionSidebar({
         onClose={() => setShowCreateDialog(false)}
         onVersionCreated={handleVersionCreated}
         editorRef={editorRef}
+        parentVersion={activeParentVersion}
       />
 
       {isDialogOpen && activePair && (

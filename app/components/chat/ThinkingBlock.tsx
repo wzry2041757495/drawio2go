@@ -1,5 +1,7 @@
 "use client";
 
+import { Loader2, Sparkles } from "lucide-react";
+
 interface ThinkingBlockProps {
   reasoning: string;
   isStreaming: boolean;
@@ -13,6 +15,11 @@ export default function ThinkingBlock({
   expanded,
   onToggle,
 }: ThinkingBlockProps) {
+  const Icon = isStreaming ? Loader2 : Sparkles;
+  const iconClassName = `thinking-block-icon ${
+    isStreaming ? "thinking-block-icon--spinning" : ""
+  }`.trim();
+
   return (
     <div
       className={`thinking-block ${isStreaming ? "thinking-block--active" : "thinking-block--completed"} ${expanded ? "thinking-block--expanded" : ""}`.trim()}
@@ -23,8 +30,8 @@ export default function ThinkingBlock({
         onClick={onToggle}
       >
         <div className="thinking-block-title">
-          <span className="thinking-block-icon">
-            {isStreaming ? "🤔" : "💡"}
+          <span className={iconClassName} aria-hidden>
+            <Icon size={16} />
           </span>
           <span>{isStreaming ? "思考中..." : "思考过程"}</span>
         </div>

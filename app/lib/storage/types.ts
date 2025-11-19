@@ -64,10 +64,19 @@ export interface XMLVersion {
   metadata: Record<string, unknown> | null;
   page_count: number;
   page_names?: string | null; // JSON 字符串，序列化的页面名称数组
-  preview_svg?: Blob | Buffer; // 第一页 SVG 预览
-  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化
+  preview_svg?: Blob | Buffer; // 第一页 SVG 预览（deflate-raw 压缩二进制）
+  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化（deflate-raw 压缩）
   preview_image?: Blob | Buffer; // 预览图（Web: Blob, Electron: Buffer）
   created_at: number;
+}
+
+/**
+ * XML 版本的 SVG 数据（大字段按需加载）
+ */
+export interface XMLVersionSVGData {
+  id: string;
+  preview_svg?: Blob | Buffer | null;
+  pages_svg?: Blob | Buffer | null;
 }
 
 /**

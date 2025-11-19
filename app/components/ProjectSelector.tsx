@@ -115,8 +115,8 @@ export default function ProjectSelector({
                   key={project.uuid}
                   className={`cursor-pointer transition-all ${
                     isActive
-                      ? "border-2 border-[#3388BB] bg-[#3388BB]/5"
-                      : "border border-gray-200 hover:border-[#3388BB]/50 hover:shadow-md"
+                      ? "border-2 border-accent bg-accent/5"
+                      : "border border-gray-200 hover:border-accent/50 hover:shadow-md"
                   }`}
                   onClick={() => handleProjectSelect(project.uuid)}
                 >
@@ -124,11 +124,11 @@ export default function ProjectSelector({
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-lg font-semibold text-[#3388BB]">
+                          <h3 className="text-lg font-semibold text-accent">
                             {project.name}
                           </h3>
                           {isActive && (
-                            <Check size={20} className="text-[#3388BB]" />
+                            <Check size={20} className="text-accent" />
                           )}
                         </div>
                         {project.description && (
@@ -152,10 +152,8 @@ export default function ProjectSelector({
 
         {/* 新建工程表单 */}
         {showNewProjectForm && (
-          <div className="mt-4 p-4 border-2 border-[#3388BB]/30 rounded-lg bg-[#3388BB]/5">
-            <h3 className="text-md font-semibold text-[#3388BB] mb-3">
-              新建工程
-            </h3>
+          <div className="mt-4 p-4 border-2 border-accent/30 rounded-lg bg-accent/5">
+            <h3 className="text-md font-semibold text-accent mb-3">新建工程</h3>
             <div className="flex flex-col gap-4">
               <TextField className="w-full" isRequired>
                 <Label>工程名称</Label>

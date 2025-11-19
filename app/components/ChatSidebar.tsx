@@ -8,6 +8,7 @@ import {
   useCallback,
   type FormEvent,
 } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useChat } from "@ai-sdk/react";
 import {
   useStorageSettings,
@@ -43,6 +44,7 @@ interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   currentProjectId?: string;
+  isSocketConnected?: boolean;
 }
 
 // ========== 数据转换工具函数 ==========
@@ -155,7 +157,10 @@ function generateTitle(messages: ChatUIMessage[]): string {
 
 // ========== 主组件 ==========
 
-export default function ChatSidebar({ currentProjectId }: ChatSidebarProps) {
+export default function ChatSidebar({
+  currentProjectId,
+  isSocketConnected = true,
+}: ChatSidebarProps) {
   const [input, setInput] = useState("");
   const [expandedToolCalls, setExpandedToolCalls] = useState<
     Record<string, boolean>
@@ -743,6 +748,7 @@ export default function ChatSidebar({ currentProjectId }: ChatSidebarProps) {
     conversationsError?.message ||
     chatError?.message ||
     null;
+  const showSocketWarning = !isSocketConnected;
 
   return (
     <div className="chat-sidebar-content">
@@ -776,6 +782,18 @@ export default function ChatSidebar({ currentProjectId }: ChatSidebarProps) {
           activeSessionId={activeConversationId}
           onSessionSelect={handleSessionSelect}
         />
+
+        {showSocketWarning && (
+          <div className="chat-inline-warning" role="status">
+            <span className="chat-inline-warning-icon" aria-hidden>
+              <AlertTriangle size={16} />
+            </span>
+            <div className="chat-inline-warning-text">
+              <p>Socket.IO 未连接</p>
+              <p>AI 工具功能暂时不可用</p>
+            </div>
+          </div>
+        )}
 
         {/* 消息列表 */}
         <MessageList

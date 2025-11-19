@@ -37,6 +37,7 @@ export type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,

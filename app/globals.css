@@ -27,7 +27,6 @@
 @import "./styles/components/sessions.css" layer(components);
 @import "./styles/components/version-animations.css" layer(components);
 @import "./styles/components/version-sidebar.css" layer(components);
-@import "./styles/components/version-wip.css" layer(components);
 @import "./styles/components/version-timeline.css" layer(components);
 @import "./styles/components/version-dialog.css" layer(components);
 

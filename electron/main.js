@@ -480,6 +480,10 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle("storage:getXMLVersionSVGData", async (event, id) => {
+  return storageManager.getXMLVersionSVGData(id);
+});
+
 ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
   if (updates?.preview_image) {
     updates.preview_image = Buffer.from(updates.preview_image);
@@ -518,13 +522,6 @@ ipcMain.handle(
   "storage:getConversationsByProject",
   async (event, projectUuid) => {
     return storageManager.getConversationsByProject(projectUuid);
-  },
-);
-
-ipcMain.handle(
-  "storage:getConversationsByXMLVersion",
-  async (event, xmlVersionId) => {
-    return storageManager.getConversationsByXMLVersion(xmlVersionId);
   },
 );
 

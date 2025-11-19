@@ -2,11 +2,10 @@ const Database = require("better-sqlite3");
 const { app } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { runSQLiteMigrations } = require("./migrations");
 
 const SQLITE_DB_FILE = "drawio2go.db";
 const DEFAULT_PROJECT_UUID = "default";
-const _DEFAULT_XML_VERSION = "1.0.0"; // 预留常量，暂未使用
-const TARGET_DB_VERSION = 1;
 
 class SQLiteManager {
   constructor() {
@@ -31,11 +30,8 @@ class SQLiteManager {
       // 启用外键约束
       this.db.pragma("foreign_keys = ON");
 
-      // 创建表结构
-      this._createTables();
-
-      // 设置数据库版本号
-      this.db.pragma(`user_version = ${TARGET_DB_VERSION}`);
+      // 创建/迁移表结构
+      runSQLiteMigrations(this.db);
 
       // 创建默认工程
       this._ensureDefaultProject();
@@ -45,110 +41,6 @@ class SQLiteManager {
       console.error("Failed to initialize SQLite:", error);
       throw error;
     }
-  }
-
-  /**
-   * 创建所有表
-   */
-  _createTables() {
-    // Settings 表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `);
-
-    // Projects 表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS projects (
-        uuid TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        active_xml_version_id TEXT,
-        active_conversation_id TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `);
-
-    // XMLVersions 表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS xml_versions (
-        id TEXT PRIMARY KEY,
-        project_uuid TEXT NOT NULL,
-        semantic_version TEXT NOT NULL,
-        name TEXT,
-        description TEXT,
-        source_version_id TEXT NOT NULL,
-        is_keyframe INTEGER NOT NULL DEFAULT 1,
-        diff_chain_depth INTEGER NOT NULL DEFAULT 0,
-        xml_content TEXT NOT NULL,
-        metadata TEXT,
-        page_count INTEGER NOT NULL DEFAULT 1,
-        page_names TEXT,
-        preview_svg BLOB,
-        pages_svg BLOB,
-        preview_image BLOB,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
-      )
-    `);
-
-    // 创建索引
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_xml_versions_project
-      ON xml_versions(project_uuid)
-    `);
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_xml_versions_source
-      ON xml_versions(source_version_id)
-    `);
-
-    // Conversations 表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
-        project_uuid TEXT NOT NULL,
-        title TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
-      )
-    `);
-
-    // 创建索引
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_conversations_project
-      ON conversations(project_uuid)
-    `);
-
-    // Messages 表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        tool_invocations TEXT,
-        model_name TEXT,
-        xml_version_id TEXT,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-        FOREIGN KEY (xml_version_id) REFERENCES xml_versions(id) ON DELETE SET NULL
-      )
-    `);
-
-    // 创建索引
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_messages_conversation
-      ON messages(conversation_id)
-    `);
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_messages_xml_version
-      ON messages(xml_version_id)
-    `);
   }
 
   /**
@@ -318,9 +210,38 @@ class SQLiteManager {
   getXMLVersionsByProject(projectUuid) {
     return this.db
       .prepare(
-        "SELECT * FROM xml_versions WHERE project_uuid = ? ORDER BY created_at DESC",
+        `
+        SELECT
+          id,
+          project_uuid,
+          semantic_version,
+          name,
+          description,
+          source_version_id,
+          is_keyframe,
+          diff_chain_depth,
+          xml_content,
+          metadata,
+          page_count,
+          page_names,
+          preview_image,
+          created_at
+        FROM xml_versions
+        WHERE project_uuid = ?
+        ORDER BY created_at DESC
+      `,
       )
       .all(projectUuid);
+  }
+
+  getXMLVersionSVGData(id) {
+    return (
+      this.db
+        .prepare(
+          `SELECT id, preview_svg, pages_svg FROM xml_versions WHERE id = ?`,
+        )
+        .get(id) || null
+    );
   }
 
   updateXMLVersion(id, updates = {}) {

@@ -6,6 +6,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -18,42 +19,12 @@ import {
   DB_VERSION,
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
-  MAX_SVG_BLOB_BYTES,
 } from "./constants";
-import { buildPageMetadataFromXml } from "./page-metadata";
-
-function assertValidPageCount(value: number | undefined): asserts value {
-  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
-    throw new Error("page_count 必须是 >= 1 的数字");
-  }
-}
-
-function normalizePageNames(names: string | undefined | null) {
-  if (names == null) return undefined;
-  try {
-    const parsed = JSON.parse(names);
-    if (!Array.isArray(parsed)) return undefined;
-    return parsed.map((n, idx) => String(n ?? `Page ${idx + 1}`));
-  } catch {
-    return undefined;
-  }
-}
-
-function assertValidPageNames(value: string | undefined | null) {
-  if (value == null) return;
-  const parsed = normalizePageNames(value);
-  if (!parsed) {
-    throw new Error("page_names 必须是 JSON 数组字符串");
-  }
-}
-
-function assertValidSvgBlob(blob: unknown) {
-  if (!(blob instanceof Blob)) return;
-  const size = blob.size;
-  if (size > MAX_SVG_BLOB_BYTES) {
-    throw new Error("SVG 数据过大，已超过 8MB 限制");
-  }
-}
+import {
+  assertValidSvgBinary,
+  resolvePageMetadataFromXml,
+} from "./page-metadata-validators";
+import { runIndexedDbMigrations } from "./migrations/indexeddb";
 
 /**
  * IndexedDB 存储实现（Web 环境）
@@ -79,57 +50,11 @@ export class IndexedDBStorage implements StorageAdapter {
   private async _doInitialize(): Promise<void> {
     try {
       this.db = await openDB(DB_NAME, DB_VERSION, {
-        upgrade: (db, oldVersion, newVersion) => {
+        upgrade: (db, oldVersion, newVersion, transaction) => {
           console.log(
             `Upgrading IndexedDB from ${oldVersion} to ${newVersion}`,
           );
-
-          // Settings store
-          if (!db.objectStoreNames.contains("settings")) {
-            db.createObjectStore("settings", { keyPath: "key" });
-          }
-
-          // Projects store
-          if (!db.objectStoreNames.contains("projects")) {
-            db.createObjectStore("projects", { keyPath: "uuid" });
-          }
-
-          // XMLVersions store
-          if (db.objectStoreNames.contains("xml_versions")) {
-            db.deleteObjectStore("xml_versions");
-          }
-          const xmlStore = db.createObjectStore("xml_versions", {
-            keyPath: "id",
-          });
-          xmlStore.createIndex("project_uuid", "project_uuid", {
-            unique: false,
-          });
-          xmlStore.createIndex("source_version_id", "source_version_id", {
-            unique: false,
-          });
-
-          // Conversations store
-          if (!db.objectStoreNames.contains("conversations")) {
-            const convStore = db.createObjectStore("conversations", {
-              keyPath: "id",
-            });
-            convStore.createIndex("project_uuid", "project_uuid", {
-              unique: false,
-            });
-          }
-
-          // Messages store
-          if (!db.objectStoreNames.contains("messages")) {
-            const msgStore = db.createObjectStore("messages", {
-              keyPath: "id",
-            });
-            msgStore.createIndex("conversation_id", "conversation_id", {
-              unique: false,
-            });
-            msgStore.createIndex("xml_version_id", "xml_version_id", {
-              unique: false,
-            });
-          }
+          runIndexedDbMigrations(db, oldVersion, newVersion, transaction);
         },
       });
 
@@ -301,20 +226,19 @@ export class IndexedDBStorage implements StorageAdapter {
     const db = await this.ensureDB();
     const now = Date.now();
 
-    const meta = buildPageMetadataFromXml(version.xml_content);
-    const pageCount = version.page_count ?? meta.pageCount;
-    const pageNames =
-      version.page_names ?? JSON.stringify(meta.pageNames.slice(0, pageCount));
+    const { pageCount, pageNamesJson } = resolvePageMetadataFromXml({
+      xmlContent: version.xml_content,
+      userPageCount: version.page_count,
+      userPageNames: version.page_names,
+    });
 
-    assertValidPageCount(pageCount);
-    assertValidPageNames(pageNames);
-    assertValidSvgBlob(version.preview_svg as Blob);
-    assertValidSvgBlob(version.pages_svg as Blob);
+    assertValidSvgBinary(version.preview_svg as Blob, "preview_svg");
+    assertValidSvgBinary(version.pages_svg as Blob, "pages_svg");
 
     const fullVersion: XMLVersion = {
       ...version,
       page_count: pageCount,
-      page_names: pageNames,
+      page_names: pageNamesJson,
       created_at: now,
     };
 
@@ -329,8 +253,31 @@ export class IndexedDBStorage implements StorageAdapter {
       "project_uuid",
       projectUuid,
     );
-    // 按创建时间倒序
-    return versions.sort((a, b) => b.created_at - a.created_at);
+    // 按创建时间倒序，移除大字段
+    return versions
+      .map((version) => {
+        const {
+          preview_svg: _ignoredPreview,
+          pages_svg: _ignoredPages,
+          ...rest
+        } = version as XMLVersion;
+        return rest as XMLVersion;
+      })
+      .sort((a, b) => b.created_at - a.created_at);
+  }
+
+  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+    const db = await this.ensureDB();
+    const version = await db.get("xml_versions", id);
+    if (!version) {
+      return null;
+    }
+
+    return {
+      id: version.id,
+      preview_svg: version.preview_svg ?? null,
+      pages_svg: version.pages_svg ?? null,
+    };
   }
 
   async updateXMLVersion(
@@ -348,22 +295,20 @@ export class IndexedDBStorage implements StorageAdapter {
       updates.semantic_version ?? existing.semantic_version;
 
     const nextXml = updates.xml_content ?? (existing as XMLVersion).xml_content;
-    const meta = buildPageMetadataFromXml(nextXml);
-    const mergedPageCount = updates.page_count ?? meta.pageCount;
-    const mergedPageNames =
-      updates.page_names ??
-      JSON.stringify(meta.pageNames.slice(0, mergedPageCount));
+    const { pageCount, pageNamesJson } = resolvePageMetadataFromXml({
+      xmlContent: nextXml,
+      userPageCount: updates.page_count,
+      userPageNames: updates.page_names,
+    });
 
-    assertValidPageCount(mergedPageCount);
-    assertValidPageNames(mergedPageNames);
-    assertValidSvgBlob(updates.preview_svg as Blob);
-    assertValidSvgBlob(updates.pages_svg as Blob);
+    assertValidSvgBinary(updates.preview_svg as Blob, "preview_svg");
+    assertValidSvgBinary(updates.pages_svg as Blob, "pages_svg");
 
     const updated: XMLVersion = {
       ...existing,
       ...updates,
-      page_count: mergedPageCount,
-      page_names: mergedPageNames,
+      page_count: pageCount,
+      page_names: pageNamesJson,
       id: existing.id, // 确保 id 不被覆盖
       created_at:
         updates.created_at ??

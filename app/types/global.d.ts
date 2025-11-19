@@ -11,6 +11,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -105,6 +106,7 @@ declare global {
       getXMLVersion: (id: string) => Promise<XMLVersion | null>;
       createXMLVersion: (version: CreateXMLVersionInput) => Promise<XMLVersion>;
       getXMLVersionsByProject: (projectUuid: string) => Promise<XMLVersion[]>;
+      getXMLVersionSVGData: (id: string) => Promise<XMLVersionSVGData | null>;
       updateXMLVersion: (
         id: string,
         updates: Partial<Omit<XMLVersion, "id">>,
@@ -123,9 +125,6 @@ declare global {
       deleteConversation: (id: string) => Promise<void>;
       getConversationsByProject: (
         projectUuid: string,
-      ) => Promise<Conversation[]>;
-      getConversationsByXMLVersion: (
-        xmlVersionId: string,
       ) => Promise<Conversation[]>;
 
       // Messages

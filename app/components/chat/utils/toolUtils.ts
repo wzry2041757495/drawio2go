@@ -6,6 +6,7 @@ import {
   TOOL_LABELS,
   TOOL_STATUS_META,
   type ToolMessagePart,
+  type ToolStatusMeta,
 } from "../constants/toolConstants";
 
 /**
@@ -44,14 +45,8 @@ export const getToolSummary = (part: ToolMessagePart): string => {
 /**
  * 获取工具调用状态元数据
  */
-export const getToolStatusMeta = (state: string) => {
-  return (
-    TOOL_STATUS_META[state] ?? {
-      label: "未知状态",
-      icon: "ℹ️",
-      tone: "info" as const,
-    }
-  );
+export const getToolStatusMeta = (state: string): ToolStatusMeta => {
+  return TOOL_STATUS_META[state] ?? TOOL_STATUS_META.default;
 };
 
 /**

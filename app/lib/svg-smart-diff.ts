@@ -152,6 +152,33 @@ function normalizedHeight(metrics: SvgMetrics | null): number {
   return metrics.height * scale;
 }
 
+function computeArea(metrics: SvgMetrics | null): number {
+  if (!metrics) return -1;
+  return (metrics.width || 0) * (metrics.height || 0);
+}
+
+function pickBaseVersion(
+  metricsA: SvgMetrics | null,
+  metricsB: SvgMetrics | null,
+  cellsA: number,
+  cellsB: number,
+): "A" | "B" {
+  // 1) 优先使用画布面积更大的版本作为底层
+  const areaA = computeArea(metricsA);
+  const areaB = computeArea(metricsB);
+  if (areaA !== areaB) {
+    return areaA > areaB ? "A" : "B";
+  }
+
+  // 2) 面积相同则选择元素数量更多的版本
+  if (cellsA !== cellsB) {
+    return cellsA > cellsB ? "A" : "B";
+  }
+
+  // 3) 完全持平时默认以版本 B（通常为更新版本）作为基准
+  return "B";
+}
+
 function buildTransform(
   metrics: SvgMetrics | null,
   finalHeight: number,
@@ -183,6 +210,12 @@ function wrapCells(cells: string[], transform: string, extraClass: string) {
   return `<g class="smart-diff__layer ${extraClass}"${transformAttr}>${cells.join(
     "",
   )}</g>`;
+}
+
+interface MatchEntry {
+  id: string;
+  markupA: string;
+  markupB: string;
 }
 
 export function generateSmartDiffSvg(
@@ -224,7 +257,7 @@ export function generateSmartDiffSvg(
   }
 
   const stats: SmartDiffStats = { ...DEFAULT_STATS };
-  const neutralEntries: string[] = [];
+  const matchEntries: MatchEntry[] = [];
   const sourceAEntries: string[] = [];
   const sourceBEntries: string[] = [];
 
@@ -242,9 +275,11 @@ export function generateSmartDiffSvg(
       const isIdentical = normalizeMarkup(markupA) === normalizeMarkup(markupB);
       if (isIdentical) {
         stats.matched += 1;
-        neutralEntries.push(
-          `<g class="smart-diff__cell smart-diff__cell--match" data-cell-id="${id}">${markupB}</g>`,
-        );
+        matchEntries.push({
+          id,
+          markupA,
+          markupB,
+        });
         return;
       }
 
@@ -303,6 +338,13 @@ export function generateSmartDiffSvg(
 
   const transformA = buildTransform(metricsA, finalHeight);
   const transformB = buildTransform(metricsB, finalHeight);
+  const baseSide = pickBaseVersion(
+    metricsA,
+    metricsB,
+    leftCells.size,
+    rightCells.size,
+  );
+  const baseTransform = baseSide === "A" ? transformA : transformB;
 
   const svgParts = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${NORMALIZED_WIDTH} ${finalHeight.toFixed(2)}" class="smart-diff__svg" role="img" aria-label="智能差异高亮">`,
@@ -349,8 +391,16 @@ export function generateSmartDiffSvg(
     `<rect class="smart-diff__bg" width="100%" height="100%" rx="32" />`,
   ];
 
+  const neutralEntries = matchEntries.map((entry) => {
+    const markup = baseSide === "A" ? entry.markupA : entry.markupB;
+    return `<g class="smart-diff__cell smart-diff__cell--match" data-cell-id="${entry.id}">${markup}</g>`;
+  });
   svgParts.push(
-    wrapCells(neutralEntries, transformB.transform, "smart-diff__layer--base"),
+    wrapCells(
+      neutralEntries,
+      baseTransform.transform,
+      "smart-diff__layer--base",
+    ),
   );
   svgParts.push(
     wrapCells(

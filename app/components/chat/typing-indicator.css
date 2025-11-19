@@ -1,6 +1,6 @@
 /**
  * AI打字机效果 - 脉冲缩放动画
- * 使用项目主题色 #3388BB
+ * 使用项目主题色系统变量
  */
 
 .typing-indicator {
@@ -13,7 +13,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #3388bb;
+  background-color: var(--accent);
   animation: pulse-scale 1.5s ease-in-out infinite;
   vertical-align: baseline;
 }
@@ -28,14 +28,6 @@
   50% {
     transform: scale(1.2);
     opacity: 1;
-  }
-}
-
-/* 深色模式优化 */
-@media (prefers-color-scheme: dark) {
-  .typing-dot {
-    /* 深色模式下稍微调亮颜色 */
-    background-color: #4a9fdb;
   }
 }
 

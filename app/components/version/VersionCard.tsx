@@ -23,6 +23,9 @@ import {
   Maximize2,
   CheckSquare,
   Square,
+  Activity,
+  ZoomIn,
+  Layers,
 } from "lucide-react";
 import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
@@ -34,10 +37,13 @@ import {
   parsePageNames,
   type BinarySource,
 } from "./version-utils";
+import { decompressBlob } from "@/app/lib/compression-utils";
+import { countSubVersions, isSubVersion } from "@/app/lib/version-utils";
 
 interface VersionCardProps {
   version: XMLVersion;
   isLatest?: boolean;
+  isWIP?: boolean;
   onRestore?: (versionId: string) => void;
   defaultExpanded?: boolean;
   compareMode?: boolean;
@@ -45,6 +51,8 @@ interface VersionCardProps {
   compareOrder?: number | null;
   onToggleSelect?: (versionId: string) => void;
   onQuickCompare?: () => void;
+  allVersions: XMLVersion[];
+  onNavigateToSubVersions?: (parentVersion: string) => void;
 }
 
 interface PageThumbnail {
@@ -60,6 +68,7 @@ interface PageThumbnail {
 export function VersionCard({
   version,
   isLatest,
+  isWIP = false,
   onRestore,
   defaultExpanded = false,
   compareMode = false,
@@ -67,9 +76,11 @@ export function VersionCard({
   compareOrder = null,
   onToggleSelect,
   onQuickCompare,
+  allVersions,
+  onNavigateToSubVersions,
 }: VersionCardProps) {
   const [isExporting, setIsExporting] = React.useState(false);
-  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded && !isWIP);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [showAllPages, setShowAllPages] = React.useState(false);
   const [pageThumbs, setPageThumbs] = React.useState<PageThumbnail[]>([]);
@@ -78,24 +89,78 @@ export function VersionCard({
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerInitialPage, setViewerInitialPage] = React.useState(0);
   const pageObjectUrlsRef = React.useRef<string[]>([]);
-  const { getXMLVersion } = useStorageXMLVersions();
+  const { getXMLVersion, loadVersionSVGFields } = useStorageXMLVersions();
+  const [resolvedVersion, setResolvedVersion] =
+    React.useState<XMLVersion>(version);
+  const isSubVersionEntry = React.useMemo(
+    () => isSubVersion(version.semantic_version),
+    [version.semantic_version],
+  );
+  const subVersionCount = React.useMemo(() => {
+    if (isSubVersionEntry) return 0;
+    return countSubVersions(allVersions, version.semantic_version);
+  }, [allVersions, isSubVersionEntry, version.semantic_version]);
+  const shouldShowSubVersionBadge =
+    !isWIP && !isSubVersionEntry && subVersionCount > 0;
+  const shouldShowSubVersionButton =
+    shouldShowSubVersionBadge && Boolean(onNavigateToSubVersions);
 
-  const versionLabel = `v${version.semantic_version}`;
-  const diffLabel = version.is_keyframe
-    ? "关键帧快照"
-    : `Diff 链 +${version.diff_chain_depth}`;
-  const diffIcon = version.is_keyframe ? (
+  React.useEffect(() => {
+    let cancelled = false;
+    setResolvedVersion(version);
+
+    const needsPreview = !version.preview_svg;
+    const needsPages = (version.page_count ?? 0) > 1 && !version.pages_svg;
+    if (!needsPreview && !needsPages) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const enriched = await loadVersionSVGFields(version);
+        if (!cancelled) {
+          setResolvedVersion(enriched);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("加载版本 SVG 数据失败", error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [version, loadVersionSVGFields]);
+  const effectiveExpanded = isWIP ? false : isExpanded;
+
+  const versionLabel = isWIP ? "WIP" : `v${version.semantic_version}`;
+  const diffLabel = isWIP
+    ? "当前画布内容"
+    : resolvedVersion.is_keyframe
+      ? "关键帧快照"
+      : `Diff 链 +${resolvedVersion.diff_chain_depth}`;
+  const diffIcon = isWIP ? null : resolvedVersion.is_keyframe ? (
     <Key className="w-3.5 h-3.5" />
   ) : (
     <GitBranch className="w-3.5 h-3.5" />
   );
 
   const pageNames = React.useMemo(
-    () => parsePageNames(version.page_names),
-    [version.page_names],
+    () => parsePageNames(resolvedVersion.page_names),
+    [resolvedVersion.page_names],
   );
 
-  const hasMultiplePages = (version.page_count ?? 0) > 1;
+  const hasMultiplePages = (resolvedVersion.page_count ?? 0) > 1;
+
+  // WIP 卡片保持折叠状态
+  React.useEffect(() => {
+    if (isWIP && isExpanded) {
+      setIsExpanded(false);
+    }
+  }, [isExpanded, isWIP]);
 
   const openViewer = React.useCallback((pageIndex: number) => {
     setViewerInitialPage(Math.max(0, pageIndex));
@@ -103,9 +168,8 @@ export function VersionCard({
   }, []);
 
   const handlePreviewActivate = React.useCallback(() => {
-    if (!hasMultiplePages) return;
     openViewer(0);
-  }, [hasMultiplePages, openViewer]);
+  }, [openViewer]);
 
   const handleThumbnailActivate = React.useCallback(
     (pageIndex: number) => {
@@ -116,6 +180,7 @@ export function VersionCard({
 
   const handleCardAreaClick = React.useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      if (isWIP) return;
       const target = event.target as HTMLElement | null;
 
       if (target?.closest(".version-card__trigger")) {
@@ -135,21 +200,24 @@ export function VersionCard({
         setIsExpanded(false);
       }
     },
-    [isExpanded],
+    [isExpanded, isWIP],
   );
 
   // 格式化创建时间
-  const createdAtFull = new Date(version.created_at).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const createdAtFull = new Date(resolvedVersion.created_at).toLocaleString(
+    "zh-CN",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    },
+  );
 
   // 紧凑格式时间（折叠状态）
-  const createdAtCompact = new Date(version.created_at).toLocaleString(
+  const createdAtCompact = new Date(resolvedVersion.created_at).toLocaleString(
     "zh-CN",
     {
       month: "2-digit",
@@ -159,25 +227,52 @@ export function VersionCard({
     },
   );
 
-  // 管理 preview_svg 的 Object URL
+  // 管理 preview_svg 的 Object URL（需要先解压）
   React.useEffect(() => {
-    const blob = createBlobFromSource(
-      version.preview_svg as BinarySource,
-      "image/svg+xml",
-    );
+    let cancelled = false;
+    let objectUrl: string | null = null;
 
-    if (!blob) {
-      setPreviewUrl(null);
-      return () => undefined;
-    }
+    (async () => {
+      if (!resolvedVersion.preview_svg) {
+        setPreviewUrl(null);
+        return;
+      }
 
-    const url = URL.createObjectURL(blob);
-    setPreviewUrl(url);
+      const compressedBlob = createBlobFromSource(
+        resolvedVersion.preview_svg as BinarySource,
+        "application/octet-stream",
+      );
+
+      if (!compressedBlob) {
+        setPreviewUrl(null);
+        return;
+      }
+
+      try {
+        const decompressed = await decompressBlob(compressedBlob);
+        if (cancelled) return;
+        const typedBlob = decompressed.type
+          ? decompressed
+          : new Blob([await decompressed.arrayBuffer()], {
+              type: "image/svg+xml",
+            });
+        objectUrl = URL.createObjectURL(typedBlob);
+        setPreviewUrl(objectUrl);
+      } catch (error) {
+        console.warn("解压 preview_svg 失败", error);
+        if (!cancelled) {
+          setPreviewUrl(null);
+        }
+      }
+    })();
 
     return () => {
-      URL.revokeObjectURL(url);
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [version.id, version.preview_svg]);
+  }, [resolvedVersion.id, resolvedVersion.preview_svg]);
 
   const cleanupPageUrls = React.useCallback(() => {
     pageObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -210,7 +305,7 @@ export function VersionCard({
       return;
     }
 
-    if (!version.pages_svg) {
+    if (!resolvedVersion.pages_svg) {
       setPagesError("暂无多页 SVG 数据");
       setPageThumbs([]);
       return;
@@ -224,7 +319,7 @@ export function VersionCard({
     (async () => {
       try {
         const blob = createBlobFromSource(
-          version.pages_svg as BinarySource,
+          resolvedVersion.pages_svg as BinarySource,
           "application/json",
         );
         if (!blob) {
@@ -272,7 +367,12 @@ export function VersionCard({
       cancelled = true;
       cleanupPageUrls();
     };
-  }, [cleanupPageUrls, showAllPages, version.id, version.pages_svg]);
+  }, [
+    cleanupPageUrls,
+    showAllPages,
+    resolvedVersion.id,
+    resolvedVersion.pages_svg,
+  ]);
 
   // 处理回滚按钮点击
   const handleRestore = () => {
@@ -314,21 +414,32 @@ export function VersionCard({
 
   return (
     <Card.Root
-      className={`version-card${isLatest ? " version-card--latest" : ""}${isExpanded ? " version-card--expanded" : " version-card--collapsed"}${compareMode ? " version-card--compare" : ""}${selected ? " version-card--selected" : ""}`}
+      className={`version-card${isLatest ? " version-card--latest" : ""}${effectiveExpanded ? " version-card--expanded" : " version-card--collapsed"}${compareMode ? " version-card--compare" : ""}${selected ? " version-card--selected" : ""}${isSubVersionEntry ? " version-card--sub-version" : ""}${isWIP ? " version-card--wip" : ""}`}
       variant="secondary"
       onClick={handleCardAreaClick}
     >
       <Card.Content className="version-card__content">
-        <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
+        <Disclosure
+          isExpanded={effectiveExpanded}
+          onExpandedChange={(expanded) => {
+            if (isWIP) return;
+            setIsExpanded(expanded);
+          }}
+        >
           {/* 折叠状态的紧凑视图 - 始终显示 */}
           <Disclosure.Heading>
             <button
               type="button"
               className="version-card__trigger"
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => {
+                if (isWIP) return;
+                setIsExpanded(!isExpanded);
+              }}
+              aria-expanded={effectiveExpanded}
+              aria-disabled={isWIP}
             >
               <div className="version-card__compact-view">
-                {compareMode && (
+                {compareMode && !isWIP && (
                   <div
                     role="button"
                     tabIndex={0}
@@ -365,25 +476,28 @@ export function VersionCard({
                 )}
                 <div className="version-card__compact-left">
                   <span className="version-number">{versionLabel}</span>
-                  {isLatest && <span className="latest-badge">最新</span>}
-                  {version.is_keyframe ? (
-                    <TooltipRoot>
-                      <span className="keyframe-badge">
-                        <Key className="w-3 h-3" />
-                      </span>
-                      <TooltipContent>关键帧</TooltipContent>
-                    </TooltipRoot>
-                  ) : (
-                    <TooltipRoot>
-                      <span className="diff-badge">
-                        <GitBranch className="w-3 h-3" />+
-                        {version.diff_chain_depth}
-                      </span>
-                      <TooltipContent>
-                        差异链深度 +{version.diff_chain_depth}
-                      </TooltipContent>
-                    </TooltipRoot>
+                  {isLatest && !isWIP && (
+                    <span className="latest-badge">最新</span>
                   )}
+                  {!isWIP &&
+                    (version.is_keyframe ? (
+                      <TooltipRoot>
+                        <span className="keyframe-badge">
+                          <Key className="w-3 h-3" />
+                        </span>
+                        <TooltipContent>关键帧</TooltipContent>
+                      </TooltipRoot>
+                    ) : (
+                      <TooltipRoot>
+                        <span className="diff-badge">
+                          <GitBranch className="w-3 h-3" />+
+                          {version.diff_chain_depth}
+                        </span>
+                        <TooltipContent>
+                          差异链深度 +{version.diff_chain_depth}
+                        </TooltipContent>
+                      </TooltipRoot>
+                    ))}
                   {/* 页面数徽章（仅多页时显示） */}
                   {version.page_count > 1 && (
                     <TooltipRoot>
@@ -396,14 +510,37 @@ export function VersionCard({
                       </TooltipContent>
                     </TooltipRoot>
                   )}
+                  {shouldShowSubVersionBadge && (
+                    <TooltipRoot>
+                      <span
+                        className="version-card__sub-version-badge"
+                        aria-label={`包含 ${subVersionCount} 个子版本`}
+                      >
+                        <Layers className="w-3 h-3" />
+                        {subVersionCount}
+                      </span>
+                      <TooltipContent>
+                        {`包含 ${subVersionCount} 个子版本`}
+                      </TooltipContent>
+                    </TooltipRoot>
+                  )}
                   {/* 内联描述（自适应宽度，仅有描述时显示） */}
-                  {version.description && (
+                  {isWIP ? (
                     <span
                       className="version-card__compact-description"
-                      title={version.description}
+                      title="当前画布内容"
                     >
-                      {version.description}
+                      当前画布内容
                     </span>
+                  ) : (
+                    version.description && (
+                      <span
+                        className="version-card__compact-description"
+                        title={version.description}
+                      >
+                        {version.description}
+                      </span>
+                    )
                   )}
                 </div>
                 <div className="version-card__compact-right">
@@ -418,22 +555,26 @@ export function VersionCard({
                     <Clock className="w-3 h-3" />
                     {createdAtCompact}
                   </span>
-                  <ChevronDown
-                    className={`version-card__chevron${isExpanded ? " rotated" : ""}`}
-                  />
+                  {!isWIP && (
+                    <ChevronDown
+                      className={`version-card__chevron${effectiveExpanded ? " rotated" : ""}`}
+                    />
+                  )}
                 </div>
               </div>
             </button>
           </Disclosure.Heading>
 
           {/* 展开状态的完整内容 */}
-          <Disclosure.Content>
+          <Disclosure.Content hidden={isWIP}>
             <div className="version-card__expanded-content">
-              {version.name && version.name !== version.semantic_version && (
-                <h4 className="version-card__name">{version.name}</h4>
-              )}
+              {!isWIP &&
+                version.name &&
+                version.name !== version.semantic_version && (
+                  <h4 className="version-card__name">{version.name}</h4>
+                )}
 
-              {version.description && (
+              {!isWIP && version.description && (
                 <p className="version-card__description">
                   {version.description}
                 </p>
@@ -442,27 +583,21 @@ export function VersionCard({
               <div className="version-card__media">
                 {previewUrl ? (
                   <div
-                    className={`version-preview${hasMultiplePages ? " version-preview--interactive" : ""}`}
-                    role={hasMultiplePages ? "button" : undefined}
-                    tabIndex={hasMultiplePages ? 0 : undefined}
+                    className="version-preview version-preview--interactive"
+                    role="button"
+                    tabIndex={0}
                     aria-label={
                       hasMultiplePages
-                        ? `打开多页 SVG 查看器，当前共 ${version.page_count} 页`
-                        : undefined
+                        ? `打开全屏查看器，当前共 ${version.page_count} 页`
+                        : `全屏查看 ${versionLabel} 预览图`
                     }
-                    onClick={
-                      hasMultiplePages ? handlePreviewActivate : undefined
-                    }
-                    onKeyDown={
-                      hasMultiplePages
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handlePreviewActivate();
-                            }
-                          }
-                        : undefined
-                    }
+                    onClick={handlePreviewActivate}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handlePreviewActivate();
+                      }
+                    }}
                   >
                     <img
                       src={previewUrl}
@@ -470,6 +605,12 @@ export function VersionCard({
                       className="version-preview__image"
                       loading="lazy"
                     />
+                    <div className="version-preview__overlay">
+                      <ZoomIn className="version-preview__zoom-icon" />
+                      <span className="version-preview__zoom-text">
+                        点击查看大图
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="version-preview version-preview--placeholder">
@@ -596,7 +737,7 @@ export function VersionCard({
 
               <div className="version-card__meta">
                 <div className="version-card__meta-item">
-                  {diffIcon}
+                  {isWIP ? <Activity className="w-3 h-3" /> : diffIcon}
                   <span>{diffLabel}</span>
                 </div>
                 <div className="version-card__meta-item">
@@ -605,37 +746,56 @@ export function VersionCard({
                 </div>
               </div>
 
-              <div className="version-card__actions">
-                {onQuickCompare && (
-                  <Button size="sm" variant="ghost" onPress={onQuickCompare}>
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    快速对比
+              {!isWIP && (
+                <div className="version-card__actions">
+                  {shouldShowSubVersionButton && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() =>
+                        onNavigateToSubVersions?.(version.semantic_version)
+                      }
+                      aria-label={`查看 ${subVersionCount} 个子版本`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      查看 {subVersionCount} 个子版本
+                    </Button>
+                  )}
+                  {onQuickCompare && (
+                    <Button size="sm" variant="ghost" onPress={onQuickCompare}>
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      快速对比
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    onPress={handleExport}
+                    isDisabled={isExporting}
+                    aria-label={`导出 ${versionLabel}`}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    导出
                   </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="tertiary"
-                  onPress={handleExport}
-                  isDisabled={isExporting}
-                  aria-label={`导出 ${versionLabel}`}
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  导出
-                </Button>
 
-                {onRestore && (
-                  <Button size="sm" variant="secondary" onPress={handleRestore}>
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    回滚
-                  </Button>
-                )}
-              </div>
+                  {onRestore && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onPress={handleRestore}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      回滚
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </Disclosure.Content>
         </Disclosure>
       </Card.Content>
       <PageSVGViewer
-        version={version}
+        version={resolvedVersion}
         isOpen={viewerOpen}
         onClose={() => setViewerOpen(false)}
         defaultPageIndex={viewerInitialPage}

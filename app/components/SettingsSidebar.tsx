@@ -134,13 +134,19 @@ export default function SettingsSidebar({
       </div>
 
       {hasChanges && (
-        <div className="floating-actions">
-          <Button variant="ghost" size="sm" onPress={handleCancel}>
-            取消
-          </Button>
-          <Button variant="primary" size="sm" onPress={handleSave}>
-            保存
-          </Button>
+        <div className="settings-action-bar" role="status">
+          <div className="settings-action-status">
+            <span className="status-dot" aria-hidden="true" />
+            <span className="status-text">有未保存的更改</span>
+          </div>
+          <div className="settings-action-buttons">
+            <Button variant="ghost" size="sm" onPress={handleCancel}>
+              取消
+            </Button>
+            <Button variant="primary" size="sm" onPress={handleSave}>
+              保存
+            </Button>
+          </div>
         </div>
       )}
     </div>

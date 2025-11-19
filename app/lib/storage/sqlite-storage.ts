@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -12,7 +13,11 @@ import type {
   Message,
   CreateMessageInput,
 } from "./types";
-import { MAX_SVG_BLOB_BYTES } from "./constants";
+import { WIP_VERSION } from "./constants";
+import {
+  assertValidSvgBinary,
+  resolvePageMetadataFromXml,
+} from "./page-metadata-validators";
 
 function parseMetadata(value: unknown): Record<string, unknown> | null {
   if (value == null) return null;
@@ -37,46 +42,6 @@ function normalizeBlobField(
   if (preview instanceof Blob) return preview;
   const buffer = preview as ArrayBuffer;
   return new Blob([buffer]);
-}
-
-function assertValidPageCount(value: number | undefined) {
-  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
-    throw new Error("page_count 必须是大于等于 1 的数字");
-  }
-}
-
-function assertValidPageNames(value: string | undefined | null) {
-  if (value == null) return;
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) {
-      throw new Error("page_names 不是数组");
-    }
-    parsed.forEach((item, index) => {
-      if (typeof item !== "string") {
-        throw new Error(`page_names[${index}] 不是字符串`);
-      }
-    });
-  } catch (error) {
-    throw new Error(`page_names 必须是 JSON 字符串: ${error}`);
-  }
-}
-
-function assertValidSvgBlob(
-  blob?: Blob | ArrayBuffer | ArrayBufferView | null,
-) {
-  if (!blob) return;
-  let size = 0;
-  if (blob instanceof Blob) {
-    size = blob.size;
-  } else if (blob instanceof ArrayBuffer) {
-    size = blob.byteLength;
-  } else if (ArrayBuffer.isView(blob)) {
-    size = blob.byteLength;
-  }
-  if (size > MAX_SVG_BLOB_BYTES) {
-    throw new Error("SVG 数据体积超过 8MB 限制");
-  }
 }
 
 /**
@@ -188,6 +153,9 @@ export class SQLiteStorage implements StorageAdapter {
 
   async createXMLVersion(version: CreateXMLVersionInput): Promise<XMLVersion> {
     await this.ensureElectron();
+    assertValidSvgBinary(version.preview_svg, "preview_svg");
+    assertValidSvgBinary(version.pages_svg, "pages_svg");
+
     // Blob → ArrayBuffer 转换
     const versionToCreate: CreateXMLVersionInput = { ...version };
     if (version.preview_image instanceof Blob) {
@@ -203,10 +171,13 @@ export class SQLiteStorage implements StorageAdapter {
         (await version.pages_svg.arrayBuffer()) as unknown as Blob;
     }
 
-    assertValidPageCount(versionToCreate.page_count);
-    assertValidPageNames(versionToCreate.page_names);
-    assertValidSvgBlob(version.preview_svg);
-    assertValidSvgBlob(version.pages_svg);
+    const { pageCount, pageNamesJson } = resolvePageMetadataFromXml({
+      xmlContent: versionToCreate.xml_content,
+      userPageCount: versionToCreate.page_count,
+      userPageNames: versionToCreate.page_names,
+    });
+    versionToCreate.page_count = pageCount;
+    versionToCreate.page_names = pageNamesJson;
 
     const result =
       await window.electronStorage!.createXMLVersion(versionToCreate);
@@ -219,7 +190,30 @@ export class SQLiteStorage implements StorageAdapter {
       await window.electronStorage!.getXMLVersionsByProject(projectUuid);
     return results
       .map((version) => this.normalizeVersion(version))
-      .filter((v): v is XMLVersion => !!v);
+      .filter((v): v is XMLVersion => !!v)
+      .map((version) => {
+        const {
+          preview_svg: _ignoredPreview,
+          pages_svg: _ignoredPages,
+          ...rest
+        } = version;
+        return rest as XMLVersion;
+      });
+  }
+
+  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+    await this.ensureElectron();
+    const svgData = await window.electronStorage!.getXMLVersionSVGData(id);
+    if (!svgData) return null;
+
+    const normalize = (value: Blob | Buffer | ArrayBuffer | null | undefined) =>
+      normalizeBlobField(value) ?? null;
+
+    return {
+      id: svgData.id,
+      preview_svg: normalize(svgData.preview_svg),
+      pages_svg: normalize(svgData.pages_svg),
+    };
   }
 
   async updateXMLVersion(
@@ -227,8 +221,40 @@ export class SQLiteStorage implements StorageAdapter {
     updates: Partial<Omit<XMLVersion, "id" | "created_at">>,
   ): Promise<void> {
     await this.ensureElectron();
+    const existingRaw = await window.electronStorage!.getXMLVersion(id);
+    const existing = this.normalizeVersion(existingRaw);
+    if (!existing) {
+      throw new Error(`XML Version not found: ${id}`);
+    }
+
+    assertValidSvgBinary(updates.preview_svg as Blob, "preview_svg");
+    assertValidSvgBinary(updates.pages_svg as Blob, "pages_svg");
+
+    const targetXml = updates.xml_content ?? existing.xml_content;
+    const { pageCount, pageNamesJson } = resolvePageMetadataFromXml({
+      xmlContent: targetXml,
+      userPageCount: updates.page_count,
+      userPageNames: updates.page_names,
+    });
+
+    const updatesToSend: Partial<Omit<XMLVersion, "id" | "created_at">> & {
+      created_at?: number;
+    } = {
+      ...updates,
+      page_count: pageCount,
+      page_names: pageNamesJson,
+    };
+
+    const targetSemanticVersion =
+      updates.semantic_version ?? existing.semantic_version;
+    if (
+      targetSemanticVersion === WIP_VERSION &&
+      updatesToSend.created_at === undefined
+    ) {
+      updatesToSend.created_at = Date.now();
+    }
+
     // Blob → ArrayBuffer 转换（如果有 preview_image）
-    const updatesToSend = { ...updates };
     if (updates.preview_image instanceof Blob) {
       updatesToSend.preview_image =
         (await updates.preview_image.arrayBuffer()) as unknown as Blob;
@@ -241,15 +267,6 @@ export class SQLiteStorage implements StorageAdapter {
       updatesToSend.pages_svg =
         (await updates.pages_svg.arrayBuffer()) as unknown as Blob;
     }
-
-    if (updates.page_count !== undefined) {
-      assertValidPageCount(updates.page_count);
-    }
-    if (updates.page_names !== undefined) {
-      assertValidPageNames(updates.page_names);
-    }
-    assertValidSvgBlob(updates.preview_svg as Blob);
-    assertValidSvgBlob(updates.pages_svg as Blob);
 
     await window.electronStorage!.updateXMLVersion(id, updatesToSend);
   }
@@ -291,13 +308,6 @@ export class SQLiteStorage implements StorageAdapter {
   ): Promise<Conversation[]> {
     await this.ensureElectron();
     return window.electronStorage!.getConversationsByProject(projectUuid);
-  }
-
-  async getConversationsByXMLVersion(
-    xmlVersionId: string,
-  ): Promise<Conversation[]> {
-    await this.ensureElectron();
-    return window.electronStorage!.getConversationsByXMLVersion(xmlVersionId);
   }
 
   // ==================== Messages ====================

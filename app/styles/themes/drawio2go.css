@@ -41,11 +41,12 @@
     --default: oklch(0.964 0.008 245.11);
     --default-foreground: var(--foreground);
 
-    /* Accent system */
-    --accent: oklch(0.5843 0.0889 234.67);
+    /* Accent system - Optimized for better contrast and modernity */
+    --accent: oklch(0.6 0.11 235);
     --accent-foreground: var(--snow);
-    --accent-hover: oklch(0.5216 0.1033 243.38);
-    --accent-soft: color-mix(in oklch, var(--accent) 15%, var(--background));
+    --accent-hover: oklch(0.53 0.13 238);
+    --accent-active: oklch(0.48 0.14 240);
+    --accent-soft: color-mix(in oklch, var(--accent) 8%, var(--background));
     --accent-soft-foreground: var(--accent-foreground);
 
     --focus: var(--accent);
@@ -57,31 +58,32 @@
     --field-placeholder: rgba(15, 23, 42, 0.52);
     --field-border: transparent;
 
-    /* Status colors */
-    --success: oklch(0.7227 0.192 149.58);
+    /* Status colors - Modernized and vibrant */
+    --success: oklch(0.75 0.22 150);
     --success-foreground: var(--eclipse);
-    --warning: oklch(0.7686 0.1647 70.08);
+    --warning: oklch(0.78 0.19 68);
     --warning-foreground: var(--eclipse);
-    --info: oklch(0.6056 0.2189 292.72);
+    --info: oklch(0.62 0.23 290);
     --info-foreground: var(--snow);
-    --danger: oklch(0.6368 0.2078 25.33);
+    --danger: oklch(0.65 0.24 25);
     --danger-foreground: var(--snow);
 
     /* Components */
     --segment: var(--white);
     --segment-foreground: var(--foreground);
 
-    /* Border System */
-    --border: color-mix(in oklch, var(--accent) 12%, transparent);
-    --border-primary: color-mix(in oklch, var(--accent) 35%, transparent);
-    --border-light: color-mix(in oklch, var(--accent) 20%, transparent);
-    --border-hover: color-mix(in oklch, var(--accent) 45%, transparent);
+    /* Border System - Enhanced contrast */
+    --border: color-mix(in oklch, var(--accent) 18%, transparent);
+    --border-primary: color-mix(in oklch, var(--accent) 40%, transparent);
+    --border-light: color-mix(in oklch, var(--accent) 28%, transparent);
+    --border-hover: color-mix(in oklch, var(--accent) 55%, transparent);
+    --border-focus: color-mix(in oklch, var(--accent) 65%, transparent);
     --divider: oklch(0.92 0.007 240.21);
 
-    /* Background System */
-    --bg-primary: color-mix(in oklch, var(--accent) 8%, transparent);
-    --bg-secondary: color-mix(in oklch, var(--accent) 12%, transparent);
-    --bg-hover: color-mix(in oklch, var(--accent) 16%, transparent);
+    /* Background System - Optimized transparency */
+    --bg-primary: color-mix(in oklch, var(--accent) 6%, transparent);
+    --bg-secondary: color-mix(in oklch, var(--accent) 10%, transparent);
+    --bg-hover: color-mix(in oklch, var(--accent) 15%, transparent);
 
     /* Gray Scale System */
     --gray-primary: oklch(0.5437 0.0149 258.28);
@@ -89,20 +91,29 @@
     --gray-border: color-mix(in oklch, var(--gray-light) 25%, transparent);
     --gray-bg: color-mix(in oklch, var(--gray-light) 4%, transparent);
 
-    /* Material Design Shadow System (OKLCH) */
-    --shadow-xs: 0 1px 2px color-mix(in oklch, var(--accent) 6%, transparent); /* 极淡阴影 - 紧凑模式 */
-    --shadow-1: 0 1px 3px color-mix(in oklch, var(--accent) 12%, transparent);
-    --shadow-2: 0 2px 6px color-mix(in oklch, var(--accent) 16%, transparent);
-    --shadow-4: 0 4px 12px color-mix(in oklch, var(--accent) 16%, transparent);
-    --shadow-8: 0 8px 24px color-mix(in oklch, var(--accent) 16%, transparent);
-    --shadow-sidebar: -2px 0 8px
-      color-mix(in oklch, var(--accent) 8%, transparent);
+    /* Material Design Shadow System - Enhanced with color tint */
+    --shadow-xs: 0 1px 2px color-mix(in oklch, var(--accent) 12%, transparent);
+    --shadow-1: 0 1px 4px color-mix(in oklch, var(--accent) 18%, transparent);
+    --shadow-2: 0 2px 8px color-mix(in oklch, var(--accent) 22%, transparent);
+    --shadow-4: 0 4px 16px color-mix(in oklch, var(--accent) 26%, transparent);
+    --shadow-8: 0 8px 32px color-mix(in oklch, var(--accent) 30%, transparent);
+    --shadow-sidebar: -2px 0 12px
+      color-mix(in oklch, var(--accent) 15%, transparent);
 
     /* Component Shadows */
     --surface-shadow: var(--shadow-1);
     --overlay-shadow: var(--shadow-4);
     --field-shadow: 0 0 0 1px
-      color-mix(in oklch, var(--accent) 12%, transparent);
+      color-mix(in oklch, var(--accent) 18%, transparent);
+
+    /* Gradient and Glass Effects - Modern UI enhancements */
+    --accent-gradient: linear-gradient(
+      135deg,
+      var(--accent) 0%,
+      oklch(0.55 0.12 240) 100%
+    );
+    --glass-effect: backdrop-blur(12px) saturate(180%) brightness(105%);
+    --glass-background: color-mix(in oklch, var(--surface) 85%, transparent);
 
     --skeleton-animation: shimmer;
   }
@@ -112,26 +123,27 @@
   [data-theme="drawio2go-dark"] {
     color-scheme: dark;
 
-    --background: oklch(0.2054 0.0288 239.43);
+    --background: oklch(0.16 0.035 238);
     --foreground: var(--snow);
-    --foreground-secondary: rgba(248, 250, 252, 0.75);
-    --foreground-tertiary: rgba(248, 250, 252, 0.5);
+    --foreground-secondary: rgba(248, 250, 252, 0.78);
+    --foreground-tertiary: rgba(248, 250, 252, 0.52);
 
-    --surface: oklch(0.2508 0.0393 241.72);
+    --surface: oklch(0.22 0.042 240);
     --surface-foreground: var(--foreground);
-    --overlay: oklch(0.286 0.038 241.5);
+    --overlay: oklch(0.26 0.045 240);
     --overlay-foreground: var(--foreground);
 
     --muted: oklch(0.58 0.03 257.1);
     --scrollbar: oklch(0.41 0.02 253.5);
 
-    --default: oklch(0.32 0.02 245.2);
+    --default: oklch(0.3 0.025 242);
     --default-foreground: var(--foreground);
 
-    --accent: oklch(0.69 0.0889 234.67);
+    --accent: oklch(0.72 0.12 235);
     --accent-foreground: var(--snow);
-    --accent-hover: oklch(0.74 0.0889 234.67);
-    --accent-soft: color-mix(in oklch, var(--accent) 22%, var(--background));
+    --accent-hover: oklch(0.77 0.13 237);
+    --accent-active: oklch(0.82 0.14 238);
+    --accent-soft: color-mix(in oklch, var(--accent) 18%, var(--background));
     --accent-soft-foreground: var(--accent-foreground);
 
     --focus: var(--accent);
@@ -142,29 +154,30 @@
     --field-placeholder: rgba(248, 250, 252, 0.55);
     --field-border: rgba(255, 255, 255, 0.08);
 
-    --success: oklch(0.7227 0.192 149.58);
-    --success-foreground: var(--foreground);
-    --warning: oklch(0.8203 0.1388 76.34);
-    --warning-foreground: var(--foreground);
-    --info: oklch(0.65 0.19 292.72);
-    --info-foreground: var(--snow);
-    --danger: oklch(0.594 0.1967 24.63);
-    --danger-foreground: var(--snow);
+    --success: oklch(0.76 0.22 150);
+    --success-foreground: var(--eclipse);
+    --warning: oklch(0.82 0.19 68);
+    --warning-foreground: var(--eclipse);
+    --info: oklch(0.7 0.23 290);
+    --info-foreground: var(--eclipse);
+    --danger: oklch(0.68 0.24 25);
+    --danger-foreground: var(--eclipse);
 
     --segment: color-mix(in oklch, var(--surface) 85%, var(--background));
     --segment-foreground: var(--foreground);
 
-    /* Border System */
-    --border: color-mix(in oklch, var(--accent) 35%, transparent);
-    --border-primary: color-mix(in oklch, var(--accent) 45%, transparent);
-    --border-light: color-mix(in oklch, var(--accent) 30%, transparent);
-    --border-hover: color-mix(in oklch, var(--accent) 55%, transparent);
-    --divider: oklch(0.32 0.01 240.35);
+    /* Border System - Enhanced for dark mode */
+    --border: color-mix(in oklch, var(--accent) 30%, transparent);
+    --border-primary: color-mix(in oklch, var(--accent) 40%, transparent);
+    --border-light: color-mix(in oklch, var(--accent) 25%, transparent);
+    --border-hover: color-mix(in oklch, var(--accent) 50%, transparent);
+    --border-focus: color-mix(in oklch, var(--accent) 65%, transparent);
+    --divider: oklch(0.28 0.015 238);
 
-    /* Background System */
-    --bg-primary: color-mix(in oklch, var(--accent) 15%, transparent);
-    --bg-secondary: color-mix(in oklch, var(--accent) 22%, transparent);
-    --bg-hover: color-mix(in oklch, var(--accent) 28%, transparent);
+    /* Background System - Enhanced transparency */
+    --bg-primary: color-mix(in oklch, var(--accent) 12%, transparent);
+    --bg-secondary: color-mix(in oklch, var(--accent) 18%, transparent);
+    --bg-hover: color-mix(in oklch, var(--accent) 25%, transparent);
 
     /* Gray Scale System */
     --gray-primary: oklch(0.58 0.03 257.1);
@@ -172,19 +185,32 @@
     --gray-border: color-mix(in oklch, var(--gray-light) 35%, transparent);
     --gray-bg: color-mix(in oklch, var(--gray-light) 8%, transparent);
 
-    /* Material Design Shadow System (OKLCH) */
-    --shadow-xs: 0 1px 2px color-mix(in oklch, var(--black) 20%, transparent); /* 极淡阴影 - 紧凑模式 */
-    --shadow-1: 0 1px 3px color-mix(in oklch, var(--black) 40%, transparent);
-    --shadow-2: 0 2px 6px color-mix(in oklch, var(--black) 50%, transparent);
-    --shadow-4: 0 4px 12px color-mix(in oklch, var(--black) 50%, transparent);
-    --shadow-8: 0 8px 24px color-mix(in oklch, var(--black) 60%, transparent);
-    --shadow-sidebar: -2px 0 8px
-      color-mix(in oklch, var(--accent) 15%, transparent);
+    /* Material Design Shadow System - Tinted for depth */
+    --shadow-xs: 0 1px 2px
+      color-mix(in oklch, oklch(0 0.1 235) 25%, transparent);
+    --shadow-1: 0 1px 4px color-mix(in oklch, oklch(0 0.1 235) 35%, transparent);
+    --shadow-2: 0 2px 8px color-mix(in oklch, oklch(0 0.1 235) 42%, transparent);
+    --shadow-4: 0 4px 16px
+      color-mix(in oklch, oklch(0 0.1 235) 48%, transparent);
+    --shadow-8: 0 8px 32px
+      color-mix(in oklch, oklch(0 0.1 235) 55%, transparent);
+    --shadow-sidebar: -2px 0 12px
+      color-mix(in oklch, var(--accent) 22%, transparent);
 
     /* Component Shadows */
-    --surface-shadow: 0 0 0 0 transparent inset;
-    --overlay-shadow: 0 0 0 0 transparent inset;
-    --field-shadow: 0 0 0 0 transparent inset;
+    --surface-shadow: var(--shadow-1);
+    --overlay-shadow: var(--shadow-4);
+    --field-shadow: 0 0 0 1px
+      color-mix(in oklch, var(--accent) 25%, transparent);
+
+    /* Gradient and Glass Effects - Dark mode optimized */
+    --accent-gradient: linear-gradient(
+      135deg,
+      var(--accent) 0%,
+      oklch(0.68 0.13 240) 100%
+    );
+    --glass-effect: backdrop-blur(16px) saturate(200%) brightness(110%);
+    --glass-background: color-mix(in oklch, var(--surface) 75%, transparent);
   }
 }
 

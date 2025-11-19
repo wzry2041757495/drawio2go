@@ -11,23 +11,31 @@
 - **drawio-ai-tools.ts**: AI 工具定义（`drawio_read` / `drawio_edit_batch`）
 - **tool-executor.ts**: 工具执行路由器，通过 Socket.IO 与前端通讯
 - **svg-export-utils.ts**: DrawIO 多页面 SVG 导出工具（页面拆分、单页 XML 重建、结果序列化）
-- **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id 的元素级匹配与视觉高亮）
+- **compression-utils.ts**: Web/Node 共享的 `CompressionStream` / `DecompressionStream` deflate-raw 压缩工具
+- **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id + 几何语义匹配的元素级高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
+- **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
 
 ### svg-export-utils.ts
 
 - `parsePages(xml)`: 解析 `<diagram>` 列表，返回 `{ id, name, index, xmlContent, element }`
 - `createSinglePageXml(diagram)`: 复制 diagram 并生成完整 mxfile 字符串，保持 host/agent 等元数据
 - `exportAllPagesSVG(editor, fullXml, options)`: 顺序执行 `loadDiagram → exportSVG` 并可接收 `onProgress`，结束后自动恢复原始 XML
-- `serializeSVGsToBlob` / `deserializeSVGsFromBlob`: 用 JSON Blob 存储/读取多页 SVG 结果
+- `serializeSVGsToBlob` / `deserializeSVGsFromBlob`: **异步** 工具，内部使用 `compression-utils` 将 JSON 结果以 `deflate-raw` 压缩后写入 Blob，再在读取时自动解压
+
+### compression-utils.ts
+
+- `compressBlob(blob)`：使用原生 `CompressionStream("deflate-raw")` 压缩 Blob（Node.js v17+ 和现代浏览器均支持）
+- `decompressBlob(blob)`：配套解压实现，使用原生 `DecompressionStream`
+- 该模块是 svg 存储和 preview_svg 压缩的唯一入口，避免重复实现
 
 ### svg-smart-diff.ts
 
-**SVG 智能差异对比引擎** - 基于 `data-cell-id` 的元素级匹配与视觉高亮
+**SVG 智能差异对比引擎** - 基于 `data-cell-id` + 几何语义的元素级匹配与视觉高亮
 
 #### 核心功能
 
-- **元素级匹配**: 通过 `data-cell-id` 自动匹配两个 SVG 版本中的对应元素
+- **元素级匹配**: 先通过 `data-cell-id` 自动匹配，剩余元素按照几何尺寸、相对位置、标签类型、文本内容进行模糊匹配
 - **差异分类**:
   - **匹配元素** (`matched`): 两个版本中完全相同的元素
   - **变更元素** (`changed`): ID 相同但内容不同的元素
@@ -35,6 +43,17 @@
   - **仅 B 存在** (`onlyB`): 新增的元素
 - **视觉归一化**: 自动缩放和居中对齐不同尺寸的 SVG
 - **智能高亮**: 使用混合模式和滤镜高亮差异元素
+
+**匹配策略升级（2025-11-17）**
+
+1. **Cell 集合解析**：为每个 `data-cell-id` 叶子节点提取 `bbox`、中心点、面积、长宽比以及裁剪后的文本内容，统一归一化坐标。
+2. **多阶段匹配**：
+   - 阶段 1：`data-cell-id` 精确匹配（自动处理重复 ID，按出现顺序一对一匹配）。
+   - 阶段 2：针对剩余元素构建候选对，综合尺寸（35%）+相对位置（25%）+文本（25%）+长宽比（15%）打分，使用最大匹配贪心策略筛选分值 ≥0.58 的配对。
+3. **高亮基准选择**：仍然根据画布面积→元素数量的优先级挑选底层版本，保证差异渲染在更大的画布上呈现。
+4. **自动补充 ID**：未携带 `data-cell-id` 的元素在差异 SVG 中会自动生成 `auto-x`，确保定位稳定。
+
+> 受限于 DrawIO 导出的绝对坐标不可靠，新的匹配算法将重心放在几何/文本相似度，避免因整体平移而误判新增或删除。
 
 #### 主要函数
 
@@ -82,6 +101,9 @@ interface SmartDiffStats {
 
 - **current-project.ts**: 当前工程 ID 持久化工具
 - **xml-version-engine.ts**: XML 版本恢复引擎（Diff 重放）
+- **page-metadata-validators.ts**: `page_count` / `page_names` / SVG Blob 校验与规范化的共享工具，IndexedDB 与 SQLite 实现必须调用保持一致行为
+- **migrations/indexeddb/**: IndexedDB v1 迁移脚本（当前仅 `v1.ts`），`IndexedDBStorage.initialize()` 会在 `upgrade` 回调内执行，禁止再删除/重建 Object Store
+- **electron/storage/migrations/**: Electron 端 SQLite 迁移脚本（当前为 `v1.js`），主进程 `SQLiteManager` 初始化时自动运行并写入 `user_version`
 
 ## DrawIO Socket.IO 调用流程
 
@@ -295,6 +317,8 @@ abstract class StorageAdapter {
 }
 ```
 
+> ⚠️ **2025-11-17 更新**：`getConversationsByXMLVersion` 已彻底移除，所有对话必须通过 `getConversationsByProject(projectUuid)` 查询。前端 Hook（`useStorageConversations`）和 Electron IPC 不再暴露 XML 版本维度查询，避免跨端行为不一致。
+
 ### 辅助工具
 
 #### current-project.ts - 当前工程 ID 持久化
@@ -395,6 +419,12 @@ const xml = await restoreXMLFromVersion("version-uuid", storage);
 - **数据库名称**: `drawio2go`
 - **对象存储**: 每个表对应一个对象存储（Object Store）
 - **索引**: 为查询字段创建索引提升性能
+
+### 数据库迁移机制（2025-11-17 生效）
+
+- **Web (IndexedDB)**: `app/lib/storage/migrations/indexeddb/` 维护版本化脚本，当前 `v1` 负责创建 `settings/projects/xml_versions/conversations/messages` 及其索引。`IndexedDBStorage.initialize()` 的 `openDB(..., { upgrade })` 仅调用迁移脚本，不再删除已有 Object Store。
+- **Electron (SQLite)**: 主进程 `SQLiteManager` 在初始化时调用 `electron/storage/migrations/runSQLiteMigrations()`，根据 `pragma user_version` 依次执行 `v1` 脚本并写回最新版本号。
+- **版本策略**: 现有结构视为 v1，后续 schema 升级只需新增迁移文件并递增版本号，无需强制清库。IndexedDB/SQLite 的升级逻辑必须保持幂等。
 
 ### 架构决策
 

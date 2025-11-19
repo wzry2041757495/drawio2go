@@ -2,6 +2,7 @@
 
 import { Button } from "@heroui/react";
 import { FolderOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface TopBarProps {
   selectionLabel?: string;
@@ -92,6 +93,8 @@ export default function TopBar({
             保存
           </Button>
         )}
+
+        <ThemeToggle />
 
         <Button
           isIconOnly

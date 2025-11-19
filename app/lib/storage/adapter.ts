@@ -12,6 +12,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   XMLVersion,
+  XMLVersionSVGData,
   CreateXMLVersionInput,
   Conversation,
   CreateConversationInput,
@@ -126,6 +127,12 @@ export interface StorageAdapter {
    * @returns XML 版本数组（按创建时间倒序）
    */
   getXMLVersionsByProject(projectUuid: string): Promise<XMLVersion[]>;
+
+  /**
+   * 获取指定 XML 版本的 SVG 大字段
+   * @param id 版本 ID
+   */
+  getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null>;
 
   /**
    * 更新 XML 版本

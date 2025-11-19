@@ -74,7 +74,7 @@ describe("svg-export-utils", () => {
       { id: "p1", name: "首页", index: 0, svg: "<svg></svg>" },
     ];
 
-    const blob = serializeSVGsToBlob(sample);
+    const blob = await serializeSVGsToBlob(sample);
     const restored = await deserializeSVGsFromBlob(blob);
 
     expect(restored).toEqual(sample);

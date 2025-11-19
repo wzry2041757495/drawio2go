@@ -76,22 +76,86 @@
 
 ### 🎨 色彩系统
 
-#### 主题色（蓝色 #3388BB）
+> **2025-11-17 主题色彩现代化优化** - 提升对比度、现代化配色、完善深色模式
+
+#### 主题色（基于 #3388BB，使用 OKLCH 色彩空间）
+
+**浅色模式：**
 
 ```css
---primary-color: #3388bb; /* 主色调 */
---primary-hover: #2a6fa0; /* 悬停状态 */
---primary-light: #e6f2f9; /* 浅色背景 */
---primary-foreground: #ffffff; /* 前景文字 */
+/* 主色调系统 - 提升饱和度和对比度 */
+--accent: oklch(0.6 0.11 235); /* 主色调（原 #3388BB 的优化版本）*/
+--accent-foreground: var(--snow); /* 主色前景文字 */
+--accent-hover: oklch(0.53 0.13 238); /* 悬停状态 - 更深更饱和 */
+--accent-active: oklch(0.48 0.14 240); /* 激活状态 - 最深 */
+--accent-soft: color-mix(
+  in oklch,
+  var(--accent) 8%,
+  var(--background)
+); /* 柔和背景 */
+
+/* 兼容性映射（旧变量） */
+--primary-color: var(--accent);
+--primary-hover: var(--accent-hover);
+--primary-light: var(--accent-soft);
+--primary-foreground: var(--accent-foreground);
 ```
 
-#### 语义化颜色
+**深色模式：**
 
 ```css
---success-color: #22c55e; /* 成功/最新版本徽章 */
---error-color: #ef4444; /* 错误/危险操作 */
---warning-color: #f59e0b; /* 警告/关键帧徽章 */
---info-color: #8b5cf6; /* 信息/差异徽章（紫色） */
+/* 深色模式主色调 - 提升亮度确保可读性 */
+--accent: oklch(0.72 0.12 235); /* 比浅色模式更亮 */
+--accent-hover: oklch(0.77 0.13 237); /* 悬停更亮 */
+--accent-active: oklch(0.82 0.14 238); /* 激活最亮 */
+--accent-soft: color-mix(in oklch, var(--accent) 18%, var(--background));
+```
+
+#### 语义化颜色（现代化版本）
+
+**浅色模式：**
+
+```css
+--success: oklch(0.75 0.22 150); /* 成功 - 更鲜艳的绿色 */
+--warning: oklch(0.78 0.19 68); /* 警告 - 更醒目的橙色 */
+--danger: oklch(0.65 0.24 25); /* 错误 - 现代红色 */
+--info: oklch(0.62 0.23 290); /* 信息 - 协调的紫蓝 */
+```
+
+**深色模式：**
+
+```css
+--success: oklch(0.76 0.22 150); /* 稍微提亮 */
+--warning: oklch(0.82 0.19 68); /* 稍微提亮 */
+--danger: oklch(0.68 0.24 25); /* 稍微提亮 */
+--info: oklch(0.7 0.23 290); /* 稍微提亮 */
+```
+
+#### 颜色使用决策树
+
+```
+选择颜色时的决策流程：
+
+1. 是否为品牌主要操作？
+   ├─ 是 → 使用 --accent（主色调）
+   └─ 否 → 继续判断
+
+2. 是否为状态反馈？
+   ├─ 成功/完成 → --success（绿色）
+   ├─ 警告/注意 → --warning（橙色）
+   ├─ 错误/危险 → --danger（红色）
+   ├─ 信息/提示 → --info（紫蓝色）
+   └─ 否 → 继续判断
+
+3. 是否需要强调但非主操作？
+   ├─ 是 → --accent-soft（柔和主色背景）
+   └─ 否 → 使用灰度系统
+
+4. 灰度系统使用场景：
+   ├─ 次要文本 → --foreground-secondary
+   ├─ 辅助文本 → --foreground-tertiary
+   ├─ 边框 → --border / --border-light
+   └─ 背景 → --bg-primary / --bg-secondary
 ```
 
 #### 灰度系统
@@ -103,44 +167,173 @@
 --gray-bg: rgba(156, 163, 175, 0.04);
 ```
 
-#### 边框和背景
+#### 边框系统（增强对比度）
+
+**浅色模式：**
 
 ```css
-/* 边框 */
---border-primary: rgba(51, 136, 187, 0.25);
---border-light: rgba(51, 136, 187, 0.15);
---border-hover: rgba(51, 136, 187, 0.3);
+--border: color-mix(in oklch, var(--accent) 18%, transparent); /* 基础边框 */
+--border-primary: color-mix(
+  in oklch,
+  var(--accent) 40%,
+  transparent
+); /* 主要边框 */
+--border-light: color-mix(
+  in oklch,
+  var(--accent) 28%,
+  transparent
+); /* 轻量边框 */
+--border-hover: color-mix(
+  in oklch,
+  var(--accent) 55%,
+  transparent
+); /* 悬停边框 */
+--border-focus: color-mix(
+  in oklch,
+  var(--accent) 65%,
+  transparent
+); /* 聚焦边框（新增）*/
+```
 
-/* 背景 */
---bg-primary: rgba(51, 136, 187, 0.04);
---bg-secondary: rgba(51, 136, 187, 0.08);
---bg-hover: rgba(51, 136, 187, 0.12);
+**深色模式：**
+
+```css
+--border: color-mix(in oklch, var(--accent) 30%, transparent);
+--border-primary: color-mix(in oklch, var(--accent) 40%, transparent);
+--border-light: color-mix(in oklch, var(--accent) 25%, transparent);
+--border-hover: color-mix(in oklch, var(--accent) 50%, transparent);
+--border-focus: color-mix(in oklch, var(--accent) 65%, transparent);
+```
+
+#### 背景系统（优化透明度）
+
+**浅色模式：**
+
+```css
+--bg-primary: color-mix(in oklch, var(--accent) 6%, transparent); /* 主背景 */
+--bg-secondary: color-mix(
+  in oklch,
+  var(--accent) 10%,
+  transparent
+); /* 次背景 */
+--bg-hover: color-mix(in oklch, var(--accent) 15%, transparent); /* 悬停背景 */
+```
+
+**深色模式：**
+
+```css
+--bg-primary: color-mix(in oklch, var(--accent) 12%, transparent);
+--bg-secondary: color-mix(in oklch, var(--accent) 18%, transparent);
+--bg-hover: color-mix(in oklch, var(--accent) 25%, transparent);
 ```
 
 ---
 
-### 🌑 Material Design 阴影层级
+### 🌑 Material Design 阴影层级（现代化增强）
+
+**浅色模式（带主题色调）：**
 
 ```css
---shadow-1: 0 1px 3px rgba(51, 136, 187, 0.12); /* 轻微提升 */
---shadow-2: 0 2px 6px rgba(51, 136, 187, 0.16); /* 标准提升 */
---shadow-4: 0 4px 12px rgba(51, 136, 187, 0.16); /* 中等提升 */
---shadow-8: 0 8px 24px rgba(51, 136, 187, 0.16); /* 高层级提升 */
+--shadow-xs: 0 1px 2px color-mix(in oklch, var(--accent) 12%, transparent); /* 极淡阴影 */
+--shadow-1: 0 1px 4px color-mix(in oklch, var(--accent) 18%, transparent); /* 轻微提升 */
+--shadow-2: 0 2px 8px color-mix(in oklch, var(--accent) 22%, transparent); /* 标准提升 */
+--shadow-4: 0 4px 16px color-mix(in oklch, var(--accent) 26%, transparent); /* 中等提升 */
+--shadow-8: 0 8px 32px color-mix(in oklch, var(--accent) 30%, transparent); /* 高层级提升 */
+--shadow-sidebar: -2px 0 12px
+  color-mix(in oklch, var(--accent) 15%, transparent); /* 侧边栏阴影 */
+```
+
+**深色模式（蓝调阴影增强层次）：**
+
+```css
+--shadow-xs: 0 1px 2px color-mix(in oklch, oklch(0 0.1 235) 25%, transparent);
+--shadow-1: 0 1px 4px color-mix(in oklch, oklch(0 0.1 235) 35%, transparent);
+--shadow-2: 0 2px 8px color-mix(in oklch, oklch(0 0.1 235) 42%, transparent);
+--shadow-4: 0 4px 16px color-mix(in oklch, oklch(0 0.1 235) 48%, transparent);
+--shadow-8: 0 8px 32px color-mix(in oklch, oklch(0 0.1 235) 55%, transparent);
+--shadow-sidebar: -2px 0 12px
+  color-mix(in oklch, var(--accent) 22%, transparent);
 ```
 
 **使用场景：**
 
+- 紧凑模式卡片 → `var(--shadow-xs)`
 - 卡片默认状态 → `var(--shadow-1)`
 - 卡片悬停状态 → `var(--shadow-2)`
 - 下拉菜单、弹出层 → `var(--shadow-4)`
 - 对话框、模态框 → `var(--shadow-8)`
+- 侧边栏边界 → `var(--shadow-sidebar)`
 
-**兼容性映射：**
+**优化亮点：**
+
+1. **模糊半径增强** - 从 3px/6px/12px/24px 提升到 4px/8px/16px/32px
+2. **透明度梯度** - 从统一 12%/16% 优化为 12%/18%/22%/26%/30% 渐进式
+3. **色彩阴影** - 浅色模式使用主题色调，深色模式使用蓝调增强层次感
+
+---
+
+### ✨ 现代 UI 增强效果（新增）
+
+> **2025-11-17 新增** - 渐变和玻璃形态效果
+
+#### 渐变效果
+
+**浅色模式：**
 
 ```css
---shadow-sm: var(--shadow-1);
---shadow-md: var(--shadow-2);
---shadow-lg: var(--shadow-4);
+--accent-gradient: linear-gradient(
+  135deg,
+  var(--accent) 0%,
+  oklch(0.55 0.12 240) 100%
+); /* 主色调渐变 - 用于按钮高光 */
+```
+
+**深色模式：**
+
+```css
+--accent-gradient: linear-gradient(
+  135deg,
+  var(--accent) 0%,
+  oklch(0.68 0.13 240) 100%
+); /* 深色模式渐变 */
+```
+
+**使用场景：**
+
+- 特殊强调按钮（如 CTA）
+- 卡片头部装饰
+- 进度条填充
+
+#### 玻璃形态效果（Glassmorphism）
+
+**浅色模式：**
+
+```css
+--glass-effect: backdrop-blur(12px) saturate(180%) brightness(105%);
+--glass-background: color-mix(in oklch, var(--surface) 85%, transparent);
+```
+
+**深色模式：**
+
+```css
+--glass-effect: backdrop-blur(16px) saturate(200%) brightness(110%);
+--glass-background: color-mix(in oklch, var(--surface) 75%, transparent);
+```
+
+**使用场景：**
+
+- 浮动面板（如工具栏）
+- 半透明模态背景
+- 悬浮卡片
+
+**使用示例：**
+
+```css
+.glass-panel {
+  background: var(--glass-background);
+  backdrop-filter: var(--glass-effect);
+  border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+}
 ```
 
 ---
@@ -187,8 +380,7 @@ app/styles/
 │   ├── version-animations.css
 │   ├── version-dialog.css
 │   ├── version-sidebar.css
-│   ├── version-timeline.css
-│   └── version-wip.css
+│   └── version-timeline.css
 ├── layout/              # 布局相关
 │   ├── container.css
 │   └── sidebar.css
@@ -246,16 +438,23 @@ app/styles/
 ### 自定义主题（drawio2go.css）
 
 - 主题文件位于 `app/styles/themes/drawio2go.css`，包含 `[data-theme="drawio2go"]`（浅色）与 `[data-theme="drawio2go-dark"]`（深色）两套变量。
-- 根节点必须按照以下约定设置：
+- **2025-11-17 更新**：根节点主题由 `ThemeToggle` 组件动态管理，支持：
+  - localStorage 持久化
+  - 系统主题检测
+  - 平滑切换动画
 
   ```html
-  <html class="light" data-theme="drawio2go">
-    <html class="dark" data-theme="drawio2go-dark"></html>
-  </html>
+  <!-- 浅色模式 -->
+  <html class="light" data-theme="drawio2go"></html>
+  <!-- 深色模式 -->
+  <html class="dark" data-theme="drawio2go-dark"></html>
   ```
 
 - `@theme inline` 已将 `--color-background`、`--color-accent`、`--radius` 等暴露给 Tailwind，故可直接使用 `bg-background`、`text-foreground`、`rounded-lg` 等工具类。
-- 所有旧的 `--primary-*` 变量已映射至 HeroUI 的 `--accent`/`--accent-hover`/`--accent-soft`，请勿再写入硬编码 Hex。
+- **重要**：所有颜色必须使用 CSS 变量，严禁硬编码 Hex 值：
+  - ✅ `color: var(--accent)` 或 `className="text-accent"`
+  - ❌ `color: #3388BB` 或 `className="text-[#3388BB]"`
+- 所有旧的 `--primary-*` 变量已映射至 HeroUI 的 `--accent`/`--accent-hover`/`--accent-soft`，保持向后兼容。
 - 需要新增主题变量时，请在 `drawio2go.css` 中定义，并在 `@theme inline` 中同步暴露 Tailwind token。
 
 ### ✅ 应该做的
@@ -431,8 +630,7 @@ import { Button, Card } from '@heroui/react'
 **版本管理组件样式文件：**
 
 - `version-sidebar.css` - 侧边栏容器和空状态
-- `version-wip.css` - WIP 指示器卡片
-- `version-timeline.css` - 版本时间线和卡片
+- `version-timeline.css` - 版本时间线、WIP 节点和卡片
 - `version-dialog.css` - 创建版本对话框
 
 **2025-11-13 视觉升级要点：**
@@ -473,36 +671,22 @@ import { Button, Card } from '@heroui/react'
 }
 ```
 
-#### WIP 指示器（`version-wip.css`）
+#### 时间线 WIP 节点（`version-timeline.css`）
 
 ```css
-.wip-indicator__body {
-  /* 三段式布局容器 */
+.version-card--wip {
+  border-style: dashed;
+  background: var(--bg-primary);
+  cursor: default;
 }
 
-.wip-indicator__top {
-  /* 顶部：图标 + 徽章 + 版本号 */
-  display: flex;
-  gap: var(--spacing-md);
+.version-card--wip::before {
+  /* 左侧圆点使用虚线边框，突出实时草稿 */
+  border-style: dashed;
 }
 
-.wip-badge {
-  /* WIP 徽章 */
-  background: var(--primary-color);
-  color: white;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.625rem;
-  font-weight: 600;
-}
-
-.wip-indicator__meta {
-  /* 底部元数据行 */
-  display: flex;
-  gap: var(--spacing-lg);
-  margin-top: var(--spacing-md);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
+.version-card--wip .version-card__trigger {
+  cursor: default;
 }
 ```
 
@@ -637,6 +821,42 @@ import { Button, Card } from '@heroui/react'
 
 ## 更新历史
 
+- **2025-11-17**: 主题色彩现代化优化（对比度 + 深色模式完善）
+  - **主色调优化**：
+    - 使用 OKLCH 色彩空间提升色彩准确性
+    - 浅色模式：饱和度从 0.089 提升至 0.11，亮度从 0.584 提升至 0.60
+    - 深色模式：饱和度从 0.089 提升至 0.12，亮度从 0.69 提升至 0.72
+    - 新增 `--accent-active` 状态（最深/最亮状态）
+  - **对比度增强**：
+    - 边框透明度：浅色 18%/28%/40%/55%（+6/8/5/10%），深色 30%/40%/50%（+5/5/5%）
+    - 阴影系统：模糊半径翻倍（4/8/16/32px），透明度梯度优化（12%→30%）
+    - 新增 `--border-focus` 状态（65% 透明度）
+  - **语义化颜色现代化**：
+    - Success/Warning/Danger/Info 使用更鲜艳的 OKLCH 值
+    - 深色模式统一提亮确保可读性
+  - **现代 UI 效果**：
+    - 新增 `--accent-gradient` 渐变变量（135deg 对角渐变）
+    - 新增 `--glass-effect` 和 `--glass-background` 玻璃形态效果
+  - **主题切换功能**：
+    - 新增 `ThemeToggle` 组件（太阳/月亮图标）
+    - localStorage 持久化 + 系统主题检测
+    - 避免闪烁的初始化脚本
+    - 集成到 TopBar 工具栏
+  - **硬编码清理**：
+    - 清理 `ProjectSelector.tsx` 中 6 处硬编码 `#3388BB`
+    - 清理 `typing-indicator.css` 中 1 处硬编码
+    - 移除 prefers-color-scheme 媒体查询（统一使用 data-theme）
+  - **文档更新**：
+    - 补充完整的 OKLCH 颜色映射表
+    - 添加颜色使用决策树
+    - 更新阴影、边框、背景系统文档
+    - 新增现代 UI 效果使用指南
+  - **相关文件**：
+    - `app/styles/themes/drawio2go.css`（核心优化）
+    - `app/components/ThemeToggle.tsx`（新建）
+    - `app/components/TopBar.tsx`（集成切换按钮）
+    - `app/layout.tsx`（主题初始化）
+    - `app/styles/AGENTS.md`（文档更新）
 - **2025-11-13**: 版本页面现代化外观升级（里程碑 3 完成）
   - **版本侧边栏**：新增信息描述区（History 图标 + 副标题）、空状态卡片与悬浮 CTA 按钮
   - **WIP 指示器**：卡片式信息区（Activity 图标 + WIP 徽章）、实时保存状态与元数据展示
@@ -654,4 +874,4 @@ import { Button, Card } from '@heroui/react'
 
 ---
 
-**维护提示：** 本文档应随设计系统变更而更新。修改 `variables.css` 后，请同步更新本文档。
+**维护提示：** 本文档应随设计系统变更而更新。修改 `drawio2go.css` 后，请同步更新本文档。

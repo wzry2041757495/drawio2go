@@ -1,5 +1,6 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { SVGExportOptions } from "../components/DrawioEditorNative";
+import { compressBlob, decompressBlob } from "./compression-utils";
 
 export interface DiagramPageInfo {
   id: string;
@@ -166,16 +167,18 @@ export async function exportAllPagesSVG(
   return results;
 }
 
-export function serializeSVGsToBlob(svgs: SvgPageExport[]): Blob {
-  return new Blob([JSON.stringify(svgs)], {
-    type: "application/json",
-  });
+export async function serializeSVGsToBlob(
+  svgs: SvgPageExport[],
+): Promise<Blob> {
+  const jsonBlob = new Blob([JSON.stringify(svgs)]);
+  return compressBlob(jsonBlob);
 }
 
 export async function deserializeSVGsFromBlob(
   blob: Blob,
 ): Promise<SvgPageExport[]> {
-  const text = await blob.text();
+  const decompressed = await decompressBlob(blob);
+  const text = await decompressed.text();
   if (!text) {
     return [];
   }

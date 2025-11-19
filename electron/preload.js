@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld("electronStorage", {
     ipcRenderer.invoke("storage:createXMLVersion", version),
   getXMLVersionsByProject: (projectUuid) =>
     ipcRenderer.invoke("storage:getXMLVersionsByProject", projectUuid),
+  getXMLVersionSVGData: (id) =>
+    ipcRenderer.invoke("storage:getXMLVersionSVGData", id),
   updateXMLVersion: (id, updates) =>
     ipcRenderer.invoke("storage:updateXMLVersion", id, updates),
   deleteXMLVersion: (id) => ipcRenderer.invoke("storage:deleteXMLVersion", id),
@@ -67,8 +69,6 @@ contextBridge.exposeInMainWorld("electronStorage", {
     ipcRenderer.invoke("storage:deleteConversation", id),
   getConversationsByProject: (projectUuid) =>
     ipcRenderer.invoke("storage:getConversationsByProject", projectUuid),
-  getConversationsByXMLVersion: (xmlVersionId) =>
-    ipcRenderer.invoke("storage:getConversationsByXMLVersion", xmlVersionId),
 
   // Messages
   getMessagesByConversation: (conversationId) =>
