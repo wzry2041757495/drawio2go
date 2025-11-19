@@ -212,7 +212,20 @@ class SQLiteManager {
       .prepare(
         `
         SELECT
-          * EXCLUDE (preview_svg, pages_svg)
+          id,
+          project_uuid,
+          semantic_version,
+          name,
+          description,
+          source_version_id,
+          is_keyframe,
+          diff_chain_depth,
+          xml_content,
+          metadata,
+          page_count,
+          page_names,
+          preview_image,
+          created_at
         FROM xml_versions
         WHERE project_uuid = ?
         ORDER BY created_at DESC
