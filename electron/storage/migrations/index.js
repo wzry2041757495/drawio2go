@@ -1,5 +1,9 @@
 const { applySQLiteV1Migration } = require("./v1");
 
+/**
+ * SQLite 数据库版本号
+ * v1 包含完整的表结构（含 sequence_number 和 conversation_sequences）
+ */
 const SQLITE_SCHEMA_VERSION = 1;
 
 function runSQLiteMigrations(db) {

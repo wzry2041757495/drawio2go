@@ -64,6 +64,13 @@
   height: 100%;
 }
 
+.sidebar-panels {
+  flex: 1;
+  height: calc(100% - var(--sidebar-tabs-height));
+  position: relative;
+  overflow: hidden;
+}
+
 .sidebar-tab-strip {
   display: flex;
   align-items: center;
@@ -117,7 +124,7 @@
 }
 
 .sidebar-panel {
-  height: calc(100% - var(--sidebar-tabs-height));
+  height: 100%;
   overflow: hidden;
   margin: 0; /* 去除顶部残余边距，内容与 Tab 紧贴 */
   padding: 0; /* 移除子分页外围留白，内容贴边呈现 */

@@ -391,7 +391,7 @@ export function VersionCard({
     try {
       // 恢复完整 XML
       const fullXml = await materializeVersionXml(version, (id) =>
-        getXMLVersion(id),
+        getXMLVersion(id, version.project_uuid),
       );
 
       // 创建下载

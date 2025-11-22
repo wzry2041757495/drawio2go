@@ -455,8 +455,8 @@ ipcMain.handle("storage:getAllProjects", async () => {
 });
 
 // XMLVersions
-ipcMain.handle("storage:getXMLVersion", async (event, id) => {
-  return storageManager.getXMLVersion(id);
+ipcMain.handle("storage:getXMLVersion", async (event, id, projectUuid) => {
+  return storageManager.getXMLVersion(id, projectUuid);
 });
 
 ipcMain.handle("storage:createXMLVersion", async (event, version) => {
@@ -480,9 +480,12 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle("storage:getXMLVersionSVGData", async (event, id) => {
-  return storageManager.getXMLVersionSVGData(id);
-});
+ipcMain.handle(
+  "storage:getXMLVersionSVGData",
+  async (event, id, projectUuid) => {
+    return storageManager.getXMLVersionSVGData(id, projectUuid);
+  },
+);
 
 ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
   if (updates?.preview_image) {
@@ -497,8 +500,8 @@ ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
   return storageManager.updateXMLVersion(id, updates);
 });
 
-ipcMain.handle("storage:deleteXMLVersion", async (event, id) => {
-  return storageManager.deleteXMLVersion(id);
+ipcMain.handle("storage:deleteXMLVersion", async (event, id, projectUuid) => {
+  return storageManager.deleteXMLVersion(id, projectUuid);
 });
 
 // Conversations
@@ -516,6 +519,14 @@ ipcMain.handle("storage:updateConversation", async (event, id, updates) => {
 
 ipcMain.handle("storage:deleteConversation", async (event, id) => {
   return storageManager.deleteConversation(id);
+});
+
+ipcMain.handle("storage:batchDeleteConversations", async (_event, ids) => {
+  return storageManager.batchDeleteConversations(ids);
+});
+
+ipcMain.handle("storage:exportConversations", async (_event, ids) => {
+  return storageManager.exportConversations(ids);
 });
 
 ipcMain.handle(

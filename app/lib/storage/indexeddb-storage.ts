@@ -1,4 +1,9 @@
-import { openDB, type IDBPDatabase } from "idb";
+import {
+  openDB,
+  type IDBPDatabase,
+  type IDBPObjectStore,
+  type IDBPTransaction,
+} from "idb";
 import type { StorageAdapter } from "./adapter";
 import type {
   Setting,
@@ -19,12 +24,15 @@ import {
   DB_VERSION,
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
+  ZERO_SOURCE_VERSION_ID,
 } from "./constants";
 import {
   assertValidSvgBinary,
   resolvePageMetadataFromXml,
 } from "./page-metadata-validators";
 import { runIndexedDbMigrations } from "./migrations/indexeddb";
+import { v4 as uuidv4 } from "uuid";
+import { createDefaultDiagramXml } from "./default-diagram-xml";
 
 /**
  * IndexedDB 存储实现（Web 环境）
@@ -33,6 +41,54 @@ import { runIndexedDbMigrations } from "./migrations/indexeddb";
 export class IndexedDBStorage implements StorageAdapter {
   private db: IDBPDatabase | null = null;
   private initPromise: Promise<void> | null = null;
+
+  private hasSequenceIndex<Mode extends IDBTransactionMode>(
+    store: IDBPObjectStore<unknown, ["messages"], "messages", Mode>,
+  ): boolean {
+    const names = store.indexNames;
+    if (!names) return false;
+    if (typeof (names as DOMStringList).contains === "function") {
+      return (names as DOMStringList).contains(
+        "conversation_id_sequence_number",
+      );
+    }
+    for (let i = 0; i < names.length; i += 1) {
+      if (names[i] === "conversation_id_sequence_number") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async ensureSequenceFloor(
+    tx: IDBPTransaction<unknown, string[], "readwrite">,
+    conversationId: string,
+    targetSequence: number,
+  ): Promise<void> {
+    const seqStore = tx.objectStore("conversation_sequences");
+    const existing = await seqStore.get(conversationId);
+    const current = existing?.last_sequence ?? 0;
+    if (targetSequence > current) {
+      await seqStore.put({
+        conversation_id: conversationId,
+        last_sequence: targetSequence,
+      });
+    }
+  }
+
+  private async getNextSequence(
+    tx: IDBPTransaction<unknown, string[], "readwrite">,
+    conversationId: string,
+  ): Promise<number> {
+    const seqStore = tx.objectStore("conversation_sequences");
+    const existing = await seqStore.get(conversationId);
+    const nextSeq = (existing?.last_sequence || 0) + 1;
+    await seqStore.put({
+      conversation_id: conversationId,
+      last_sequence: nextSeq,
+    });
+    return nextSeq;
+  }
 
   /**
    * 初始化数据库
@@ -50,16 +106,17 @@ export class IndexedDBStorage implements StorageAdapter {
   private async _doInitialize(): Promise<void> {
     try {
       this.db = await openDB(DB_NAME, DB_VERSION, {
-        upgrade: (db, oldVersion, newVersion, transaction) => {
+        upgrade: async (db, oldVersion, newVersion, transaction) => {
           console.log(
             `Upgrading IndexedDB from ${oldVersion} to ${newVersion}`,
           );
-          runIndexedDbMigrations(db, oldVersion, newVersion, transaction);
+          await runIndexedDbMigrations(db, oldVersion, newVersion, transaction);
         },
       });
 
       // 确保默认工程存在
       await this._ensureDefaultProject();
+      await this._ensureDefaultWipVersion();
 
       console.log("IndexedDB initialized");
     } catch (error) {
@@ -98,6 +155,39 @@ export class IndexedDBStorage implements StorageAdapter {
       await db.put("projects", defaultProject);
       console.log("Created default project");
     }
+  }
+
+  /**
+   * 确保默认 WIP 版本存在（避免首次访问空库触发 AI 工具失败）
+   */
+  private async _ensureDefaultWipVersion(): Promise<void> {
+    const versions = await this.getXMLVersionsByProject(DEFAULT_PROJECT_UUID);
+    if (versions.length > 0) {
+      return;
+    }
+
+    const defaultXml = createDefaultDiagramXml();
+    const { pageCount, pageNamesJson } = resolvePageMetadataFromXml({
+      xmlContent: defaultXml,
+    });
+
+    await this.createXMLVersion({
+      id: uuidv4(),
+      project_uuid: DEFAULT_PROJECT_UUID,
+      semantic_version: WIP_VERSION,
+      source_version_id: ZERO_SOURCE_VERSION_ID,
+      is_keyframe: true,
+      diff_chain_depth: 0,
+      xml_content: defaultXml,
+      metadata: null,
+      page_count: pageCount,
+      page_names: pageNamesJson,
+      preview_svg: undefined,
+      pages_svg: undefined,
+      preview_image: undefined,
+      description: "默认工作版本",
+      name: undefined,
+    });
   }
 
   // ==================== Settings ====================
@@ -171,7 +261,13 @@ export class IndexedDBStorage implements StorageAdapter {
 
     // 级联删除相关数据
     const tx = db.transaction(
-      ["projects", "xml_versions", "conversations", "messages"],
+      [
+        "projects",
+        "xml_versions",
+        "conversations",
+        "messages",
+        "conversation_sequences",
+      ],
       "readwrite",
     );
 
@@ -199,6 +295,7 @@ export class IndexedDBStorage implements StorageAdapter {
         await tx.objectStore("messages").delete(msg.id);
       }
       await tx.objectStore("conversations").delete(conv.id);
+      await tx.objectStore("conversation_sequences").delete(conv.id);
     }
 
     // 删除工程
@@ -216,10 +313,30 @@ export class IndexedDBStorage implements StorageAdapter {
 
   // ==================== XMLVersions ====================
 
-  async getXMLVersion(id: string): Promise<XMLVersion | null> {
+  async getXMLVersion(
+    id: string,
+    projectUuid?: string,
+  ): Promise<XMLVersion | null> {
     const db = await this.ensureDB();
     const version = await db.get("xml_versions", id);
-    return version || null;
+
+    if (!version) {
+      return null;
+    }
+
+    if (projectUuid && version.project_uuid !== projectUuid) {
+      const message =
+        `安全错误：版本 ${id} 不属于当前项目 ${projectUuid}。` +
+        `该版本属于项目 ${version.project_uuid}，已拒绝访问。`;
+      console.error("[IndexedDBStorage] 拒绝跨项目访问", {
+        versionId: id,
+        requestedProject: projectUuid,
+        versionProject: version.project_uuid,
+      });
+      throw new Error(message);
+    }
+
+    return version;
   }
 
   async createXMLVersion(version: CreateXMLVersionInput): Promise<XMLVersion> {
@@ -266,15 +383,31 @@ export class IndexedDBStorage implements StorageAdapter {
       .sort((a, b) => b.created_at - a.created_at);
   }
 
-  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+  async getXMLVersionSVGData(
+    id: string,
+    projectUuid?: string,
+  ): Promise<XMLVersionSVGData | null> {
     const db = await this.ensureDB();
     const version = await db.get("xml_versions", id);
     if (!version) {
       return null;
     }
 
+    if (projectUuid && version.project_uuid !== projectUuid) {
+      const message =
+        `安全错误：版本 ${id} 不属于当前项目 ${projectUuid}。` +
+        `该版本属于项目 ${version.project_uuid}，已拒绝访问 SVG 数据。`;
+      console.error("[IndexedDBStorage] 拒绝跨项目 SVG 访问", {
+        versionId: id,
+        requestedProject: projectUuid,
+        versionProject: version.project_uuid,
+      });
+      throw new Error(message);
+    }
+
     return {
       id: version.id,
+      project_uuid: version.project_uuid,
       preview_svg: version.preview_svg ?? null,
       pages_svg: version.pages_svg ?? null,
     };
@@ -320,8 +453,23 @@ export class IndexedDBStorage implements StorageAdapter {
     await db.put("xml_versions", updated);
   }
 
-  async deleteXMLVersion(id: string): Promise<void> {
+  async deleteXMLVersion(id: string, projectUuid?: string): Promise<void> {
     const db = await this.ensureDB();
+
+    const existing = await db.get("xml_versions", id);
+    if (!existing) {
+      return;
+    }
+
+    if (projectUuid && existing.project_uuid !== projectUuid) {
+      const message = `安全错误：删除版本 ${id} 被拒绝，目标项目 ${projectUuid} 与版本归属 ${existing.project_uuid} 不一致。`;
+      console.error("[IndexedDBStorage] 拒绝跨项目删除", {
+        versionId: id,
+        requestedProject: projectUuid,
+        versionProject: existing.project_uuid,
+      });
+      throw new Error(message);
+    }
 
     // 删除 XML 版本（消息中的 xml_version_id 会被设置为 null）
     const tx = db.transaction(["xml_versions", "messages"], "readwrite");
@@ -391,7 +539,10 @@ export class IndexedDBStorage implements StorageAdapter {
     const db = await this.ensureDB();
 
     // 级联删除消息
-    const tx = db.transaction(["conversations", "messages"], "readwrite");
+    const tx = db.transaction(
+      ["conversations", "messages", "conversation_sequences"],
+      "readwrite",
+    );
 
     const messages = await tx
       .objectStore("messages")
@@ -402,8 +553,87 @@ export class IndexedDBStorage implements StorageAdapter {
     }
 
     await tx.objectStore("conversations").delete(id);
+    await tx.objectStore("conversation_sequences").delete(id);
 
     await tx.done;
+  }
+
+  async batchDeleteConversations(ids: string[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    const db = await this.ensureDB();
+    const tx = db.transaction(
+      ["conversations", "messages", "conversation_sequences"],
+      "readwrite",
+    );
+    const messagesStore = tx.objectStore("messages");
+    const convStore = tx.objectStore("conversations");
+    const seqStore = tx.objectStore("conversation_sequences");
+
+    for (const id of ids) {
+      const range = IDBKeyRange.only(id);
+      const cursor = await messagesStore
+        .index("conversation_id")
+        .openCursor(range);
+      if (cursor) {
+        let current: typeof cursor | null = cursor;
+        // 逐个删除，兼顾旧环境不支持 delete(range)
+        while (current) {
+          await messagesStore.delete(current.primaryKey);
+          current = await current.continue();
+        }
+      }
+      await convStore.delete(id);
+      await seqStore.delete(id);
+    }
+
+    await tx.done;
+  }
+
+  async exportConversations(ids: string[]): Promise<Blob> {
+    const db = await this.ensureDB();
+    const tx = db.transaction(["conversations", "messages"], "readonly");
+    const convStore = tx.objectStore("conversations");
+    const msgStore = tx.objectStore("messages");
+    const exportItems = [];
+
+    for (const id of ids) {
+      const conv = await convStore.get(id);
+      if (!conv) continue;
+
+      const messages = (await msgStore
+        .index("conversation_id")
+        .getAll(id)) as Message[];
+
+      messages.sort((a, b) => {
+        const aSeq =
+          typeof a.sequence_number === "number"
+            ? a.sequence_number
+            : a.created_at;
+        const bSeq =
+          typeof b.sequence_number === "number"
+            ? b.sequence_number
+            : b.created_at;
+        if (aSeq !== bSeq) return aSeq - bSeq;
+        return a.created_at - b.created_at;
+      });
+
+      exportItems.push({
+        ...conv,
+        messages,
+      });
+    }
+
+    await tx.done;
+
+    const payload = {
+      version: "1.1",
+      exportedAt: new Date().toISOString(),
+      conversations: exportItems,
+    };
+
+    return new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
   }
 
   async getConversationsByProject(
@@ -423,24 +653,95 @@ export class IndexedDBStorage implements StorageAdapter {
 
   async getMessagesByConversation(conversationId: string): Promise<Message[]> {
     const db = await this.ensureDB();
-    const messages = await db.getAllFromIndex(
-      "messages",
-      "conversation_id",
-      conversationId,
-    );
-    // 按创建时间正序
-    return messages.sort((a, b) => a.created_at - b.created_at);
+    const tx = db.transaction("messages", "readonly");
+    const store = tx.objectStore("messages");
+    const hasSequenceIndex = this.hasSequenceIndex(store);
+
+    let messages: Message[] = [];
+
+    if (hasSequenceIndex) {
+      const range = IDBKeyRange.bound(
+        [conversationId, -Infinity],
+        [conversationId, Infinity],
+      );
+      const ordered = (await store
+        .index("conversation_id_sequence_number")
+        .getAll(range)) as Message[];
+      const fallback = (await store
+        .index("conversation_id")
+        .getAll(conversationId)) as Message[];
+
+      const merged = new Map<string, Message>();
+      for (const msg of ordered) {
+        merged.set(msg.id, msg);
+      }
+      for (const msg of fallback) {
+        merged.set(msg.id, msg);
+      }
+
+      messages = Array.from(merged.values());
+    } else {
+      messages =
+        ((await store
+          .index("conversation_id")
+          .getAll(conversationId)) as Message[]) || [];
+    }
+
+    await tx.done;
+
+    return messages.sort((a, b) => {
+      const aSeq =
+        typeof a.sequence_number === "number"
+          ? a.sequence_number
+          : a.created_at;
+      const bSeq =
+        typeof b.sequence_number === "number"
+          ? b.sequence_number
+          : b.created_at;
+
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      return a.created_at - b.created_at;
+    });
   }
 
   async createMessage(message: CreateMessageInput): Promise<Message> {
     const db = await this.ensureDB();
-    const now = Date.now();
+    const tx = db.transaction(
+      ["messages", "conversation_sequences"],
+      "readwrite",
+    );
+    const store = tx.objectStore("messages");
+    const defaultTimestamp = Date.now();
+
+    const createdAt =
+      typeof message.created_at === "number"
+        ? message.created_at
+        : typeof message.createdAt === "number"
+          ? message.createdAt
+          : defaultTimestamp;
+
+    const sequenceNumber =
+      typeof message.sequence_number === "number"
+        ? message.sequence_number
+        : await this.getNextSequence(tx, message.conversation_id);
+
+    if (typeof message.sequence_number === "number") {
+      await this.ensureSequenceFloor(
+        tx,
+        message.conversation_id,
+        sequenceNumber,
+      );
+    }
+
     const fullMessage: Message = {
       ...message,
-      created_at: now,
+      sequence_number: sequenceNumber,
+      created_at: createdAt,
     };
 
-    await db.put("messages", fullMessage);
+    await store.put(fullMessage);
+    await tx.done;
+
     return fullMessage;
   }
 
@@ -451,20 +752,44 @@ export class IndexedDBStorage implements StorageAdapter {
 
   async createMessages(messages: CreateMessageInput[]): Promise<Message[]> {
     const db = await this.ensureDB();
-    const now = Date.now();
-    const tx = db.transaction("messages", "readwrite");
+    const tx = db.transaction(
+      ["messages", "conversation_sequences"],
+      "readwrite",
+    );
+    const store = tx.objectStore("messages");
+    const defaultTimestamp = Date.now();
 
-    const fullMessages: Message[] = messages.map((msg) => ({
-      ...msg,
-      created_at: now,
-    }));
+    const inserted: Message[] = [];
 
-    for (const msg of fullMessages) {
-      await tx.store.put(msg);
+    for (const msg of messages) {
+      const createdAt =
+        typeof msg.created_at === "number"
+          ? msg.created_at
+          : typeof msg.createdAt === "number"
+            ? msg.createdAt
+            : defaultTimestamp;
+
+      const sequenceNumber =
+        typeof msg.sequence_number === "number"
+          ? msg.sequence_number
+          : await this.getNextSequence(tx, msg.conversation_id);
+
+      if (typeof msg.sequence_number === "number") {
+        await this.ensureSequenceFloor(tx, msg.conversation_id, sequenceNumber);
+      }
+
+      const fullMessage: Message = {
+        ...msg,
+        sequence_number: sequenceNumber,
+        created_at: createdAt,
+      };
+
+      await store.put(fullMessage);
+      inserted.push(fullMessage);
     }
 
     await tx.done;
 
-    return fullMessages;
+    return inserted;
   }
 }

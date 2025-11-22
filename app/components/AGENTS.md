@@ -2,7 +2,16 @@
 
 ## 概述
 
-基于 React 19 + HeroUI v3 (Alpha) 构建的 DrawIO 编辑器界面组件，采用复合组件模式。
+基于 React 19 + HeroUI v3 (v3.0.0-beta.1) 构建的 DrawIO 编辑器界面组件，采用复合组件模式。
+
+### HeroUI v3 架构特性
+
+- **基于 React Aria Components**: 内置 WCAG 2.1 AA 可访问性合规
+- **复合组件模式**: 灵活组合、深度自定义
+- **语义化设计系统**: primary/secondary/tertiary 替代 solid/flat/bordered
+- **GPU 加速动画**: 原生 CSS 替代 Framer Motion
+- **树摇优化**: 仅打包使用的组件
+- **完全类型安全**: TypeScript + IntelliSense 全覆盖
 
 ## 核心组件
 
@@ -268,11 +277,18 @@ interface UnifiedSidebarProps {
 
 #### 特性
 
+- **多面板 Tab 切换**: 支持文件设置、LLM 设置、版本管理设置三个面板
 - **无标题栏设计**: 删除顶部标题和关闭按钮
-- **底部操作条**: 有修改时底部整条不透明操作栏展示“取消/保存”，保持上下文不遮挡
+- **底部操作条**: 有修改时底部整条不透明操作栏展示"取消/保存"，保持上下文不遮挡
 - **自动检测修改**: 对比当前值与已保存值
 - **供应商选择**: 支持 OpenAI Responses、Chat Completions 与 DeepSeek 兼容接口切换
 - **扁平化设计**: 无分隔线，简化视觉
+
+#### 子面板组件
+
+- **FileSettingsPanel**: 文件保存路径设置
+- **LLMSettingsPanel**: LLM 提供商、API 配置、系统提示词
+- **VersionSettingsPanel**: AI 编辑自动版本快照策略
 
 #### Props
 
@@ -283,6 +299,29 @@ interface SettingsSidebarProps {
   onSettingsChange?: (settings: { defaultPath: string }) => void; // 设置变更
 }
 ```
+
+#### VersionSettingsPanel.tsx - 版本管理设置面板
+
+**AI 自动版本配置** - 为设置侧栏提供自动版本快照开关
+
+##### Props
+
+```typescript
+interface VersionSettingsPanelProps {
+  settings: {
+    autoVersionOnAIEdit: boolean;
+  };
+  onChange: (settings: { autoVersionOnAIEdit: boolean }) => void;
+}
+```
+
+##### 特性
+
+- **HeroUI Switch**: 复合结构 `Switch.Control` + `Switch.Thumb` + `Label`，保持一致的交互可达性
+- **受控模式**: `isSelected` 绑定 `settings.autoVersionOnAIEdit`，`onValueChange` 直接透传更新
+- **描述信息**: `Description` 展示“AI 批量编辑或覆写 XML 前自动创建子版本快照”提示
+- **布局规范**: 容器 `settings-panel flex flex-col gap-6`，单项 `flex flex-col gap-2`，延续 File/LLM 面板的间距体系
+- **父级集成**: 不直接访问 `useStorageSettings`，由 `SettingsSidebar` 将存储值与回调传入
 
 ### 5. ChatSidebar.tsx
 
@@ -343,7 +382,41 @@ interface ChatSidebarProps {
 
 所有组件通过 `app/components/chat/index.ts` 统一导出，提供清晰的导入接口。
 
-### 6. TopBar.tsx
+### 6. ThemeToggle.tsx
+
+**主题切换组件** - 深色/浅色模式切换按钮
+
+#### 特性
+
+- **图标切换**: 太阳图标（浅色）/ 月亮图标（深色）
+- **持久化**: localStorage 保存主题偏好
+- **系统检测**: 自动检测系统主题（`prefers-color-scheme`）
+- **平滑动画**: 300ms 过渡动画
+- **无闪烁**: 服务端渲染时避免主题闪烁
+
+#### Props
+
+```typescript
+// 无 props - 组件自管理状态
+```
+
+#### 使用示例
+
+```typescript
+import { ThemeToggle } from "@/components/ThemeToggle";
+
+<ThemeToggle />
+```
+
+#### 实现细节
+
+- `mounted` 状态避免 hydration 不匹配
+- 监听系统主题变化（仅在未手动设置时跟随）
+- 切换时同步更新 `html.classList` 和 `data-theme` 属性
+- 浅色模式：`class="light" data-theme="drawio2go"`
+- 深色模式：`class="dark" data-theme="drawio2go-dark"`
+
+### 7. TopBar.tsx
 
 **顶部操作栏** - 紧凑信息 + 操作汇聚区
 
@@ -365,7 +438,7 @@ interface TopBarProps {
 
 - 左侧选区徽章实时渲染 `selectionLabel`，超长文本自动省略并带 Tooltip
 - 工程按钮居中占据剩余空间，采用 HeroUI `Button`（variant secondary）+ 文件夹图标
-- 右侧包含加载/保存按钮 + 仅图标按钮（PanelRightOpen/Close）切换统一侧栏
+- 右侧包含：加载/保存按钮 + 主题切换按钮（`ThemeToggle`）+ 侧栏切换按钮（PanelRightOpen/Close）
 - 顶栏高度控制在 `var(--top-bar-height)`，使用 Material 扁平边框，滚动时 `position: sticky`
 - **Electron 环境**: 选区文本实时显示 `选中了X个对象`
 - **浏览器环境**: 安全限制下固定文案 `网页无法使用该功能`
@@ -398,28 +471,134 @@ interface ProjectSelectorProps {
 
 ## HeroUI v3 使用规范
 
-### 复合组件模式
+### 复合组件模式（Composition Over Configuration）
 
-- ✅ 使用 `Card.Root`, `Card.Header`, `Card.Content` 等
-- ❌ 不使用扁平化 props 如 `Card title="..."`
-
-### 事件处理
-
-- ✅ 使用 `onPress` 代替 `onClick`
-- ✅ 带交互的组件必须添加 `"use client"`
-
-### Tooltip 组件
+✅ **使用复合组件结构**：
 
 ```typescript
-<TooltipRoot>
-  <Button>...</Button>
-  <TooltipContent>提示内容</TooltipContent>
-</TooltipRoot>
+// Dot notation（推荐）
+<Card.Root>
+  <Card.Header>标题</Card.Header>
+  <Card.Content>内容</Card.Content>
+</Card.Root>
+
+// Named exports（同样支持）
+import { Card, CardHeader, CardContent } from '@heroui/react';
+<Card>
+  <CardHeader>标题</CardHeader>
+  <CardContent>内容</CardContent>
+</Card>
+```
+
+❌ **避免扁平化 props**（v2 风格）：
+
+```typescript
+// 不要这样使用
+<Card title="标题">内容</Card>
+```
+
+### 语义化变量（Semantic Intent）
+
+✅ **使用语义化 variants**：
+
+```typescript
+<Button variant="primary">保存</Button>      // 主要操作
+<Button variant="secondary">编辑</Button>    // 备选操作
+<Button variant="tertiary">取消</Button>     // 消极操作
+<Button variant="danger">删除</Button>       // 破坏性操作
+```
+
+❌ **避免视觉描述**（v2 风格）：
+
+```typescript
+// 不要使用这些
+<Button variant="solid">...</Button>
+<Button variant="flat">...</Button>
+<Button variant="bordered">...</Button>
+```
+
+**Variant 使用指南**：
+
+| Variant     | 用途                   | 使用场景                            |
+| ----------- | ---------------------- | ----------------------------------- |
+| `primary`   | 主要操作，推动流程前进 | 每个上下文 1 个（保存、提交、确认） |
+| `secondary` | 备选操作               | 可多个（编辑、查看、导出）          |
+| `tertiary`  | 消极操作               | 取消、跳过、返回                    |
+| `danger`    | 破坏性操作             | 删除、重置、清空                    |
+
+### 事件处理（React Aria 规范）
+
+✅ **使用 React Aria 事件名称**：
+
+```typescript
+<Button onPress={() => {}} />        // ✅ 替代 onClick
+<Switch isDisabled />                 // ✅ 替代 disabled
+<Checkbox isSelected />               // ✅ 替代 checked
+```
+
+❌ **避免原生 DOM 事件名**：
+
+```typescript
+<Button onClick={() => {}} />        // ❌ 不推荐
+<Switch disabled />                  // ❌ 不推荐
+<Checkbox checked />                 // ❌ 不推荐
+```
+
+### Tooltip 组件（复合模式）
+
+```typescript
+import { Tooltip } from '@heroui/react';
+
+<Tooltip.Root>
+  <Button>悬停查看提示</Button>
+  <Tooltip.Content>这是提示内容</Tooltip.Content>
+</Tooltip.Root>
+```
+
+### 客户端指令要求
+
+所有包含用户交互的组件必须添加：
+
+```typescript
+"use client";
+
+export function InteractiveComponent() {
+  return <Button onPress={() => {}}>点击</Button>;
+}
 ```
 
 ### 无 Provider 要求
 
-HeroUI v3 不需要全局 Provider 包裹，直接使用即可。
+HeroUI v3 不需要全局 Provider 包裹，直接导入使用即可：
+
+```typescript
+// ❌ v2 需要 Provider
+<HeroUIProvider>
+  <App />
+</HeroUIProvider>
+
+// ✅ v3 直接使用
+import { Button } from '@heroui/react';
+<Button>点击</Button>
+```
+
+### 可用组件列表（v3.0.0-beta.1）
+
+**布局与容器**：Card, Surface, Separator, Fieldset
+
+**表单控件**：Button, Input, TextArea, TextField, Checkbox, CheckboxGroup, RadioGroup, Select, Switch, Slider, InputOTP
+
+**反馈组件**：Alert, Spinner, Skeleton, Tooltip, Popover
+
+**导航组件**：Tabs, Link, ListBox
+
+**数据展示**：Avatar, Chip, Kbd, Label, Description
+
+**交互组件**：Accordion, Disclosure, DisclosureGroup, CloseButton
+
+**表单辅助**：Form, FieldError
+
+> **注意**: 34个组件均可用，部分 v2 组件可能在 v3 beta 中尚未提供。v3 正在积极开发中。
 
 ## 样式主题
 

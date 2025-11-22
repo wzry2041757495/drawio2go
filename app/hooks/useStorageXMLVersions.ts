@@ -28,6 +28,7 @@ import {
   getParentVersion,
   isSubVersion,
 } from "@/app/lib/version-utils";
+import { normalizeDiagramXml } from "@/app/lib/drawio-xml-utils";
 
 /**
  * XML 版本管理 Hook
@@ -88,16 +89,17 @@ export function useStorageXMLVersions() {
       setError(null);
 
       try {
+        const normalizedXml = normalizeDiagramXml(xml);
         const storage = await getStorage();
-        const pageMetadata = buildPageMetadataFromXml(xml);
+        const pageMetadata = buildPageMetadataFromXml(normalizedXml);
         const pageNamesJson = JSON.stringify(pageMetadata.pageNames);
 
         // 始终保存到 WIP 版本
         const payload = await computeVersionPayload({
-          newXml: xml,
+          newXml: normalizedXml,
           semanticVersion: WIP_VERSION,
-          latestVersion: null, // WIP 不依赖 latestVersion
-          resolveVersionById: (id) => storage.getXMLVersion(id),
+          baseVersion: null, // WIP 不依赖基线版本
+          resolveVersionById: (id) => storage.getXMLVersion(id, projectUuid),
         });
 
         if (!payload) {
@@ -203,9 +205,9 @@ export function useStorageXMLVersions() {
         const latest = wipVersion || versions[0];
         setLoading(false);
         const resolved = await materializeVersionXml(latest, (id) =>
-          storage.getXMLVersion(id),
+          storage.getXMLVersion(id, projectUuid),
         );
-        return resolved;
+        return normalizeDiagramXml(resolved);
       } catch (err) {
         const error = err as Error;
         setError(error);
@@ -272,13 +274,22 @@ export function useStorageXMLVersions() {
    * 获取指定版本
    */
   const getXMLVersion = useCallback(
-    async (id: string): Promise<XMLVersion | null> => {
+    async (id: string, projectUuid?: string): Promise<XMLVersion | null> => {
       setLoading(true);
       setError(null);
 
       try {
         const storage = await getStorage();
-        const version = await storage.getXMLVersion(id);
+        const resolvedProjectUuid =
+          projectUuid ?? versionsCacheRef.current?.projectUuid;
+
+        if (!resolvedProjectUuid) {
+          throw new Error(
+            "安全错误：未提供项目 ID，无法获取指定版本以避免跨项目数据泄露",
+          );
+        }
+
+        const version = await storage.getXMLVersion(id, resolvedProjectUuid);
         setLoading(false);
         return version;
       } catch (err) {
@@ -292,7 +303,10 @@ export function useStorageXMLVersions() {
   );
 
   const getXMLVersionSVGData = useCallback(
-    async (id: string): Promise<XMLVersionSVGData | null> => {
+    async (
+      id: string,
+      projectUuid?: string,
+    ): Promise<XMLVersionSVGData | null> => {
       const cached = svgCacheRef.current.get(id);
       if (cached) {
         // 命中后移到队尾，维持 LRU 顺序
@@ -303,7 +317,17 @@ export function useStorageXMLVersions() {
 
       try {
         const storage = await getStorage();
-        const svgData = await storage.getXMLVersionSVGData(id);
+        const resolvedProjectUuid =
+          projectUuid ?? versionsCacheRef.current?.projectUuid;
+        if (!resolvedProjectUuid) {
+          throw new Error(
+            "安全错误：未提供项目 ID，无法获取版本 SVG 数据以避免跨项目数据泄露",
+          );
+        }
+        const svgData = await storage.getXMLVersionSVGData(
+          id,
+          resolvedProjectUuid,
+        );
         if (svgData) {
           svgCacheRef.current.set(id, svgData);
           if (svgCacheRef.current.size > MAX_SVG_CACHE_SIZE) {
@@ -329,7 +353,10 @@ export function useStorageXMLVersions() {
   const loadVersionSVGFields = useCallback(
     async (version: XMLVersion): Promise<XMLVersion> => {
       if (version.preview_svg || version.pages_svg) return version;
-      const svgData = await getXMLVersionSVGData(version.id);
+      const svgData = await getXMLVersionSVGData(
+        version.id,
+        version.project_uuid,
+      );
       if (!svgData) return version;
       return { ...version, ...svgData } as XMLVersion;
     },
@@ -385,18 +412,40 @@ export function useStorageXMLVersions() {
           );
         }
 
+        // 归一化（含 base64 解码与压缩内容解压），确保版本链使用统一形态
+        const normalizedWipXml = normalizeDiagramXml(wipXml);
+
         // 获取最后一个历史版本作为 source_version
         const historicalVersions = versions
           .filter((v) => v.semantic_version !== WIP_VERSION)
           .sort((a, b) => b.created_at - a.created_at);
-        const lastHistoricalVersion = historicalVersions[0];
+
+        const isChildVersion = isSubVersion(semanticVersion);
+        let baseVersion: XMLVersion | null = null;
+
+        if (isChildVersion) {
+          const parentVersion = getParentVersion(semanticVersion);
+          const parentVersionEntity = historicalVersions.find(
+            (v) => v.semantic_version === parentVersion,
+          );
+
+          if (!parentVersionEntity) {
+            throw new Error(
+              `无法创建子版本 ${semanticVersion}：父版本 ${parentVersion} 不存在。请先创建主版本或刷新版本列表。`,
+            );
+          }
+
+          baseVersion = parentVersionEntity;
+        } else {
+          baseVersion = historicalVersions[0] ?? null;
+        }
 
         // 计算新版本的存储策略（关键帧 or Diff）
         const payload = await computeVersionPayload({
-          newXml: wipXml,
+          newXml: normalizedWipXml,
           semanticVersion,
-          latestVersion: lastHistoricalVersion ?? null,
-          resolveVersionById: (id) => storage.getXMLVersion(id),
+          baseVersion,
+          resolveVersionById: (id) => storage.getXMLVersion(id, projectUuid),
         });
 
         if (!payload) {
@@ -404,7 +453,7 @@ export function useStorageXMLVersions() {
         }
 
         // 默认的页面元数据（从 XML 解析）
-        const pageMetadata = buildPageMetadataFromXml(wipXml);
+        const pageMetadata = buildPageMetadataFromXml(normalizedWipXml);
 
         // 导出 SVG（可选，失败则降级为仅 XML 存储）
         let previewSvg: Blob | undefined;
@@ -416,7 +465,7 @@ export function useStorageXMLVersions() {
           try {
             const svgPages = await exportAllPagesSVG(
               editorRef.current,
-              wipXml,
+              normalizedWipXml,
               {
                 onProgress: options?.onExportProgress,
               },
@@ -511,14 +560,29 @@ export function useStorageXMLVersions() {
         const storage = await getStorage();
 
         // 获取目标版本
-        const targetVersion = await storage.getXMLVersion(versionId);
+        const targetVersion = await storage.getXMLVersion(
+          versionId,
+          projectUuid,
+        );
         if (!targetVersion) {
           throw new Error("目标版本不存在");
         }
 
+        if (targetVersion.project_uuid !== projectUuid) {
+          const message =
+            `安全错误：版本 ${versionId} 不属于当前项目 ${projectUuid}。` +
+            `该版本属于项目 ${targetVersion.project_uuid}，无法回滚。`;
+          console.error("[rollbackToVersion] 拒绝跨项目回滚", {
+            versionId,
+            requestedProject: projectUuid,
+            versionProject: targetVersion.project_uuid,
+          });
+          throw new Error(message);
+        }
+
         // 恢复目标版本的完整 XML
         const targetXml = await materializeVersionXml(targetVersion, (id) =>
-          storage.getXMLVersion(id),
+          storage.getXMLVersion(id, projectUuid),
         );
 
         // 将目标版本的内容写入 WIP

@@ -103,15 +103,21 @@ declare global {
       getAllProjects: () => Promise<Project[]>;
 
       // XMLVersions
-      getXMLVersion: (id: string) => Promise<XMLVersion | null>;
+      getXMLVersion: (
+        id: string,
+        projectUuid?: string,
+      ) => Promise<XMLVersion | null>;
       createXMLVersion: (version: CreateXMLVersionInput) => Promise<XMLVersion>;
       getXMLVersionsByProject: (projectUuid: string) => Promise<XMLVersion[]>;
-      getXMLVersionSVGData: (id: string) => Promise<XMLVersionSVGData | null>;
+      getXMLVersionSVGData: (
+        id: string,
+        projectUuid?: string,
+      ) => Promise<XMLVersionSVGData | null>;
       updateXMLVersion: (
         id: string,
         updates: Partial<Omit<XMLVersion, "id">>,
       ) => Promise<void>;
-      deleteXMLVersion: (id: string) => Promise<void>;
+      deleteXMLVersion: (id: string, projectUuid?: string) => Promise<void>;
 
       // Conversations
       getConversation: (id: string) => Promise<Conversation | null>;
@@ -123,6 +129,8 @@ declare global {
         updates: UpdateConversationInput,
       ) => Promise<void>;
       deleteConversation: (id: string) => Promise<void>;
+      batchDeleteConversations: (ids: string[]) => Promise<void>;
+      exportConversations: (ids: string[]) => Promise<string>;
       getConversationsByProject: (
         projectUuid: string,
       ) => Promise<Conversation[]>;
@@ -146,5 +154,7 @@ declare module "xpath" {
     node: Node | Document,
   ): XPathValue | XPathValue[];
 }
+
+declare module "pako";
 
 export {};

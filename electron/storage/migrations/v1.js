@@ -1,3 +1,14 @@
+/**
+ * SQLite v1 迁移
+ *
+ * 包含完整的表结构：
+ * - settings: 应用设置
+ * - projects: 项目信息
+ * - xml_versions: XML 版本管理
+ * - conversations: 聊天会话
+ * - messages: 聊天消息（含 sequence_number 字段）
+ * - conversation_sequences: 会话序列号追踪
+ */
 function applySQLiteV1Migration(db) {
   // Settings
   db.exec(`
@@ -78,6 +89,7 @@ function applySQLiteV1Migration(db) {
       tool_invocations TEXT,
       model_name TEXT,
       xml_version_id TEXT,
+      sequence_number INTEGER,
       created_at INTEGER NOT NULL,
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
       FOREIGN KEY (xml_version_id) REFERENCES xml_versions(id) ON DELETE SET NULL
@@ -90,6 +102,20 @@ function applySQLiteV1Migration(db) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_xml_version
     ON messages(xml_version_id)
+  `);
+  // 消息序列号复合索引（用于按序查询）
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence
+    ON messages(conversation_id, sequence_number)
+  `);
+
+  // 会话序列号追踪表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_sequences (
+      conversation_id TEXT PRIMARY KEY,
+      last_sequence INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    )
   `);
 }
 

@@ -1,7 +1,7 @@
 import type { IDBPDatabase, IDBPTransaction } from "idb";
 import { applyIndexedDbV1Migration } from "./v1";
 
-export function runIndexedDbMigrations(
+export async function runIndexedDbMigrations(
   db: IDBPDatabase<unknown>,
   oldVersion: number,
   newVersion: number | null,

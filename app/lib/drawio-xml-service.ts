@@ -2,6 +2,7 @@ import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { select } from "xpath";
 
 import { executeToolOnClient } from "./tool-executor";
+import { normalizeDiagramXml } from "./drawio-xml-utils";
 import type {
   DrawioEditBatchRequest,
   DrawioEditBatchResult,
@@ -17,8 +18,6 @@ import type {
   RemoveElementOperation,
 } from "@/app/types/drawio-tools";
 import type { GetXMLResult, ReplaceXMLResult } from "@/app/types/drawio-tools";
-
-const BASE64_PREFIX = "data:image/svg+xml;base64,";
 
 export async function executeDrawioRead(
   xpathExpression?: string,
@@ -114,8 +113,8 @@ export async function executeDrawioEditBatch(
 
   const replaceResult = (await executeToolOnClient(
     "replace_drawio_xml",
-    { drawio_xml: updatedXml },
-    30000,
+    { drawio_xml: updatedXml, _originalTool: "drawio_edit_batch" },
+    60000,
   )) as ReplaceXMLResult;
 
   if (!replaceResult?.success) {
@@ -141,34 +140,7 @@ async function fetchDiagramXml(): Promise<string> {
     throw new Error(response?.error || "无法获取当前 DrawIO XML");
   }
 
-  return decodeDiagramXml(response.xml);
-}
-
-function decodeDiagramXml(payload: string): string {
-  const trimmed = payload.trim();
-
-  if (trimmed.startsWith("<")) {
-    return trimmed;
-  }
-
-  let base64Content = trimmed;
-  if (trimmed.startsWith(BASE64_PREFIX)) {
-    base64Content = trimmed.slice(BASE64_PREFIX.length);
-  }
-
-  try {
-    const decoded = Buffer.from(base64Content, "base64").toString("utf-8");
-    if (!decoded.trim().startsWith("<")) {
-      throw new Error("解码结果不是合法的 XML");
-    }
-    return decoded;
-  } catch (error) {
-    throw new Error(
-      error instanceof Error
-        ? `Base64 解码失败: ${error.message}`
-        : "Base64 解码失败",
-    );
-  }
+  return normalizeDiagramXml(response.xml);
 }
 
 function parseXml(xml: string): Document {

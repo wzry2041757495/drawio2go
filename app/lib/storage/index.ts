@@ -46,6 +46,7 @@ export type {
   MessageRole,
   CreateMessageInput,
   PreviewImageData,
+  ConversationExportItem,
 } from "./types";
 
 // ==================== 常量 ====================

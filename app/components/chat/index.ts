@@ -17,6 +17,10 @@ export { default as ChatInputArea } from "./ChatInputArea";
 export { default as ChatInputActions } from "./ChatInputActions";
 export { default as ToolCallCard } from "./ToolCallCard";
 export { default as ThinkingBlock } from "./ThinkingBlock";
+export { default as ChatHistoryView } from "./ChatHistoryView";
+export { default as HistoryToolbar } from "./HistoryToolbar";
+export { default as ConversationList } from "./ConversationList";
+export { default as MessagePreviewPanel } from "./MessagePreviewPanel";
 
 // 常量
 export * from "./constants/toolConstants";

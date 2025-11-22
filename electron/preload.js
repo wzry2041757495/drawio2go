@@ -48,16 +48,18 @@ contextBridge.exposeInMainWorld("electronStorage", {
   getAllProjects: () => ipcRenderer.invoke("storage:getAllProjects"),
 
   // XMLVersions
-  getXMLVersion: (id) => ipcRenderer.invoke("storage:getXMLVersion", id),
+  getXMLVersion: (id, projectUuid) =>
+    ipcRenderer.invoke("storage:getXMLVersion", id, projectUuid),
   createXMLVersion: (version) =>
     ipcRenderer.invoke("storage:createXMLVersion", version),
   getXMLVersionsByProject: (projectUuid) =>
     ipcRenderer.invoke("storage:getXMLVersionsByProject", projectUuid),
-  getXMLVersionSVGData: (id) =>
-    ipcRenderer.invoke("storage:getXMLVersionSVGData", id),
+  getXMLVersionSVGData: (id, projectUuid) =>
+    ipcRenderer.invoke("storage:getXMLVersionSVGData", id, projectUuid),
   updateXMLVersion: (id, updates) =>
     ipcRenderer.invoke("storage:updateXMLVersion", id, updates),
-  deleteXMLVersion: (id) => ipcRenderer.invoke("storage:deleteXMLVersion", id),
+  deleteXMLVersion: (id, projectUuid) =>
+    ipcRenderer.invoke("storage:deleteXMLVersion", id, projectUuid),
 
   // Conversations
   getConversation: (id) => ipcRenderer.invoke("storage:getConversation", id),
@@ -67,6 +69,10 @@ contextBridge.exposeInMainWorld("electronStorage", {
     ipcRenderer.invoke("storage:updateConversation", id, updates),
   deleteConversation: (id) =>
     ipcRenderer.invoke("storage:deleteConversation", id),
+  batchDeleteConversations: (ids) =>
+    ipcRenderer.invoke("storage:batchDeleteConversations", ids),
+  exportConversations: (ids) =>
+    ipcRenderer.invoke("storage:exportConversations", ids),
   getConversationsByProject: (projectUuid) =>
     ipcRenderer.invoke("storage:getConversationsByProject", projectUuid),
 

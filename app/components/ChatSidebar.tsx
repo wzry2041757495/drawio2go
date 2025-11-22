@@ -26,12 +26,13 @@ import type {
   CreateMessageInput,
 } from "@/app/lib/storage";
 import { DEFAULT_LLM_CONFIG, normalizeLLMConfig } from "@/app/lib/config-utils";
+import { debounce, type DebouncedFunction } from "@/app/lib/utils";
 
 // 导入拆分后的组件
 import ChatSessionHeader from "./chat/ChatSessionHeader";
-import ChatSessionMenu from "./chat/ChatSessionMenu";
 import MessageList from "./chat/MessageList";
 import ChatInputArea from "./chat/ChatInputArea";
+import ChatHistoryView from "./chat/ChatHistoryView";
 
 // 导入工具函数和常量
 import {
@@ -127,6 +128,8 @@ function convertUIMessageToCreateInput(
       : undefined;
 
   const metadata = (uiMsg.metadata as MessageMetadata | undefined) ?? {};
+  const createdAt =
+    typeof metadata.createdAt === "number" ? metadata.createdAt : undefined;
 
   return {
     id: uiMsg.id,
@@ -136,6 +139,7 @@ function convertUIMessageToCreateInput(
     tool_invocations,
     model_name: metadata.modelName ?? null,
     xml_version_id: xmlVersionId,
+    created_at: createdAt,
   };
 }
 
@@ -155,6 +159,30 @@ function generateTitle(messages: ChatUIMessage[]): string {
   return text.trim().slice(0, 30) || "新对话";
 }
 
+function fingerprintMessage(message: ChatUIMessage): string {
+  return JSON.stringify({
+    id: message.id,
+    role: message.role,
+    parts: message.parts,
+    metadata: message.metadata,
+  });
+}
+
+function getChangedMessages(
+  previous: ChatUIMessage[] = [],
+  next: ChatUIMessage[] = [],
+): ChatUIMessage[] {
+  const previousFingerprints = new Map(
+    previous.map((msg) => [msg.id, fingerprintMessage(msg)]),
+  );
+
+  return next.filter((msg) => {
+    const nextFingerprint = fingerprintMessage(msg);
+    const prevFingerprint = previousFingerprints.get(msg.id);
+    return !prevFingerprint || prevFingerprint !== nextFingerprint;
+  });
+}
+
 // ========== 主组件 ==========
 
 export default function ChatSidebar({
@@ -168,7 +196,7 @@ export default function ChatSidebar({
   const [expandedThinkingBlocks, setExpandedThinkingBlocks] = useState<
     Record<string, boolean>
   >({});
-  const [showSessionMenu, setShowSessionMenu] = useState(false);
+  const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ========== 存储 Hooks ==========
@@ -179,6 +207,8 @@ export default function ChatSidebar({
     getAllConversations,
     updateConversation,
     deleteConversation: deleteConversationFromStorage,
+    batchDeleteConversations,
+    exportConversations,
     getMessages,
     addMessages,
     error: conversationsError,
@@ -199,9 +229,19 @@ export default function ChatSidebar({
   const [defaultXmlVersionId, setDefaultXmlVersionId] = useState<string | null>(
     null,
   );
+  type SavePayload = { conversationId: string; messages: ChatUIMessage[] };
+  const conversationMessagesRef = useRef<Record<string, ChatUIMessage[]>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // 使用 ref 来跟踪发送消息时的会话ID
   const sendingSessionIdRef = useRef<string | null>(null);
+  const lastSavedMessagesRef = useRef<Record<string, ChatUIMessage[]>>({});
+  const previousConversationIdRef = useRef<string | null>(null);
+  const pendingSavePayloadRef = useRef<SavePayload | null>(null);
+  const debouncedSaveRef = useRef<DebouncedFunction<[SavePayload]> | null>(
+    null,
+  );
 
   // 追踪正在创建的对话 Promise（用于异步创建对话时的同步）
   const creatingConversationPromiseRef = useRef<{
@@ -221,35 +261,36 @@ export default function ChatSidebar({
   }, [activeConversationId, conversationMessages]);
 
   // 为 ChatSessionMenu 构造兼容的数据格式
-  const sessionsData = useMemo(() => {
-    if (conversations.length === 0 || !activeConversationId) return null;
+  const fallbackModelName = useMemo(
+    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
+    [llmConfig],
+  );
 
-    const sessionsMap: Record<
-      string,
-      {
-        id: string;
-        title: string;
-        messages: ChatUIMessage[];
-        createdAt: number;
-        updatedAt: number;
-      }
-    > = {};
-    conversations.forEach((conv) => {
-      sessionsMap[conv.id] = {
-        id: conv.id,
-        title: conv.title,
-        messages: conversationMessages[conv.id] || [],
-        createdAt: conv.created_at,
-        updatedAt: conv.updated_at,
+  const ensureMessageMetadata = useCallback(
+    (message: ChatUIMessage): ChatUIMessage => {
+      const metadata = (message.metadata as MessageMetadata | undefined) ?? {};
+      const resolvedMetadata: MessageMetadata = {
+        modelName: metadata.modelName ?? fallbackModelName,
+        createdAt: metadata.createdAt ?? Date.now(),
       };
-    });
 
-    return {
-      sessions: sessionsMap,
-      activeSessionId: activeConversationId,
-      sessionOrder: conversations.map((c) => c.id),
-    };
-  }, [conversations, activeConversationId, conversationMessages]);
+      if (
+        metadata.modelName === resolvedMetadata.modelName &&
+        metadata.createdAt === resolvedMetadata.createdAt
+      ) {
+        return message;
+      }
+
+      return {
+        ...message,
+        metadata: {
+          ...metadata,
+          ...resolvedMetadata,
+        },
+      };
+    },
+    [fallbackModelName],
+  );
 
   // ========== 初始化 ==========
   useEffect(() => {
@@ -295,6 +336,7 @@ export default function ChatSidebar({
           setConversations([newConv]);
           setActiveConversationId(newConv.id);
           setConversationMessages({ [newConv.id]: [] });
+          lastSavedMessagesRef.current = { [newConv.id]: [] };
         } else {
           // 激活最新的对话
           const latestConv = allConversations[0];
@@ -304,9 +346,13 @@ export default function ChatSidebar({
           const messagesMap: Record<string, ChatUIMessage[]> = {};
           for (const conv of allConversations) {
             const messages = await getMessages(conv.id);
-            messagesMap[conv.id] = messages.map(convertMessageToUIMessage);
+            const normalizedMessages = messages
+              .map(convertMessageToUIMessage)
+              .map(ensureMessageMetadata);
+            messagesMap[conv.id] = normalizedMessages;
           }
           setConversationMessages(messagesMap);
+          lastSavedMessagesRef.current = { ...messagesMap };
         }
       } catch (error) {
         console.error("[ChatSidebar] 初始化失败:", error);
@@ -325,37 +371,143 @@ export default function ChatSidebar({
     createConversation,
     saveXML,
     currentProjectId,
+    ensureMessageMetadata,
   ]);
 
-  const fallbackModelName = useMemo(
-    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
-    [llmConfig],
-  );
+  const saveMessagesToStorage = useCallback(
+    async (
+      conversationId: string,
+      uiMessages: ChatUIMessage[],
+      options?: { force?: boolean },
+    ) => {
+      if (!conversationId) return;
 
-  const ensureMessageMetadata = useCallback(
-    (message: ChatUIMessage): ChatUIMessage => {
-      const metadata = (message.metadata as MessageMetadata | undefined) ?? {};
-      const resolvedMetadata: MessageMetadata = {
-        modelName: metadata.modelName ?? fallbackModelName,
-        createdAt: metadata.createdAt ?? Date.now(),
-      };
+      setSaveError(null);
+
+      let resolvedConversationId = conversationId;
 
       if (
-        metadata.modelName === resolvedMetadata.modelName &&
-        metadata.createdAt === resolvedMetadata.createdAt
+        resolvedConversationId.startsWith("temp-") &&
+        creatingConversationPromiseRef.current &&
+        creatingConversationPromiseRef.current.conversationId ===
+          resolvedConversationId
       ) {
-        return message;
+        try {
+          const created = await creatingConversationPromiseRef.current.promise;
+          resolvedConversationId = created.id;
+          setActiveConversationId(created.id);
+        } catch (error) {
+          console.error("[ChatSidebar] 保存前等待对话创建失败:", error);
+          return;
+        }
       }
 
-      return {
-        ...message,
-        metadata: {
-          ...metadata,
-          ...resolvedMetadata,
-        },
-      };
+      const normalizedMessages = uiMessages.map(ensureMessageMetadata);
+
+      const previousMessages =
+        lastSavedMessagesRef.current[resolvedConversationId] ??
+        conversationMessagesRef.current[resolvedConversationId] ??
+        [];
+
+      const changedMessages = getChangedMessages(
+        previousMessages,
+        normalizedMessages,
+      );
+
+      if (changedMessages.length === 0) {
+        const nextTitle = generateTitle(normalizedMessages);
+
+        if (options?.force) {
+          try {
+            await updateConversation(resolvedConversationId, {
+              title: nextTitle,
+            });
+            setConversations((prev) =>
+              prev.map((conv) =>
+                conv.id === resolvedConversationId
+                  ? { ...conv, title: nextTitle, updated_at: Date.now() }
+                  : conv,
+              ),
+            );
+          } catch (error) {
+            console.error("[ChatSidebar] 强制更新对话标题失败:", error);
+          }
+        }
+
+        if (!lastSavedMessagesRef.current[resolvedConversationId]) {
+          lastSavedMessagesRef.current[resolvedConversationId] =
+            normalizedMessages;
+        }
+        return;
+      }
+
+      const messagesToPersist = changedMessages.map((msg) =>
+        convertUIMessageToCreateInput(
+          msg,
+          resolvedConversationId,
+          defaultXmlVersionId ?? undefined,
+        ),
+      );
+
+      setIsSaving(true);
+      setSaveError(null);
+
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+        try {
+          await addMessages(messagesToPersist);
+
+          const nextTitle = generateTitle(normalizedMessages);
+          await updateConversation(resolvedConversationId, {
+            title: nextTitle,
+          });
+
+          setConversationMessages((prev) => ({
+            ...prev,
+            [resolvedConversationId]: normalizedMessages,
+          }));
+
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === resolvedConversationId
+                ? { ...conv, title: nextTitle, updated_at: Date.now() }
+                : conv,
+            ),
+          );
+
+          lastSavedMessagesRef.current = {
+            ...lastSavedMessagesRef.current,
+            [resolvedConversationId]: normalizedMessages,
+          };
+
+          setIsSaving(false);
+          setSaveError(null);
+          return;
+        } catch (error) {
+          console.error(
+            `[ChatSidebar] 保存消息失败（第 ${attempt} 次）:`,
+            error,
+          );
+
+          if (attempt >= maxRetries) {
+            setIsSaving(false);
+            const message =
+              error instanceof Error ? error.message : "消息保存失败";
+            setSaveError(message);
+            alert("消息自动保存失败，将在后台继续重试。请检查存储或网络状态。");
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+          }
+        }
+      }
     },
-    [fallbackModelName],
+    [
+      addMessages,
+      defaultXmlVersionId,
+      ensureMessageMetadata,
+      updateConversation,
+    ],
   );
 
   // ========== useChat 集成 ==========
@@ -369,7 +521,7 @@ export default function ChatSidebar({
     id: activeConversationId || "default",
     messages: initialMessages,
     onFinish: async ({ messages: finishedMessages }) => {
-      let targetSessionId = sendingSessionIdRef.current;
+      const targetSessionId = sendingSessionIdRef.current;
 
       if (!targetSessionId) {
         console.error("[ChatSidebar] onFinish: 没有记录的目标会话ID");
@@ -377,76 +529,9 @@ export default function ChatSidebar({
       }
 
       try {
-        // 如果对话正在异步创建中，等待创建完成
-        if (creatingConversationPromiseRef.current) {
-          const { promise, conversationId } =
-            creatingConversationPromiseRef.current;
-
-          if (conversationId === targetSessionId) {
-            console.log(
-              "[ChatSidebar] onFinish: 等待对话创建完成...",
-              targetSessionId,
-            );
-            try {
-              const newConv = await promise;
-              targetSessionId = newConv.id;
-              console.log(
-                "[ChatSidebar] onFinish: 对话创建已完成，真实ID:",
-                targetSessionId,
-              );
-            } catch (error) {
-              console.error("[ChatSidebar] onFinish: 等待对话创建失败:", error);
-              throw error;
-            } finally {
-              // 清理 ref
-              creatingConversationPromiseRef.current = null;
-            }
-          }
-        }
-
-        // 确保 targetSessionId 不为空（TypeScript 类型保护）
-        if (!targetSessionId) {
-          console.error("[ChatSidebar] onFinish: targetSessionId 为空");
-          return;
-        }
-
-        // 使用常量确保 TypeScript 类型推断
-        const finalSessionId: string = targetSessionId;
-
-        // 将 UIMessage[] 转换为 CreateMessageInput[]
-        const normalizedMessages = finishedMessages.map(ensureMessageMetadata);
-
-        const messagesToSave = normalizedMessages.map((msg) =>
-          convertUIMessageToCreateInput(
-            msg,
-            finalSessionId,
-            defaultXmlVersionId ?? undefined,
-          ),
-        );
-
-        // 批量保存到存储
-        await addMessages(messagesToSave);
-
-        // 更新本地缓存
-        setConversationMessages((prev) => ({
-          ...prev,
-          [finalSessionId]: normalizedMessages,
-        }));
-
-        // 更新对话标题
-        const title = generateTitle(normalizedMessages);
-        await updateConversation(finalSessionId, { title });
-
-        // 更新本地对话列表中的标题
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === finalSessionId
-              ? { ...conv, title, updated_at: Date.now() }
-              : conv,
-          ),
-        );
-
-        console.log("[ChatSidebar] 消息已保存到对话:", finalSessionId);
+        await saveMessagesToStorage(targetSessionId, finishedMessages, {
+          force: true,
+        });
       } catch (error) {
         console.error("[ChatSidebar] 保存消息失败:", error);
       } finally {
@@ -465,6 +550,62 @@ export default function ChatSidebar({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayMessages]);
+
+  useEffect(() => {
+    conversationMessagesRef.current = conversationMessages;
+  }, [conversationMessages]);
+
+  useEffect(() => {
+    const debouncedSave = debounce((payload: SavePayload) => {
+      pendingSavePayloadRef.current = payload;
+      void saveMessagesToStorage(payload.conversationId, payload.messages);
+    }, 1000);
+
+    debouncedSaveRef.current = debouncedSave;
+
+    return () => {
+      if (pendingSavePayloadRef.current) {
+        debouncedSave.flush();
+      } else {
+        debouncedSave.cancel();
+      }
+    };
+  }, [saveMessagesToStorage]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+
+    const normalizedMessages = displayMessages.map(ensureMessageMetadata);
+
+    setConversationMessages((prev) => ({
+      ...prev,
+      [activeConversationId]: normalizedMessages,
+    }));
+
+    const payload = {
+      conversationId: activeConversationId,
+      messages: normalizedMessages,
+    };
+
+    pendingSavePayloadRef.current = payload;
+    debouncedSaveRef.current?.(payload);
+  }, [activeConversationId, displayMessages, ensureMessageMetadata]);
+
+  useEffect(() => {
+    const previousId = previousConversationIdRef.current;
+
+    if (
+      previousId &&
+      previousId !== activeConversationId &&
+      pendingSavePayloadRef.current &&
+      pendingSavePayloadRef.current.conversationId === previousId
+    ) {
+      debouncedSaveRef.current?.flush();
+      pendingSavePayloadRef.current = null;
+    }
+
+    previousConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   // ========== 事件处理函数 ==========
 
@@ -495,6 +636,11 @@ export default function ChatSidebar({
           setConversations((prev) => [newConv, ...prev]);
           setActiveConversationId(newConv.id);
           setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
+          lastSavedMessagesRef.current = {
+            ...lastSavedMessagesRef.current,
+            [newConv.id]: [],
+          };
+          creatingConversationPromiseRef.current = null;
 
           return newConv;
         })
@@ -555,13 +701,17 @@ export default function ChatSidebar({
       setConversations((prev) => [newConv, ...prev]);
       setActiveConversationId(newConv.id);
       setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
+      lastSavedMessagesRef.current = {
+        ...lastSavedMessagesRef.current,
+        [newConv.id]: [],
+      };
     } catch (error) {
       console.error("[ChatSidebar] 创建新对话失败:", error);
     }
   }, [createConversation, currentProjectId]);
 
   const handleHistory = () => {
-    setShowSessionMenu(!showSessionMenu);
+    setCurrentView("history");
   };
 
   const handleDeleteSession = useCallback(async () => {
@@ -593,6 +743,11 @@ export default function ChatSidebar({
           delete newMessages[activeConversation.id];
           return newMessages;
         });
+        lastSavedMessagesRef.current = Object.fromEntries(
+          Object.entries(lastSavedMessagesRef.current).filter(
+            ([key]) => key !== activeConversation.id,
+          ),
+        );
       } catch (error) {
         console.error("[ChatSidebar] 删除对话失败:", error);
         alert("删除失败");
@@ -713,21 +868,118 @@ export default function ChatSidebar({
 
   const handleSessionSelect = async (sessionId: string) => {
     setActiveConversationId(sessionId);
-    setShowSessionMenu(false);
 
     // 如果消息尚未加载，立即加载
     if (!conversationMessages[sessionId]) {
       try {
         const messages = await getMessages(sessionId);
+        const normalizedMessages = messages
+          .map(convertMessageToUIMessage)
+          .map(ensureMessageMetadata);
         setConversationMessages((prev) => ({
           ...prev,
-          [sessionId]: messages.map(convertMessageToUIMessage),
+          [sessionId]: normalizedMessages,
         }));
+        lastSavedMessagesRef.current = {
+          ...lastSavedMessagesRef.current,
+          [sessionId]: normalizedMessages,
+        };
       } catch (error) {
         console.error("[ChatSidebar] 加载消息失败:", error);
       }
     }
   };
+
+  const handleHistoryBack = () => {
+    setCurrentView("chat");
+  };
+
+  const handleSelectFromHistory = async (sessionId: string) => {
+    await handleSessionSelect(sessionId);
+    setCurrentView("chat");
+  };
+
+  const handleBatchDelete = useCallback(
+    async (ids: string[]) => {
+      if (!ids || ids.length === 0) return;
+      const remaining = conversations.length - ids.length;
+      if (remaining <= 0) {
+        const confirmed = confirm("删除后将自动创建一个空会话，确定继续吗？");
+        if (!confirmed) return;
+      }
+
+      const deletingActive =
+        activeConversationId != null && ids.includes(activeConversationId);
+
+      try {
+        await batchDeleteConversations(ids);
+        const nextConversations = conversations.filter(
+          (conv) => !ids.includes(conv.id),
+        );
+        setConversations(nextConversations);
+        setConversationMessages((prev) => {
+          const next = { ...prev };
+          ids.forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+        lastSavedMessagesRef.current = Object.fromEntries(
+          Object.entries(lastSavedMessagesRef.current).filter(
+            ([id]) => !ids.includes(id),
+          ),
+        );
+
+        if (nextConversations.length === 0) {
+          const newConv = await createConversation("新对话", currentProjectId);
+          setConversations([newConv]);
+          setActiveConversationId(newConv.id);
+          setConversationMessages({ [newConv.id]: [] });
+          lastSavedMessagesRef.current = { [newConv.id]: [] };
+        } else if (deletingActive) {
+          setActiveConversationId(nextConversations[0].id);
+        }
+      } catch (error) {
+        console.error("[ChatSidebar] 批量删除对话失败:", error);
+        alert("批量删除失败，请稍后重试");
+      }
+    },
+    [
+      activeConversationId,
+      batchDeleteConversations,
+      conversations,
+      createConversation,
+      currentProjectId,
+    ],
+  );
+
+  const handleBatchExport = useCallback(
+    async (ids: string[]) => {
+      if (!ids || ids.length === 0) return;
+      try {
+        const blob = await exportConversations(ids);
+        const content = await blob.text();
+        const defaultPath = `chat-export-${new Date().toISOString().split("T")[0]}.json`;
+        const filePath = await showSaveDialog({
+          defaultPath,
+          filters: [{ name: "JSON 文件", extensions: ["json"] }],
+        });
+
+        if (filePath) {
+          const success = await writeFile(filePath, content);
+          if (!success) {
+            alert("导出失败，请重试");
+          }
+        } else {
+          downloadFile(content, defaultPath);
+        }
+      } catch (error) {
+        console.error("[ChatSidebar] 批量导出对话失败:", error);
+        alert("导出失败，请稍后重试");
+      }
+    },
+    [exportConversations],
+  );
 
   const handleToolCallToggle = (key: string) => {
     setExpandedToolCalls((prev) => ({
@@ -750,6 +1002,21 @@ export default function ChatSidebar({
     null;
   const showSocketWarning = !isSocketConnected;
 
+  if (currentView === "history") {
+    return (
+      <div className="chat-sidebar-content">
+        <ChatHistoryView
+          currentProjectId={currentProjectId}
+          conversations={conversations}
+          onSelectConversation={handleSelectFromHistory}
+          onBack={handleHistoryBack}
+          onDeleteConversations={handleBatchDelete}
+          onExportConversations={handleBatchExport}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="chat-sidebar-content">
       {/* 消息内容区域 - 无分隔线一体化设计 */}
@@ -767,20 +1034,13 @@ export default function ChatSidebar({
                 }
               : null
           }
-          showSessionMenu={showSessionMenu}
-          onHistoryToggle={handleHistory}
+          isSaving={isSaving}
+          saveError={saveError}
+          onHistoryClick={handleHistory}
           onDeleteSession={handleDeleteSession}
           onExportSession={handleExportSession}
           onExportAllSessions={handleExportAllSessions}
           onImportSessions={handleImportSessions}
-        />
-
-        {/* 会话选择菜单 */}
-        <ChatSessionMenu
-          showSessionMenu={showSessionMenu}
-          sessionsData={sessionsData}
-          activeSessionId={activeConversationId}
-          onSessionSelect={handleSessionSelect}
         />
 
         {showSocketWarning && (

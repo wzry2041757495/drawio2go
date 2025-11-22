@@ -25,6 +25,7 @@
 @import "./styles/components/chat.css" layer(components);
 @import "./styles/components/modal.css" layer(components);
 @import "./styles/components/sessions.css" layer(components);
+@import "./styles/components/history-view.css" layer(components);
 @import "./styles/components/version-animations.css" layer(components);
 @import "./styles/components/version-sidebar.css" layer(components);
 @import "./styles/components/version-timeline.css" layer(components);

@@ -152,47 +152,71 @@ export default function UnifiedSidebar({
         onPointerCancel={handlePointerUp}
       />
 
-      <Tabs
-        aria-label="侧栏导航"
-        selectedKey={activeTab}
-        onSelectionChange={handleTabSelection}
-        className="sidebar-tabs-shell"
-      >
-        <Tabs.ListContainer className="sidebar-tab-strip">
-          <Tabs.List aria-label="侧栏选项" className="sidebar-tab-list">
-            {TAB_ITEMS.map(({ key, label, Icon }) => (
-              <Tabs.Tab key={key} id={key} className="sidebar-tab-item">
-                <Icon size={16} />
-                <span>{label}</span>
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
-        </Tabs.ListContainer>
+      <div className="sidebar-tabs-shell">
+        <Tabs
+          aria-label="侧栏导航"
+          selectedKey={activeTab}
+          onSelectionChange={handleTabSelection}
+        >
+          <Tabs.ListContainer className="sidebar-tab-strip">
+            <Tabs.List aria-label="侧栏选项" className="sidebar-tab-list">
+              {TAB_ITEMS.map(({ key, label, Icon }) => (
+                <Tabs.Tab key={key} id={key} className="sidebar-tab-item">
+                  <Icon size={16} />
+                  <span>{label}</span>
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </Tabs.ListContainer>
+        </Tabs>
 
-        <Tabs.Panel id="chat" className="sidebar-panel">
-          <ChatSidebar
-            isOpen={true}
-            onClose={onClose}
-            currentProjectId={currentProjectId}
-          />
-        </Tabs.Panel>
+        <div className="sidebar-panels">
+          <div
+            id="chat-panel"
+            role="tabpanel"
+            aria-labelledby="chat"
+            aria-hidden={activeTab !== "chat"}
+            className="sidebar-panel"
+            style={{ display: activeTab === "chat" ? "block" : "none" }}
+          >
+            <ChatSidebar
+              isOpen={true}
+              onClose={onClose}
+              currentProjectId={currentProjectId}
+            />
+          </div>
 
-        <Tabs.Panel id="settings" className="sidebar-panel">
-          <SettingsSidebar
-            isOpen={true}
-            onClose={onClose}
-            onSettingsChange={onSettingsChange}
-          />
-        </Tabs.Panel>
+          <div
+            id="settings-panel"
+            role="tabpanel"
+            aria-labelledby="settings"
+            aria-hidden={activeTab !== "settings"}
+            className="sidebar-panel"
+            style={{ display: activeTab === "settings" ? "block" : "none" }}
+          >
+            <SettingsSidebar
+              isOpen={true}
+              onClose={onClose}
+              onSettingsChange={onSettingsChange}
+            />
+          </div>
 
-        <Tabs.Panel id="version" className="sidebar-panel">
-          <VersionSidebar
-            projectUuid={projectUuid || null}
-            onVersionRestore={onVersionRestore}
-            editorRef={editorRef}
-          />
-        </Tabs.Panel>
-      </Tabs>
+          <div
+            id="version-panel"
+            role="tabpanel"
+            aria-labelledby="version"
+            aria-hidden={activeTab !== "version"}
+            className="sidebar-panel"
+            style={{ display: activeTab === "version" ? "block" : "none" }}
+          >
+            <VersionSidebar
+              projectUuid={projectUuid || null}
+              onVersionRestore={onVersionRestore}
+              editorRef={editorRef}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

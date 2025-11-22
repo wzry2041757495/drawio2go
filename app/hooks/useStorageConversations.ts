@@ -121,6 +121,29 @@ export function useStorageConversations() {
   }, []);
 
   /**
+   * 批量删除对话
+   */
+  const batchDeleteConversations = useCallback(
+    async (ids: string[]): Promise<void> => {
+      if (!ids || ids.length === 0) return;
+      setLoading(true);
+      setError(null);
+
+      try {
+        const storage = await getStorage();
+        await storage.batchDeleteConversations(ids);
+        setLoading(false);
+      } catch (err) {
+        const error = err as Error;
+        setError(error);
+        setLoading(false);
+        throw error;
+      }
+    },
+    [],
+  );
+
+  /**
    * 获取所有对话
    *
    * @param projectUuid 工程 UUID（默认使用 DEFAULT_PROJECT_UUID）
@@ -234,6 +257,29 @@ export function useStorageConversations() {
     [],
   );
 
+  /**
+   * 导出对话为 JSON Blob
+   */
+  const exportConversations = useCallback(
+    async (ids: string[]): Promise<Blob> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const storage = await getStorage();
+        const blob = await storage.exportConversations(ids);
+        setLoading(false);
+        return blob;
+      } catch (err) {
+        const error = err as Error;
+        setError(error);
+        setLoading(false);
+        throw error;
+      }
+    },
+    [],
+  );
+
   return {
     loading,
     error,
@@ -241,9 +287,11 @@ export function useStorageConversations() {
     getConversation,
     updateConversation,
     deleteConversation,
+    batchDeleteConversations,
     getAllConversations,
     getMessages,
     addMessage,
     addMessages,
+    exportConversations,
   };
 }

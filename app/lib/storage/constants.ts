@@ -6,6 +6,12 @@
 
 // ==================== 默认常量（当前架构） ====================
 
+import {
+  DEFAULT_PROJECT_UUID as SHARED_DEFAULT_PROJECT_UUID,
+  WIP_VERSION as SHARED_WIP_VERSION,
+  ZERO_SOURCE_VERSION_ID as SHARED_ZERO_SOURCE_VERSION_ID,
+} from "./constants-shared";
+
 /**
  * 默认工程 UUID
  *
@@ -24,7 +30,7 @@
  * - 添加项目创建、删除、重命名功能
  * - 项目级别的配置隔离
  */
-export const DEFAULT_PROJECT_UUID = "default";
+export const DEFAULT_PROJECT_UUID = SHARED_DEFAULT_PROJECT_UUID;
 
 /**
  * 默认 XML 语义化版本号
@@ -62,7 +68,7 @@ export const DEFAULT_XML_VERSION = "1.0.0";
  * - 保持版本历史的整洁性
  * - 用户明确控制何时创建快照
  */
-export const WIP_VERSION = "0.0.0";
+export const WIP_VERSION = SHARED_WIP_VERSION;
 
 /**
  * 默认首版本号
@@ -77,7 +83,7 @@ export const DEFAULT_FIRST_VERSION = "1.0.0";
  *
  * 用于标记关键帧的根节点（无父版本）
  */
-export const ZERO_SOURCE_VERSION_ID = "00000000-0000-0000-0000-000000000000";
+export const ZERO_SOURCE_VERSION_ID = SHARED_ZERO_SOURCE_VERSION_ID;
 
 /**
  * 触发关键帧重置的差异阈值（相对于原始文档长度）

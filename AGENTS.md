@@ -12,12 +12,22 @@
 ### 核心技术栈
 
 - **前端框架**: Next.js 15 (App Router) + React 19
-- **UI 库**: HeroUI v3 (Beta) - 复合组件模式
+- **UI 库**: HeroUI v3 (v3.0.0-beta.1) - 基于 React Aria Components 的复合组件模式
 - **样式**: Tailwind CSS v4 (⚠️ 必须 v4，v3 不兼容)
 - **DrawIO 集成**: 原生 iframe 实现
 - **桌面应用**: Electron 38.x
 - **语言**: TypeScript
 - **主题**: 现代扁平化设计，Material Design风格 (#3388BB 蓝色主题)
+
+### HeroUI v3 核心特性
+
+- **语义化设计**: 使用 primary/secondary/tertiary 替代 solid/flat/bordered
+- **可访问性优先**: 基于 React Aria Components，内置 WCAG 2.1 AA 合规性
+- **复合组件模式**: 灵活组合、深度自定义，而非扁平化 props
+- **GPU 加速动画**: 原生 CSS 动画替代 Framer Motion，性能更优
+- **树摇优化**: 仅打包使用的组件，减小包体积
+- **AI 友好**: 为 AI 辅助开发设计的 API 和文档结构
+- **完全类型安全**: TypeScript 全覆盖，IntelliSense 支持
 
 ### 设计系统规范
 
@@ -109,10 +119,63 @@ server.js              # Socket.IO 服务器 + Next.js 集成
 
 ### 1. HeroUI v3 使用规范
 
-- **复合组件**: 使用 `Card.Root`, `Card.Header`, `Card.Content` 等
-- **事件处理**: 使用 `onPress` 代替 `onClick`
-- **客户端指令**: 带交互的组件必须添加 `"use client"`
-- **无 Provider**: HeroUI v3 不需要全局 Provider 包裹
+#### 设计原则（10条核心原则）
+
+1. **语义化意图优于视觉样式**: 使用 primary/secondary/tertiary 表达层级，而非 solid/flat/bordered 描述外观
+2. **可访问性为基础**: 基于 React Aria Components，内置 WCAG 2.1 AA 合规性
+3. **组合优于配置**: 复合组件允许重排、自定义或省略部分，而非扁平化 props
+4. **渐进式披露**: 从简单开始，仅在需要时添加复杂性
+5. **可预测行为**: 所有组件遵循一致的模式（size、variant、className、data 属性）
+6. **类型安全优先**: 完整的 TypeScript 支持，IntelliSense 和编译时错误检测
+7. **样式与逻辑分离**: `@heroui/styles` 可独立用于任何框架或纯 HTML
+8. **卓越的开发者体验**: 清晰的 API、描述性错误、AI 友好的文档
+9. **完全可自定义**: 开箱即用的美观默认样式，可通过 CSS 变量或 BEM 类完全改造
+10. **开放且可扩展**: 使用 `asChild`、variant 函数或自定义包装器扩展组件
+
+#### 复合组件模式（Composition Over Configuration）
+
+- ✅ **使用复合组件**: `Card.Root`, `Card.Header`, `Card.Content` 等
+- ✅ **命名导出**: 也可使用命名导出如 `<Card><CardHeader /></Card>`
+- ❌ **避免扁平 props**: 不使用 `<Card title="..." />` 等 v2 风格
+
+#### 语义化变量（Semantic Intent Over Visual Style）
+
+- ✅ **语义化变量**: `variant="primary"` / `"secondary"` / `"tertiary"` / `"danger"`
+- ❌ **避免视觉描述**: 不使用 `"solid"` / `"flat"` / `"bordered"` (v2 风格)
+- **用途说明**:
+  - `primary`: 主要操作，推动流程前进（每个上下文 1 个）
+  - `secondary`: 备选操作（可多个）
+  - `tertiary`: 取消、跳过等消极操作
+  - `danger`: 破坏性操作（删除、重置等）
+
+#### 事件处理与状态
+
+- ✅ **使用 `onPress`**: 替代 `onClick`（React Aria 统一规范）
+- ✅ **使用 `isDisabled`**: 替代 `disabled`
+- ✅ **使用 `isSelected`**: 替代 `checked` / `selected`
+- ✅ **客户端指令**: 带交互的组件必须添加 `"use client"`
+
+#### 无 Provider 要求
+
+- HeroUI v3 不需要全局 Provider 包裹，直接导入使用即可
+
+#### 可用组件（34个，v3.0.0-beta.1）
+
+Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButton, Description, Disclosure, DisclosureGroup, FieldError, Fieldset, Form, Input, InputOTP, Kbd, Label, Link, ListBox, Popover, RadioGroup, Select, Separator, Skeleton, Slider, Spinner, Surface, Switch, Tabs, TextArea, TextField, Tooltip
+
+> **注意**: 部分 v2 组件可能在 v3 beta 中尚未提供，v3 正在积极开发中
+
+#### HeroUI v3 vs v2 对比
+
+| 方面           | v2                              | v3                                     |
+| -------------- | ------------------------------- | -------------------------------------- |
+| **动画**       | Framer Motion                   | CSS + GPU 加速                         |
+| **组件模式**   | 单组件 + 多 props               | 复合组件                               |
+| **Variants**   | 视觉化（solid, bordered, flat） | 语义化（primary, secondary, tertiary） |
+| **样式**       | 部分支持 Tailwind v4            | 完全支持 Tailwind v4                   |
+| **可访问性**   | 优秀（React Aria）              | 优秀（React Aria）                     |
+| **包体积**     | 较大（Bundle）                  | 更小（树摇优化）                       |
+| **自定义难度** | 中等（基于 Props）              | 简单（复合组件 + 原生 CSS）            |
 
 ### 2. Tailwind CSS v4 配置
 
@@ -177,9 +240,10 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 ### HeroUI v3 相关
 
-- v3 仍在 alpha 阶段，警告正常
-- 使用 `context7` MCP 工具查询最新 API
+- v3 已进入 Beta 阶段（v3.0.0-beta.1），API 趋于稳定
+- 使用 `context7` MCP 工具查询最新 API 和组件文档
 - 需要 React 19+ 和 Tailwind CSS v4
+- 基于 React Aria Components，内置完整的可访问性支持
 
 ### Electron 问题
 
@@ -197,6 +261,30 @@ pnpm format               # 使用 Prettier 格式化所有代码
 | **桌面应用**    | `electron/AGENTS.md`       | Electron 配置、安全策略和调试指南        |
 
 ## 最近更新
+
+### 主题系统增强（2025-11-17 ~ 2025-11-19）
+
+**主题切换功能**
+
+- 新增 `ThemeToggle` 组件：太阳/月亮图标切换深色/浅色模式
+- localStorage 持久化 + 系统主题检测（`prefers-color-scheme`）
+- 避免闪烁的初始化脚本（`layout.tsx` 中内联）
+- 集成到 `TopBar` 组件右上角工具栏
+
+**主题色彩现代化**
+
+- 主色调使用 OKLCH 色彩空间，提升饱和度和对比度
+- 深色模式优化：亮度提升确保可读性
+- 语义化颜色增强：Success/Warning/Danger/Info 更鲜艳
+- 边框系统强化：新增 `--border-focus` 状态（65% 透明度）
+- 阴影系统升级：模糊半径翻倍（4/8/16/32px），透明度梯度优化
+- 现代 UI 效果：新增 `--accent-gradient` 渐变和 `--glass-effect` 玻璃形态
+
+**设置面板增强**
+
+- 新增 `VersionSettingsPanel` 组件：控制 AI 编辑自动版本快照策略
+- 设置侧边栏支持多面板 Tab 切换（文件/LLM/版本）
+- 统一导出：`app/components/settings/index.ts`
 
 ### 核心架构（2025-11）
 
@@ -286,6 +374,11 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 - **对话 API**：`getConversationsByXMLVersion` 全面下线，所有会话按 `project_uuid` 维度查询，前端 Hook 与 Electron IPC 均已同步。
 - **页面元数据校验**：新增 `app/lib/storage/page-metadata-validators.ts`，统一 `page_count`、`page_names` 解析规则与 SVG Blob（8MB）体积校验，IndexedDB/SQLite 复用同一逻辑。
-- **迁移体系**：IndexedDB 初始化通过 `storage/migrations/indexeddb/v1.ts` 执行幂等迁移，SQLite 主进程通过 `electron/storage/migrations/` 自动执行 v1 迁移并更新 `user_version`，禁止再删除/重建存储。
+- **迁移体系**：
+  - 数据库版本统一为 v1（包含所有表结构）
+  - IndexedDB 通过 `storage/migrations/indexeddb/v1.ts` 执行幂等迁移
+  - SQLite 通过 `electron/storage/migrations/v1.js` 自动执行迁移并更新 `user_version`
+  - v1 已包含完整表结构（含 sequence_number 字段和 conversation_sequences 表）
+  - 禁止删除/重建存储，仅通过迁移脚本更新
 
-_最后更新: 2025-11-17_
+_最后更新: 2025-11-22_

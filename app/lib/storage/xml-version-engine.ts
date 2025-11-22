@@ -6,6 +6,7 @@ import {
   WIP_VERSION,
 } from "./constants";
 import type { XMLVersion } from "./types";
+import { normalizeDiagramXml } from "../drawio-xml-utils";
 
 type DiffEngine = InstanceType<typeof diff_match_patch>;
 
@@ -26,18 +27,18 @@ const createDiffEngine = (): DiffEngine => {
 
 /**
  * 计算新版本的持久化策略（关键帧 vs Diff）
- * 如果与最新版本内容一致，则返回 null 表示无需创建新版本
+ * 如果与基线版本内容一致，则返回 null 表示无需创建新版本
  * WIP 版本始终返回关键帧 payload，即使内容相同
  */
 export async function computeVersionPayload({
   newXml,
   semanticVersion,
-  latestVersion,
+  baseVersion,
   resolveVersionById,
 }: {
   newXml: string;
   semanticVersion: string;
-  latestVersion: XMLVersion | null;
+  baseVersion: XMLVersion | null;
   resolveVersionById: VersionResolver;
 }): Promise<VersionPayloadResult | null> {
   // WIP 版本始终为关键帧（全量存储），允许相同内容更新
@@ -51,11 +52,11 @@ export async function computeVersionPayload({
   }
 
   // WIP 版本是独立草稿，不应作为其他版本的 diff 链基础
-  const effectiveLatestVersion =
-    latestVersion?.semantic_version === WIP_VERSION ? null : latestVersion;
+  const effectiveBaseVersion =
+    baseVersion?.semantic_version === WIP_VERSION ? null : baseVersion;
 
   // 历史版本：使用关键帧 + Diff 混合策略
-  if (!effectiveLatestVersion) {
+  if (!effectiveBaseVersion) {
     return {
       xml_content: newXml,
       is_keyframe: true,
@@ -65,7 +66,7 @@ export async function computeVersionPayload({
   }
 
   const baseXml = await materializeVersionXml(
-    effectiveLatestVersion,
+    effectiveBaseVersion,
     resolveVersionById,
   );
   if (baseXml === newXml) {
@@ -83,9 +84,9 @@ export async function computeVersionPayload({
   const baseline = Math.max(baseXml.length, 1);
   const changeRatio = changedCharacters / baseline;
 
-  const nextDepth = effectiveLatestVersion.is_keyframe
+  const nextDepth = effectiveBaseVersion.is_keyframe
     ? 1
-    : effectiveLatestVersion.diff_chain_depth + 1;
+    : effectiveBaseVersion.diff_chain_depth + 1;
 
   const needsKeyframe =
     changeRatio > DIFF_KEYFRAME_THRESHOLD || nextDepth > MAX_DIFF_CHAIN_LENGTH;
@@ -106,7 +107,7 @@ export async function computeVersionPayload({
     xml_content: patchText,
     is_keyframe: false,
     diff_chain_depth: nextDepth,
-    source_version_id: effectiveLatestVersion.id,
+    source_version_id: effectiveBaseVersion.id,
   };
 }
 
@@ -134,8 +135,9 @@ async function resolveMaterializedXml(
   }
 
   if (version.is_keyframe) {
-    cache.set(version.id, version.xml_content);
-    return version.xml_content;
+    const normalized = normalizeDiagramXml(version.xml_content);
+    cache.set(version.id, normalized);
+    return normalized;
   }
 
   if (version.source_version_id === ZERO_SOURCE_VERSION_ID) {
@@ -149,6 +151,19 @@ async function resolveMaterializedXml(
     throw new Error(
       `无法加载源版本: ${version.source_version_id}（当前: ${version.id}）`,
     );
+  }
+
+  if (parent.project_uuid !== version.project_uuid) {
+    const message =
+      `版本链完整性错误：父版本 ${parent.id} 属于项目 ${parent.project_uuid}，` +
+      `与当前版本 ${version.id} 的项目 ${version.project_uuid} 不一致。`;
+    console.error("[XMLVersion] 拒绝跨项目版本链", {
+      currentVersionId: version.id,
+      currentProject: version.project_uuid,
+      parentVersionId: parent.id,
+      parentProject: parent.project_uuid,
+    });
+    throw new Error(message);
   }
 
   const baseXml = await resolveMaterializedXml(
@@ -167,6 +182,7 @@ async function resolveMaterializedXml(
     });
   }
 
-  cache.set(version.id, result);
-  return result;
+  const normalized = normalizeDiagramXml(result);
+  cache.set(version.id, normalized);
+  return normalized;
 }

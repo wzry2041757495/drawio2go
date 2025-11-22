@@ -145,10 +145,27 @@ export class SQLiteStorage implements StorageAdapter {
 
   // ==================== XMLVersions ====================
 
-  async getXMLVersion(id: string): Promise<XMLVersion | null> {
+  async getXMLVersion(
+    id: string,
+    projectUuid?: string,
+  ): Promise<XMLVersion | null> {
     await this.ensureElectron();
-    const result = await window.electronStorage!.getXMLVersion(id);
-    return this.normalizeVersion(result);
+    const result = await window.electronStorage!.getXMLVersion(id, projectUuid);
+    const normalized = this.normalizeVersion(result);
+
+    if (normalized && projectUuid && normalized.project_uuid !== projectUuid) {
+      const message =
+        `安全错误：版本 ${id} 不属于当前项目 ${projectUuid}。` +
+        `该版本属于项目 ${normalized.project_uuid}，已拒绝访问。`;
+      console.error("[SQLiteStorage] 拒绝跨项目访问", {
+        versionId: id,
+        requestedProject: projectUuid,
+        versionProject: normalized.project_uuid,
+      });
+      throw new Error(message);
+    }
+
+    return normalized;
   }
 
   async createXMLVersion(version: CreateXMLVersionInput): Promise<XMLVersion> {
@@ -201,16 +218,39 @@ export class SQLiteStorage implements StorageAdapter {
       });
   }
 
-  async getXMLVersionSVGData(id: string): Promise<XMLVersionSVGData | null> {
+  async getXMLVersionSVGData(
+    id: string,
+    projectUuid?: string,
+  ): Promise<XMLVersionSVGData | null> {
     await this.ensureElectron();
-    const svgData = await window.electronStorage!.getXMLVersionSVGData(id);
+    const svgData = await window.electronStorage!.getXMLVersionSVGData(
+      id,
+      projectUuid,
+    );
     if (!svgData) return null;
 
     const normalize = (value: Blob | Buffer | ArrayBuffer | null | undefined) =>
       normalizeBlobField(value) ?? null;
 
+    if (
+      projectUuid &&
+      svgData.project_uuid &&
+      svgData.project_uuid !== projectUuid
+    ) {
+      const message =
+        `安全错误：版本 ${id} 的 SVG 数据属于项目 ${svgData.project_uuid}，` +
+        `与请求的项目 ${projectUuid} 不一致。`;
+      console.error("[SQLiteStorage] 拒绝跨项目 SVG 访问", {
+        versionId: id,
+        requestedProject: projectUuid,
+        versionProject: svgData.project_uuid,
+      });
+      throw new Error(message);
+    }
+
     return {
       id: svgData.id,
+      project_uuid: svgData.project_uuid,
       preview_svg: normalize(svgData.preview_svg),
       pages_svg: normalize(svgData.pages_svg),
     };
@@ -271,9 +311,9 @@ export class SQLiteStorage implements StorageAdapter {
     await window.electronStorage!.updateXMLVersion(id, updatesToSend);
   }
 
-  async deleteXMLVersion(id: string): Promise<void> {
+  async deleteXMLVersion(id: string, projectUuid?: string): Promise<void> {
     await this.ensureElectron();
-    await window.electronStorage!.deleteXMLVersion(id);
+    await window.electronStorage!.deleteXMLVersion(id, projectUuid);
   }
 
   // ==================== Conversations ====================
@@ -301,6 +341,18 @@ export class SQLiteStorage implements StorageAdapter {
   async deleteConversation(id: string): Promise<void> {
     await this.ensureElectron();
     await window.electronStorage!.deleteConversation(id);
+  }
+
+  async batchDeleteConversations(ids: string[]): Promise<void> {
+    await this.ensureElectron();
+    if (!ids || ids.length === 0) return;
+    await window.electronStorage!.batchDeleteConversations(ids);
+  }
+
+  async exportConversations(ids: string[]): Promise<Blob> {
+    await this.ensureElectron();
+    const json = await window.electronStorage!.exportConversations(ids);
+    return new Blob([json], { type: "application/json" });
   }
 
   async getConversationsByProject(

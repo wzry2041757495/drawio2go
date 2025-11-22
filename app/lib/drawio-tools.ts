@@ -21,6 +21,8 @@ import {
 } from "./storage/xml-version-engine";
 import { v4 as uuidv4 } from "uuid";
 import { resolveCurrentProjectUuid } from "./storage/current-project";
+import { createDefaultDiagramXml } from "./storage/default-diagram-xml";
+import { normalizeDiagramXml } from "./drawio-xml-utils";
 
 /**
  * 验证 XML 格式是否合法
@@ -52,37 +54,6 @@ function validateXML(xml: string): XMLValidationResult {
 }
 
 /**
- * 解码 base64 编码的 XML 内容
- *
- * 检测并解码 data:image/svg+xml;base64, 前缀的内容
- *
- * @param xml - 原始 XML 字符串（可能包含 base64 编码）
- * @returns 解码后的 XML 字符串，如果不是 base64 格式则返回原始内容
- */
-function decodeBase64XML(xml: string): string {
-  const prefix = "data:image/svg+xml;base64,";
-
-  if (xml.startsWith(prefix)) {
-    try {
-      const base64Content = xml.substring(prefix.length);
-
-      // 正确处理 UTF-8 编码：
-      // atob() 返回的是 binary string (Latin-1)，需要转换为 UTF-8
-      const binaryString = atob(base64Content);
-      const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
-      const decoded = new TextDecoder("utf-8").decode(bytes);
-
-      return decoded;
-    } catch (error) {
-      console.error("[DrawIO Tools] Base64 解码失败:", error);
-      return xml;
-    }
-  }
-
-  return xml;
-}
-
-/**
  * 保存 XML 到存储的内部实现（不触发事件）
  *
  * @param decodedXml - 已解码的 XML 内容
@@ -109,8 +80,8 @@ async function saveDrawioXMLInternal(decodedXml: string): Promise<void> {
   const payload = await computeVersionPayload({
     newXml: decodedXml,
     semanticVersion: WIP_VERSION,
-    latestVersion: null,
-    resolveVersionById: (id) => storage.getXMLVersion(id),
+    baseVersion: null,
+    resolveVersionById: (id) => storage.getXMLVersion(id, projectUuid),
   });
 
   if (!payload) {
@@ -159,13 +130,16 @@ export async function saveDrawioXML(xml: string): Promise<void> {
     throw new Error("saveDrawioXML 只能在浏览器环境中使用");
   }
 
-  const decodedXml = decodeBase64XML(xml);
-
   try {
+    const decodedXml = normalizeDiagramXml(xml);
+    const validation = validateXML(decodedXml);
+    if (!validation.valid) {
+      throw new Error(validation.error || "XML 格式验证失败");
+    }
     await saveDrawioXMLInternal(decodedXml);
   } catch (error) {
     console.error("[DrawIO Tools] 保存 XML 失败:", error);
-    throw error;
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -196,9 +170,12 @@ export async function getDrawioXML(): Promise<GetXMLResult> {
     const versions = await storage.getXMLVersionsByProject(projectUuid);
 
     if (versions.length === 0) {
+      const defaultXml = createDefaultDiagramXml();
+      await saveDrawioXMLInternal(defaultXml);
+
       return {
-        success: false,
-        error: "未找到保存的图表数据",
+        success: true,
+        xml: defaultXml,
       };
     }
 
@@ -206,9 +183,9 @@ export async function getDrawioXML(): Promise<GetXMLResult> {
     const latestVersion =
       versions.find((v) => v.semantic_version === WIP_VERSION) ?? versions[0];
     const resolvedXml = await materializeVersionXml(latestVersion, (id) =>
-      storage.getXMLVersion(id),
+      storage.getXMLVersion(id, projectUuid),
     );
-    const decodedXml = decodeBase64XML(resolvedXml);
+    const decodedXml = normalizeDiagramXml(resolvedXml);
 
     return {
       success: true,
@@ -243,17 +220,16 @@ export async function replaceDrawioXML(
     };
   }
 
-  const validation = validateXML(drawio_xml);
-  if (!validation.valid) {
-    return {
-      success: false,
-      message: "XML 格式验证失败",
-      error: validation.error,
-    };
-  }
-
   try {
-    const decodedXml = decodeBase64XML(drawio_xml);
+    const decodedXml = normalizeDiagramXml(drawio_xml);
+    const validation = validateXML(decodedXml);
+    if (!validation.valid) {
+      return {
+        success: false,
+        message: "XML 格式验证失败",
+        error: validation.error,
+      };
+    }
     await saveDrawioXMLInternal(decodedXml);
 
     return {
