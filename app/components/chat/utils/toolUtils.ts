@@ -65,6 +65,6 @@ export const getToolExpansionKey = (
 /**
  * 判断工具调用是否应该默认展开
  */
-export const shouldToolBeExpanded = (state: string): boolean => {
-  return state === "output-error";
+export const shouldToolBeExpanded = (_state: string): boolean => {
+  return false;
 };

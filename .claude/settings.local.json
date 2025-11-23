@@ -70,7 +70,8 @@
       "Bash(git diff:*)",
       "mcp__codex__codex",
       "mcp__codex__codex-reply",
-      "Bash(pnpm vitest:*)"
+      "Bash(pnpm vitest:*)",
+      "Bash(pnpm run lint)"
     ],
     "deny": [],
     "ask": []

@@ -24,6 +24,9 @@ import { resolveCurrentProjectUuid } from "./storage/current-project";
 import { createDefaultDiagramXml } from "./storage/default-diagram-xml";
 import { normalizeDiagramXml } from "./drawio-xml-utils";
 
+// 内存快照：记录替换前的 XML，用于合并失败时回滚
+let _drawioXmlSnapshot: string | null = null;
+
 /**
  * 验证 XML 格式是否合法
  * 使用浏览器内置的 DOMParser 进行验证
@@ -211,6 +214,7 @@ export async function getDrawioXML(): Promise<GetXMLResult> {
  */
 export async function replaceDrawioXML(
   drawio_xml: string,
+  options?: { requestId?: string; isRollback?: boolean },
 ): Promise<ReplaceXMLResult & { xml?: string }> {
   if (typeof window === "undefined") {
     return {
@@ -220,7 +224,86 @@ export async function replaceDrawioXML(
     };
   }
 
+  const requestId = options?.requestId ?? crypto.randomUUID();
+  const isRollback = options?.isRollback === true;
+
+  const waitForMergeValidation = (
+    currentRequestId: string,
+    timeoutMs = 3000,
+  ): Promise<{
+    error?: string;
+    message?: string;
+    requestId?: string;
+  } | null> => {
+    return new Promise((resolve) => {
+      const controller = new AbortController();
+      const { signal } = controller;
+      let settled = false;
+
+      const finish = (
+        payload: {
+          error?: string;
+          message?: string;
+          requestId?: string;
+        } | null,
+      ) => {
+        if (settled) return;
+        settled = true;
+        controller.abort();
+        resolve(payload);
+      };
+
+      const timer = window.setTimeout(() => {
+        finish(null);
+      }, timeoutMs);
+
+      const onMergeError = (event: Event) => {
+        const detail = (
+          event as CustomEvent<{
+            error?: string;
+            message?: string;
+            requestId?: string;
+          }>
+        ).detail;
+        const eventRequestId = detail?.requestId;
+
+        if (
+          currentRequestId &&
+          eventRequestId &&
+          eventRequestId !== currentRequestId
+        ) {
+          return;
+        }
+
+        if (timer) {
+          window.clearTimeout(timer);
+        }
+
+        finish(detail ?? { error: "drawio_merge_error" });
+      };
+
+      signal.addEventListener("abort", () => {
+        if (timer) {
+          window.clearTimeout(timer);
+        }
+      });
+
+      window.addEventListener("drawio-merge-error", onMergeError, {
+        signal,
+      });
+    });
+  };
+
   try {
+    // 1) 修改前保存快照
+    const currentResult = await getDrawioXML();
+    _drawioXmlSnapshot =
+      currentResult.success && currentResult.xml ? currentResult.xml : null;
+    if (!_drawioXmlSnapshot) {
+      console.warn("[DrawIO Tools] 未能获取当前 XML 快照，回滚可能不可用");
+    }
+
+    // 2) 现有验证逻辑
     const decodedXml = normalizeDiagramXml(drawio_xml);
     const validation = validateXML(decodedXml);
     if (!validation.valid) {
@@ -230,11 +313,58 @@ export async function replaceDrawioXML(
         error: validation.error,
       };
     }
+
+    // 3) 保存到存储
     await saveDrawioXMLInternal(decodedXml);
+
+    // 4) 通知编辑器加载新 XML
+    window.dispatchEvent(
+      new CustomEvent("ai-xml-replaced", {
+        detail: { xml: decodedXml, requestId, isRollback },
+      }),
+    );
+
+    if (isRollback) {
+      return {
+        success: true,
+        message: "XML 已替换",
+        xml: decodedXml,
+      };
+    }
+
+    const mergeError = await waitForMergeValidation(requestId);
+
+    // 5) 错误回滚
+    if (mergeError?.error) {
+      console.error("[DrawIO Tools] DrawIO merge 错误:", mergeError);
+      if (_drawioXmlSnapshot) {
+        try {
+          await saveDrawioXMLInternal(_drawioXmlSnapshot);
+          window.dispatchEvent(
+            new CustomEvent("ai-xml-replaced", {
+              detail: {
+                xml: _drawioXmlSnapshot,
+                requestId,
+                isRollback: true,
+              },
+            }),
+          );
+          console.warn("[DrawIO Tools] 已回滚到替换前的 XML");
+        } catch (rollbackError) {
+          console.error("[DrawIO Tools] 回滚失败:", rollbackError);
+        }
+      }
+
+      return {
+        success: false,
+        error: "drawio_syntax_error",
+        message: "DrawIO 报告 XML 语法错误，已自动回滚到修改前状态",
+      };
+    }
 
     return {
       success: true,
-      message: "XML 内容已成功保存",
+      message: "XML 已替换",
       xml: decodedXml,
     };
   } catch (error) {
@@ -243,5 +373,7 @@ export async function replaceDrawioXML(
       message: "保存失败",
       error: error instanceof Error ? error.message : "写入数据失败",
     };
+  } finally {
+    _drawioXmlSnapshot = null;
   }
 }

@@ -109,6 +109,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     const [isReady, setIsReady] = useState(false);
     const previousXmlRef = useRef<string | undefined>(initialXml);
     const isFirstLoadRef = useRef(true);
+    const activeRequestIdRef = useRef<string | undefined>(undefined);
 
     // 检测初始主题（用于设置 DrawIO URL 参数）
     // 优先读取 localStorage 中的用户偏好，回退到系统主题
@@ -377,6 +378,31 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       mergeWithFallbackRef.current = mergeWithFallback;
     }, [loadDiagram, mergeWithFallback]);
 
+    useEffect(() => {
+      const handleAIXmlReplaced = (event: Event) => {
+        const detail = (
+          event as CustomEvent<{ requestId?: string; isRollback?: boolean }>
+        ).detail;
+        const isRollback = detail?.isRollback === true;
+
+        if (detail?.requestId) {
+          activeRequestIdRef.current = detail.requestId;
+        } else {
+          activeRequestIdRef.current = undefined;
+        }
+
+        if (isRollback) {
+          console.log("[DrawIO] 接收到回滚 XML，跳过并发验证链路");
+        }
+      };
+
+      window.addEventListener("ai-xml-replaced", handleAIXmlReplaced);
+
+      return () => {
+        window.removeEventListener("ai-xml-replaced", handleAIXmlReplaced);
+      };
+    }, []);
+
     // 防抖的更新函数 - 使用 useMemo 确保只创建一次
     const debouncedUpdate = useMemo(
       () =>
@@ -498,12 +524,36 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
               }
             }
           } else if (data.event === "merge") {
-            console.log("✅ merge 操作完成");
             // 清除 merge 超时定时器
             if (mergeTimeoutRef.current) {
               clearTimeout(mergeTimeoutRef.current);
               mergeTimeoutRef.current = null;
             }
+
+            const requestIdFromPayload =
+              typeof data.requestId === "string" ? data.requestId : undefined;
+            const requestId =
+              requestIdFromPayload ?? activeRequestIdRef.current;
+
+            if (requestIdFromPayload) {
+              activeRequestIdRef.current = requestIdFromPayload;
+            }
+
+            // 新增：检测 DrawIO 返回的 merge 错误
+            if (data.error) {
+              console.error("[DrawIO] merge 错误:", data.error);
+              window.dispatchEvent(
+                new CustomEvent("drawio-merge-error", {
+                  detail: {
+                    error: data.error,
+                    message: data.message,
+                    requestId,
+                  },
+                }),
+              );
+            }
+
+            console.log("✅ merge 操作完成");
           } else if (data.event === "autosave" || data.event === "save") {
             console.log("💾 DrawIO 保存事件触发");
             autosaveReceivedRef.current = true; // 标记已收到 autosave

@@ -52,6 +52,9 @@ export default function Home() {
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] =
     useState<boolean>(false);
+  const [mergeErrorMessage, setMergeErrorMessage] = useState<string | null>(
+    null,
+  );
 
   // 初始化 Socket.IO 连接
   const { isConnected } = useDrawioSocket(editorRef);
@@ -135,6 +138,47 @@ export default function Home() {
       };
     }
   }, [getDefaultPath, editorRef]);
+
+  // 监听 DrawIO 合并错误并展示提示
+  useEffect(() => {
+    let toastTimer: number | null = null;
+
+    const handleMergeError = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        error?: unknown;
+        message?: string;
+      }>;
+      const { error, message } = customEvent.detail || {};
+
+      const mergedMessage =
+        (typeof message === "string" && message.trim()) ||
+        (error instanceof Error && error.message) ||
+        (typeof error === "string" && error.trim()) ||
+        "未知错误";
+
+      console.error("[DrawIO] 图表更新失败:", error, message);
+      setMergeErrorMessage(
+        `图表更新失败：${mergedMessage}。已自动回滚到修改前状态`,
+      );
+
+      if (toastTimer) {
+        window.clearTimeout(toastTimer);
+      }
+
+      toastTimer = window.setTimeout(() => {
+        setMergeErrorMessage(null);
+      }, 8000);
+    };
+
+    window.addEventListener("drawio-merge-error", handleMergeError);
+
+    return () => {
+      window.removeEventListener("drawio-merge-error", handleMergeError);
+      if (toastTimer) {
+        window.clearTimeout(toastTimer);
+      }
+    };
+  }, []);
 
   // 自动保存图表到统一存储层
   const handleAutoSave = async (xml: string) => {
@@ -375,23 +419,77 @@ export default function Home() {
 
   return (
     <main className={`main-container ${isSidebarOpen ? "sidebar-open" : ""}`}>
-      {/* Socket.IO 连接状态指示器 */}
-      {!isConnected && (
+      {/* 顶部通知区域：Socket 断连 & DrawIO 合并错误 */}
+      {(mergeErrorMessage || !isConnected) && (
         <div
           style={{
             position: "fixed",
             top: 0,
             left: 0,
             right: 0,
-            background: "#ff6b6b",
-            color: "white",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
             padding: "8px 16px",
-            textAlign: "center",
-            fontSize: "14px",
             zIndex: 9999,
+            pointerEvents: "none",
           }}
         >
-          ⚠️ Socket.IO 未连接，AI 工具功能不可用
+          {!isConnected && (
+            <div
+              style={{
+                background: "#ff6b6b",
+                color: "white",
+                padding: "8px 12px",
+                textAlign: "center",
+                fontSize: "14px",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                pointerEvents: "auto",
+              }}
+            >
+              ⚠️ Socket.IO 未连接，AI 工具功能不可用
+            </div>
+          )}
+
+          {mergeErrorMessage && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                background: "#ff6b6b",
+                color: "white",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                fontSize: "14px",
+                lineHeight: 1.5,
+                pointerEvents: "auto",
+              }}
+            >
+              <span role="img" aria-label="error">
+                ⚠️
+              </span>
+              <div style={{ flex: 1 }}>{mergeErrorMessage}</div>
+              <button
+                type="button"
+                onClick={() => setMergeErrorMessage(null)}
+                style={{
+                  background: "rgba(255,255,255,0.16)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  lineHeight: 1.2,
+                }}
+              >
+                关闭
+              </button>
+            </div>
+          )}
         </div>
       )}
 

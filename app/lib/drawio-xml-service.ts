@@ -95,6 +95,7 @@ export async function executeDrawioEditBatch(
   }
 
   const xml = await fetchDiagramXml();
+  const originalXml = xml;
   const document = parseXml(xml);
 
   for (let index = 0; index < operations.length; index++) {
@@ -118,9 +119,51 @@ export async function executeDrawioEditBatch(
   )) as ReplaceXMLResult;
 
   if (!replaceResult?.success) {
-    throw new Error(
-      replaceResult?.error || replaceResult?.message || "前端替换 XML 失败",
-    );
+    console.error("[DrawIO XML Service] 批量编辑写回失败:", replaceResult);
+
+    let rollbackSucceeded = false;
+    let rollbackErrorMessage: string | undefined;
+
+    try {
+      const rollbackResult = (await executeToolOnClient(
+        "replace_drawio_xml",
+        { drawio_xml: originalXml },
+        60000,
+      )) as ReplaceXMLResult;
+
+      if (rollbackResult?.success) {
+        rollbackSucceeded = true;
+        console.warn(
+          "[DrawIO XML Service] replace_drawio_xml 失败后已回滚到原始 XML",
+        );
+      } else {
+        rollbackErrorMessage =
+          rollbackResult?.error ||
+          rollbackResult?.message ||
+          "未知原因导致回滚失败";
+        console.error(
+          "[DrawIO XML Service] 回滚到原始 XML 失败:",
+          rollbackResult,
+        );
+      }
+    } catch (rollbackError) {
+      rollbackErrorMessage =
+        rollbackError instanceof Error
+          ? rollbackError.message
+          : String(rollbackError);
+      console.error("[DrawIO XML Service] 回滚过程异常:", rollbackError);
+    }
+
+    const originalError =
+      replaceResult?.error ||
+      replaceResult?.message ||
+      "前端替换 XML 失败（未知原因）";
+
+    const errorMessage = rollbackSucceeded
+      ? `批量编辑失败：${originalError}，已自动回滚到修改前状态。\n原始错误：${originalError}`
+      : `批量编辑失败：${originalError}，回滚失败：${rollbackErrorMessage ?? "未知原因"}。\n原始错误：${originalError}`;
+
+    throw new Error(errorMessage);
   }
 
   return {

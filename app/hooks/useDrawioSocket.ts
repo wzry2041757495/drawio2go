@@ -195,7 +195,7 @@ export function useDrawioSocket(
           success: boolean;
           error?: string;
           message?: string;
-          [key: string]: unknown;
+          xml?: string;
         };
 
         // 根据工具名称执行相应函数
@@ -213,24 +213,8 @@ export function useDrawioSocket(
             if (!request.input?.drawio_xml) {
               throw new Error("缺少 drawio_xml 参数");
             }
-            result = (await replaceDrawioXML(
-              request.input.drawio_xml as string,
-            )) as unknown as {
-              success: boolean;
-              error?: string;
-              message?: string;
-              xml?: string;
-              [key: string]: unknown;
-            };
-
-            // 如果替换成功，触发自定义事件通知编辑器更新
-            if (result.success && result.xml) {
-              window.dispatchEvent(
-                new CustomEvent("ai-xml-replaced", {
-                  detail: { xml: result.xml },
-                }),
-              );
-            }
+            result = await replaceDrawioXML(request.input.drawio_xml as string);
+            // 事件派发已在 replaceDrawioXML 内部处理，这里避免重复派发
             break;
 
           default:
