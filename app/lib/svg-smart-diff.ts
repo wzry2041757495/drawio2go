@@ -1,5 +1,7 @@
 "use client";
 
+import { getDomParser, getXmlSerializer } from "./dom-parser-cache";
+
 interface SvgMetrics {
   minX: number;
   minY: number;
@@ -37,35 +39,13 @@ const DEFAULT_STATS: SmartDiffStats = {
 const NORMALIZED_WIDTH = 1200;
 const MIN_NORMALIZED_HEIGHT = 640;
 
-let cachedParser: DOMParser | null = null;
-let cachedSerializer: XMLSerializer | null = null;
-
-function ensureDomParser(): DOMParser | null {
-  if (cachedParser) return cachedParser;
-  if (
-    typeof window === "undefined" ||
-    typeof window.DOMParser === "undefined"
-  ) {
-    return null;
-  }
-  cachedParser = new window.DOMParser();
-  return cachedParser;
-}
-
-function ensureSerializer(): XMLSerializer | null {
-  if (cachedSerializer) return cachedSerializer;
-  if (typeof XMLSerializer === "undefined") return null;
-  cachedSerializer = new XMLSerializer();
-  return cachedSerializer;
-}
-
 function parseSvgRoot(
   source: string | undefined,
   label: string,
   warnings: string[],
 ): SVGSVGElement | null {
   if (!source) return null;
-  const parser = ensureDomParser();
+  const parser = getDomParser();
   if (!parser) {
     warnings.push("当前环境不支持 DOMParser，无法解析 SVG");
     return null;
@@ -223,7 +203,7 @@ export function generateSmartDiffSvg(
   rightSvg?: string,
 ): SmartDiffResult {
   const warnings: string[] = [];
-  const serializer = ensureSerializer();
+  const serializer = getXmlSerializer();
 
   if (!serializer) {
     warnings.push("当前环境缺少 XMLSerializer，无法生成智能差异 SVG");

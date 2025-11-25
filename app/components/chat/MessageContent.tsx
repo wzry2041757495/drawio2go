@@ -5,7 +5,7 @@ import ThinkingBlock from "./ThinkingBlock";
 import ToolCallCard from "./ToolCallCard";
 import { TypingIndicator } from "./TypingIndicator";
 import { markdownComponents } from "./constants/markdownComponents";
-import { getToolExpansionKey, shouldToolBeExpanded } from "./utils/toolUtils";
+import { getToolExpansionKey } from "./utils/toolUtils";
 import { type ToolMessagePart } from "./constants/toolConstants";
 import type { ChatUIMessage } from "@/app/types/chat";
 
@@ -94,9 +94,7 @@ export default function MessageContent({
             normalizedPart.toolCallId,
             normalizedPart.state,
           );
-          const isExpanded =
-            expandedToolCalls[expansionKey] ??
-            shouldToolBeExpanded(normalizedPart.state);
+          const isExpanded = expandedToolCalls[expansionKey] ?? false;
 
           return (
             <ToolCallCard

@@ -229,6 +229,30 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 
 - 务必主动调用`pnpm run lint`获得语法错误检查信息，避免在编译时才处理语法错误
 
+## 代码腐化清理记录
+
+### 2025-11-24 清理
+
+**执行的操作**：
+
+- 删除未实现的 TODO 函数（ChatSidebar.tsx）、未使用的国际化资源、空目录
+- 新增 DOM 缓存工具（dom-parser-cache.ts），统一 Parser/Serializer 缓存
+- 新增 UUID 生成工具（utils.generateProjectUUID），移除重复实现
+- 新增会话数据服务（chat-session-service.ts），ChatSidebar 从 1088 行减至 745 行
+- 新增会话存储订阅机制（conversation-created/updated/deleted、messages-updated 事件）
+- 修复默认工程创建路径，统一使用 prepareXmlContext + persistWipVersion 管线
+- 新增统一日志工具（logger.ts），移除 useCurrentProject 中的 emoji 日志
+- 统一错误处理与超时策略（8 秒超时，runStorageTask + withTimeout）
+- XML 规范化集中到 writers 管线，移除重复调用
+- 用 HeroUI Alert 替代原生 alert，提取魔术值到常量
+
+**影响文件**：约 25 个文件
+
+**下次关注**：
+
+- ChatSidebar 可进一步拆分动作/视图层，目标 500 行以内
+- 考虑为存储层添加统一的事务/批处理接口
+
 ## 开发命令
 
 使用pnpm作为包管理系统

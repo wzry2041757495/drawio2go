@@ -46,3 +46,59 @@ export function debounce<Args extends unknown[]>(
 
   return debounced as DebouncedFunction<Args>;
 }
+
+/**
+ * 为异步存储任务提供统一的加载/错误处理包装器
+ */
+export async function runStorageTask<T>(
+  task: () => Promise<T>,
+  options?: {
+    setLoading?: (value: boolean) => void;
+    setError?: (error: Error | null) => void;
+  },
+): Promise<T> {
+  const { setLoading, setError } = options ?? {};
+  setLoading?.(true);
+  setError?.(null);
+
+  try {
+    return await task();
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    setError?.(error);
+    throw error;
+  } finally {
+    setLoading?.(false);
+  }
+}
+
+/**
+ * 为 Promise 添加超时保护
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(timeoutMessage));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+export function generateProjectUUID(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `project-${crypto.randomUUID()}`;
+  }
+
+  const random = Math.random().toString(36).slice(2, 10);
+  const timestamp = Date.now();
+  return `project-${timestamp}-${random}`;
+}

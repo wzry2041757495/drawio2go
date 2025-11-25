@@ -10,6 +10,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { DrawioSelectionInfo } from "../types/drawio-tools";
+import { debounce } from "@/app/lib/utils";
 
 type DrawioExportFormat = "xml" | "svg";
 
@@ -55,21 +56,6 @@ interface RawDrawioCell {
     y?: number;
     width?: number;
     height?: number;
-  };
-}
-
-// 简化的防抖函数，专门用于 XML 更新场景
-// 通过具体的类型定义避免使用 any
-function debounceXmlUpdate(
-  func: (xml: string | undefined) => void,
-  wait: number,
-): (xml: string | undefined) => void {
-  let timeout: NodeJS.Timeout | null = null;
-  return function (xml: string | undefined) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => {
-      func(xml);
-    }, wait);
   };
 }
 
@@ -406,7 +392,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     // 防抖的更新函数 - 使用 useMemo 确保只创建一次
     const debouncedUpdate = useMemo(
       () =>
-        debounceXmlUpdate((xml: string | undefined) => {
+        debounce((xml?: string) => {
           if (isFirstLoadRef.current) {
             // 首次加载使用 load
             loadDiagramRef.current(xml);

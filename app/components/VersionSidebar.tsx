@@ -1,6 +1,12 @@
 "use client";
 
-import React from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type RefObject,
+} from "react";
 import { Alert, Button, Skeleton } from "@heroui/react";
 import {
   VersionTimeline,
@@ -17,10 +23,12 @@ import { History, Save } from "lucide-react";
 import type { XMLVersion } from "@/app/lib/storage/types";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 
+const VERSION_FEEDBACK_DURATION = 4000;
+
 interface VersionSidebarProps {
   projectUuid: string | null;
   onVersionRestore?: (versionId: string) => void;
-  editorRef: React.RefObject<DrawioEditorRef | null>;
+  editorRef: RefObject<DrawioEditorRef | null>;
 }
 
 /**
@@ -32,21 +40,18 @@ export function VersionSidebar({
   onVersionRestore,
   editorRef,
 }: VersionSidebarProps) {
-  const [showCreateDialog, setShowCreateDialog] = React.useState(false);
-  const [versions, setVersions] = React.useState<XMLVersion[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [creationFeedback, setCreationFeedback] = React.useState<{
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [versions, setVersions] = useState<XMLVersion[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [creationFeedback, setCreationFeedback] = useState<{
     message: string;
     tone: "success" | "warning";
   } | null>(null);
-  const feedbackTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const [timelineViewMode, setTimelineViewMode] =
-    React.useState<VersionTimelineViewMode>({ type: "main" });
+    useState<VersionTimelineViewMode>({ type: "main" });
 
-  const { getAllXMLVersions } = useStorageXMLVersions();
+  const { subscribeVersions, getAllXMLVersions } = useStorageXMLVersions();
   const compare = useVersionCompare();
   const {
     isCompareMode,
@@ -60,7 +65,7 @@ export function VersionSidebar({
     closeDialog,
   } = compare;
 
-  const selectedVersions = React.useMemo(
+  const selectedVersions = useMemo(
     () =>
       selectedIds
         .map((id) => versions.find((item) => item.id === id))
@@ -68,14 +73,14 @@ export function VersionSidebar({
     [selectedIds, versions],
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedIds.length) return;
     if (selectedVersions.length !== selectedIds.length) {
       resetSelection();
     }
   }, [selectedIds, selectedVersions.length, resetSelection]);
 
-  const comparePair = React.useMemo(() => {
+  const comparePair = useMemo(() => {
     if (selectedVersions.length !== 2) return null;
     const sorted = [...selectedVersions].sort(
       (a, b) => a.created_at - b.created_at,
@@ -89,14 +94,14 @@ export function VersionSidebar({
       ? timelineViewMode.parentVersion
       : undefined;
 
-  const handleTimelineViewModeChange = React.useCallback(
+  const handleTimelineViewModeChange = useCallback(
     (mode: VersionTimelineViewMode) => {
       setTimelineViewMode(mode);
     },
     [setTimelineViewMode],
   );
 
-  const handleNavigateToSubVersions = React.useCallback(
+  const handleNavigateToSubVersions = useCallback(
     (parentVersion: string) => {
       setTimelineViewMode((prev) => {
         if (prev.type === "sub" && prev.parentVersion === parentVersion) {
@@ -108,74 +113,72 @@ export function VersionSidebar({
     [setTimelineViewMode],
   );
 
-  // 加载版本列表
-  const loadVersions = React.useCallback(async () => {
-    if (!projectUuid) return;
+  useEffect(() => {
+    if (!projectUuid) {
+      setVersions([]);
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
+
+    const unsubscribe = subscribeVersions(
+      projectUuid,
+      (nextVersions) => {
+        setVersions(nextVersions);
+        setIsLoading(false);
+      },
+      () => {
+        setError("加载版本列表失败");
+        setIsLoading(false);
+      },
+    );
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [projectUuid, subscribeVersions]);
+
+  useEffect(() => {
+    setTimelineViewMode({ type: "main" });
+  }, [projectUuid, setTimelineViewMode]);
+
+  useEffect(() => {
+    if (!creationFeedback) return;
+    const timer = window.setTimeout(
+      () => setCreationFeedback(null),
+      VERSION_FEEDBACK_DURATION,
+    );
+    return () => window.clearTimeout(timer);
+  }, [creationFeedback]);
+
+  const handleReload = useCallback(async () => {
+    if (!projectUuid) return;
+    setIsLoading(true);
+    setError(null);
     try {
-      const allVersions = await getAllXMLVersions(projectUuid);
-      setVersions(allVersions);
+      await getAllXMLVersions(projectUuid);
     } catch (err) {
       console.error("加载版本列表失败:", err);
       setError("加载版本列表失败");
     } finally {
       setIsLoading(false);
     }
-  }, [projectUuid, getAllXMLVersions]);
+  }, [getAllXMLVersions, projectUuid]);
 
-  // 项目变化时重新加载版本列表
-  React.useEffect(() => {
-    loadVersions();
-  }, [loadVersions]);
-
-  // 监听版本更新事件（创建/回滚后自动刷新）
-  React.useEffect(() => {
-    const handleVersionUpdate = () => {
-      loadVersions();
-    };
-
-    window.addEventListener("version-updated", handleVersionUpdate);
-    window.addEventListener("wip-updated", handleVersionUpdate);
-    return () => {
-      window.removeEventListener("version-updated", handleVersionUpdate);
-      window.removeEventListener("wip-updated", handleVersionUpdate);
-    };
-  }, [loadVersions]);
-
-  React.useEffect(() => {
-    return () => {
-      if (feedbackTimerRef.current) {
-        clearTimeout(feedbackTimerRef.current);
-      }
-    };
-  }, []);
-
-  React.useEffect(() => {
-    setTimelineViewMode({ type: "main" });
-  }, [projectUuid, setTimelineViewMode]);
-
-  // 版本创建后重新加载列表
-  const handleVersionCreated = React.useCallback(
+  // 版本创建后反馈提示
+  const handleVersionCreated = useCallback(
     (result?: CreateHistoricalVersionResult) => {
-      loadVersions();
-
       if (result) {
         const tone = result.svgAttached ? "success" : "warning";
         const message = result.svgAttached
           ? `已保存 ${result.pageCount} 页版本，并缓存 SVG 预览。`
           : `版本已保存（${result.pageCount} 页），但 SVG 导出失败已自动降级。`;
         setCreationFeedback({ message, tone });
-        if (feedbackTimerRef.current) {
-          clearTimeout(feedbackTimerRef.current);
-        }
-        feedbackTimerRef.current = setTimeout(() => {
-          setCreationFeedback(null);
-        }, 4000);
       }
     },
-    [loadVersions],
+    [],
   );
 
   // 如果没有选择项目，显示空状态
@@ -212,7 +215,7 @@ export function VersionSidebar({
           <Button
             size="sm"
             variant="secondary"
-            onPress={loadVersions}
+            onPress={handleReload}
             className="version-sidebar__retry"
           >
             重试

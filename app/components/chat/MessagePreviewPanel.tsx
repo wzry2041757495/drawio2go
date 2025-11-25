@@ -4,6 +4,7 @@ import { Button, Spinner } from "@heroui/react";
 import type { ReactNode } from "react";
 import { X, MessageSquare, User, Bot } from "lucide-react";
 import type { Conversation, Message } from "@/app/lib/storage";
+import { formatConversationDate } from "@/app/lib/format-utils";
 
 interface MessagePreviewPanelProps {
   isOpen: boolean;
@@ -36,14 +37,18 @@ export default function MessagePreviewPanel({
 }: MessagePreviewPanelProps) {
   if (!isOpen || !conversation) return null;
 
+  const updatedLabel = formatConversationDate(
+    conversation.updated_at ?? conversation.created_at,
+    "datetime",
+  );
+
   return (
     <aside className="history-preview" aria-live="polite">
       <div className="history-preview__header">
         <div className="history-preview__title">
           <p className="history-preview__name">{conversation.title}</p>
           <p className="history-preview__meta">
-            {messages.length} 条消息预览 ·{" "}
-            {new Date(conversation.updated_at).toLocaleString()}
+            {messages.length} 条消息预览 · {updatedLabel}
           </p>
         </div>
         <div className="history-preview__actions">

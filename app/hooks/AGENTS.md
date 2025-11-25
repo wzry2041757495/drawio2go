@@ -12,7 +12,7 @@
 
 #### 核心方法
 
-- `getSetting(key)` / `setSetting(key, value)` / `deleteSetting(key)` / `getAllSettings()`
+- `getSetting(key)` / `setSetting(key, value)` / `getAllSettings()`
 - `getLLMConfig()` / `saveLLMConfig(config)`: 获取/保存 LLM 配置（自动规范化）
 - `getDefaultPath()` / `saveDefaultPath(path)`: 获取/保存默认路径
 
@@ -153,3 +153,47 @@ export { useDrawioEditor } from "./useDrawioEditor";
 - **存储层架构**: 详见 `app/lib/AGENTS.md` 中的存储层说明
 - **类型定义**: 详见 `app/types/AGENTS.md`
 - **Socket.IO 协议**: 详见 `app/types/socket-protocol.ts`
+
+## 代码腐化清理记录
+
+### 2025-11-24 清理（超时与提示统一）
+
+- `useStorageConversations` / `useStorageXMLVersions` 统一通过 `withTimeout` 添加 8 秒超时保护，订阅刷新失败会回填到 `error` 状态
+- 聊天侧边栏的存储操作提示改用 HeroUI `Alert`，移除阻塞式 `alert()`
+
+### 2025-11-24 清理（会话订阅落地）
+
+- 存储层新增会话/消息事件派发：`conversation-created` / `conversation-updated` / `conversation-deleted` / `messages-updated`（IndexedDB + SQLite 双端）
+- `useStorageConversations` 提供 `subscribeToConversations`、`subscribeToMessages`，内部缓存随事件自动刷新
+- `ChatSidebar` 改为订阅驱动会话列表与消息加载，保留去抖自动保存；导出前懒加载缺失消息
+
+### 2025-11-23 清理（存储订阅落地）
+
+**执行的操作**：
+
+- `useStorageXMLVersions.ts` 新增 `subscribeVersions()`，统一版本缓存与事件监听
+- 所有 useStorage\* Hooks 改用 `runStorageTask()` 处理加载/错误状态
+- `withTimeout` 提取到 `lib/utils.ts`，Hooks 引用统一
+- 抽取重复的版本缓存更新逻辑为 `updateVersionsCache()` 辅助函数
+
+**影响文件**：5 个文件
+
+**下次关注**：
+
+- 订阅回调的节流与取消机制
+- `runStorageTask` 的错误上报是否需要分级（警告/致命）
+
+### 2025-11-23 清理（第二批）
+
+**执行的操作**：
+
+- 统一 WIP/历史版本写入：新增 `storage/writers.ts`，`saveXML`/`createHistoricalVersion`/`saveDrawioXMLInternal` 均走同一管线（归一化 + 元数据 + 事件派发）
+- 版本缓存集中化：`useStorageXMLVersions` 提供 `subscribeVersions`，内部监听 version/wip 事件刷新缓存，`VersionSidebar` 取消本地重复加载
+- 提取公共工具：`runStorageTask`/`withTimeout`/`formatVersionTimestamp`/`formatConversationDate`，所有 useStorage\* Hooks 统一错误与加载处理
+- XML 验证与 DOMParser 缓存统一：`validateXMLFormat`、drawio-xml-service 缓存解析器
+
+**影响文件**：`app/hooks/useStorageXMLVersions.ts`、`app/components/VersionSidebar.tsx`、`app/lib/storage/writers.ts`、`app/lib/drawio-tools.ts`、`app/lib/drawio-ai-tools.ts`、`app/lib/drawio-xml-service.ts`、`app/lib/drawio-xml-utils.ts`、`app/lib/utils.ts`、`app/lib/format-utils.ts`、`app/hooks/useStorageSettings.ts`、`app/hooks/useStorageProjects.ts`、`app/hooks/useStorageConversations.ts`、`app/components/version/*`、`app/components/chat/*`
+
+**下次关注**：
+
+- 版本订阅机制已上线，后续组件（如版本时间线的派生视图）可逐步迁移到订阅数据源，避免并行状态

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
-import { Download, History, Upload, Trash2 } from "lucide-react";
+import { Download, History, Trash2 } from "lucide-react";
 import type { ChatSession } from "@/app/types/chat";
 
 interface ChatSessionHeaderProps {
@@ -12,7 +12,6 @@ interface ChatSessionHeaderProps {
   onDeleteSession: () => void;
   onExportSession: () => void;
   onExportAllSessions: () => void;
-  onImportSessions: () => void;
 }
 
 export default function ChatSessionHeader({
@@ -23,7 +22,6 @@ export default function ChatSessionHeader({
   onDeleteSession,
   onExportSession,
   onExportAllSessions,
-  onImportSessions,
 }: ChatSessionHeaderProps) {
   if (!activeSession) {
     return null;
@@ -103,21 +101,6 @@ export default function ChatSessionHeader({
           </Button>
           <TooltipContent placement="top">
             <p>导出所有会话</p>
-          </TooltipContent>
-        </TooltipRoot>
-
-        <TooltipRoot delay={0}>
-          <Button
-            size="sm"
-            variant="tertiary"
-            isIconOnly
-            aria-label="导入会话"
-            onPress={onImportSessions}
-          >
-            <Upload size={16} />
-          </Button>
-          <TooltipContent placement="top">
-            <p>导入会话</p>
           </TooltipContent>
         </TooltipRoot>
       </div>

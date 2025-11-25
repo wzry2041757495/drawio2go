@@ -61,10 +61,3 @@ export const getToolExpansionKey = (
   const baseKey = toolCallId ? String(toolCallId) : `${messageId}-${index}`;
   return state ? `${baseKey}-${state}` : baseKey;
 };
-
-/**
- * 判断工具调用是否应该默认展开
- */
-export const shouldToolBeExpanded = (_state: string): boolean => {
-  return false;
-};

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-// import DrawioEditor from "./components/DrawioEditor";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import TopBar from "./components/TopBar";
 import UnifiedSidebar, { type SidebarTab } from "./components/UnifiedSidebar";
@@ -187,8 +186,6 @@ export default function Home() {
         await saveXML(xml, currentProject.uuid);
         // 更新 diagramXml 用于手动保存功能
         setDiagramXml(xml);
-        // 触发 WIP 更新事件
-        window.dispatchEvent(new Event("wip-updated"));
       } catch (error) {
         console.error("自动保存失败:", error);
         // 可以在这里添加用户提示，但不中断编辑流程
@@ -309,9 +306,6 @@ export default function Home() {
 
       // 重新加载 WIP 到编辑器并同步状态
       await syncDiagramXml();
-
-      // 触发版本更新事件
-      window.dispatchEvent(new Event("version-updated"));
 
       console.log("✅ 版本回滚成功");
     } catch (error) {

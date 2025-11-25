@@ -17,8 +17,6 @@ interface ChatInputAreaProps {
   onCancel?: () => void;
   onNewChat: () => void;
   onHistory: () => void;
-  onVersionControl: () => void;
-  onFileUpload: () => void;
 }
 
 export default function ChatInputArea({
@@ -32,8 +30,6 @@ export default function ChatInputArea({
   onCancel,
   onNewChat,
   onHistory,
-  onVersionControl,
-  onFileUpload,
 }: ChatInputAreaProps) {
   const isSendDisabled =
     !input.trim() || isChatStreaming || configLoading || !llmConfig;
@@ -78,8 +74,6 @@ export default function ChatInputArea({
           onCancel={onCancel}
           onNewChat={onNewChat}
           onHistory={onHistory}
-          onVersionControl={onVersionControl}
-          onFileUpload={onFileUpload}
         />
       </form>
     </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getStorage, DEFAULT_PROJECT_UUID } from "@/app/lib/storage";
 import type { Project } from "@/app/lib/storage";
+import { generateProjectUUID, runStorageTask } from "@/app/lib/utils";
 
 /**
  * 工程管理 Hook
@@ -19,16 +20,15 @@ export function useStorageProjects() {
    * 获取所有工程列表
    */
   const getAllProjects = useCallback(async (): Promise<Project[]> => {
-    try {
-      const storage = await getStorage();
-      const allProjects = await storage.getAllProjects();
-      setProjects(allProjects);
-      return allProjects;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      throw error;
-    }
+    return runStorageTask(
+      async () => {
+        const storage = await getStorage();
+        const allProjects = await storage.getAllProjects();
+        setProjects(allProjects);
+        return allProjects;
+      },
+      { setLoading, setError },
+    );
   }, []);
 
   /**
@@ -36,15 +36,14 @@ export function useStorageProjects() {
    */
   const getProject = useCallback(
     async (uuid: string): Promise<Project | null> => {
-      try {
-        const storage = await getStorage();
-        const project = await storage.getProject(uuid);
-        return project;
-      } catch (err) {
-        const error = err as Error;
-        setError(error);
-        throw error;
-      }
+      return runStorageTask(
+        async () => {
+          const storage = await getStorage();
+          const project = await storage.getProject(uuid);
+          return project;
+        },
+        { setLoading, setError },
+      );
     },
     [],
   );
@@ -53,16 +52,15 @@ export function useStorageProjects() {
    * 获取默认工程
    */
   const getDefaultProject = useCallback(async (): Promise<Project | null> => {
-    try {
-      const storage = await getStorage();
-      const project = await storage.getProject(DEFAULT_PROJECT_UUID);
-      setDefaultProject(project);
-      return project;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      throw error;
-    }
+    return runStorageTask(
+      async () => {
+        const storage = await getStorage();
+        const project = await storage.getProject(DEFAULT_PROJECT_UUID);
+        setDefaultProject(project);
+        return project;
+      },
+      { setLoading, setError },
+    );
   }, []);
 
   /**
@@ -70,27 +68,26 @@ export function useStorageProjects() {
    */
   const createProject = useCallback(
     async (name: string, description?: string): Promise<Project> => {
-      try {
-        const storage = await getStorage();
-        const uuid = `project-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        const now = Date.now();
+      return runStorageTask(
+        async () => {
+          const storage = await getStorage();
+          const uuid = generateProjectUUID();
+          const now = Date.now();
 
-        const newProject: Project = {
-          uuid,
-          name,
-          description,
-          created_at: now,
-          updated_at: now,
-        };
+          const newProject: Project = {
+            uuid,
+            name,
+            description,
+            created_at: now,
+            updated_at: now,
+          };
 
-        await storage.createProject(newProject);
-        await getAllProjects(); // 刷新列表
-        return newProject;
-      } catch (err) {
-        const error = err as Error;
-        setError(error);
-        throw error;
-      }
+          await storage.createProject(newProject);
+          await getAllProjects(); // 刷新列表
+          return newProject;
+        },
+        { setLoading, setError },
+      );
     },
     [getAllProjects],
   );
@@ -103,18 +100,17 @@ export function useStorageProjects() {
       uuid: string,
       updates: Partial<Omit<Project, "uuid" | "created_at" | "updated_at">>,
     ): Promise<void> => {
-      try {
-        const storage = await getStorage();
-        await storage.updateProject(uuid, updates);
-        await getAllProjects(); // 刷新列表
-        if (uuid === DEFAULT_PROJECT_UUID) {
-          await getDefaultProject(); // 刷新默认工程
-        }
-      } catch (err) {
-        const error = err as Error;
-        setError(error);
-        throw error;
-      }
+      await runStorageTask(
+        async () => {
+          const storage = await getStorage();
+          await storage.updateProject(uuid, updates);
+          await getAllProjects(); // 刷新列表
+          if (uuid === DEFAULT_PROJECT_UUID) {
+            await getDefaultProject(); // 刷新默认工程
+          }
+        },
+        { setLoading, setError },
+      );
     },
     [getAllProjects, getDefaultProject],
   );

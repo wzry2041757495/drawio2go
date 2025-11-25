@@ -13,8 +13,6 @@ interface ChatInputActionsProps {
   onCancel?: () => void;
   onNewChat: () => void;
   onHistory: () => void;
-  onVersionControl: () => void;
-  onFileUpload: () => void;
 }
 
 export default function ChatInputActions({
@@ -23,8 +21,6 @@ export default function ChatInputActions({
   onCancel,
   onNewChat,
   onHistory,
-  onVersionControl,
-  onFileUpload,
 }: ChatInputActionsProps) {
   const canCancel = Boolean(isChatStreaming && onCancel);
   const sendButtonVariant: ButtonProps["variant"] = canCancel
@@ -99,61 +95,6 @@ export default function ChatInputActions({
 
       {/* 右侧按钮组 */}
       <div className="chat-actions-right">
-        <TooltipRoot delay={0}>
-          <Button
-            size="sm"
-            variant="tertiary"
-            isIconOnly
-            aria-label="版本管理"
-            onPress={onVersionControl}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="18" cy="18" r="3"></circle>
-              <circle cx="6" cy="6" r="3"></circle>
-              <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
-              <line x1="6" y1="9" x2="6" y2="21"></line>
-            </svg>
-          </Button>
-          <TooltipContent placement="top">
-            <p>版本管理</p>
-          </TooltipContent>
-        </TooltipRoot>
-
-        <TooltipRoot delay={0}>
-          <Button
-            size="sm"
-            variant="tertiary"
-            isIconOnly
-            aria-label="文件上传"
-            onPress={onFileUpload}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-            </svg>
-          </Button>
-          <TooltipContent placement="top">
-            <p>文件上传</p>
-          </TooltipContent>
-        </TooltipRoot>
-
         <Button
           type={sendButtonType}
           variant={sendButtonVariant}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, type Key } from "react";
+import { useState, useEffect, useRef, type Key, type RefObject } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { Tabs } from "@heroui/react";
 import { History, MessageSquare, Settings } from "lucide-react";
 import ChatSidebar from "./ChatSidebar";
 import SettingsSidebar from "./SettingsSidebar";
 import { VersionSidebar } from "./VersionSidebar";
+import { SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from "./constants/sidebar";
 import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 
@@ -21,11 +22,8 @@ interface UnifiedSidebarProps {
   currentProjectId?: string;
   projectUuid?: string | null;
   onVersionRestore?: (versionId: string) => void;
-  editorRef: React.RefObject<DrawioEditorRef | null>;
+  editorRef: RefObject<DrawioEditorRef | null>;
 }
-
-const MIN_WIDTH = 300;
-const MAX_WIDTH = 3000;
 
 type SidebarPointerEvent = ReactPointerEvent<HTMLDivElement>;
 
@@ -68,8 +66,8 @@ export default function UnifiedSidebar({
   const calculateWidth = (clientX: number) => {
     const viewportWidth = window.innerWidth;
     const rawWidth = viewportWidth - clientX;
-    const clampedMax = Math.min(MAX_WIDTH, viewportWidth);
-    return Math.max(MIN_WIDTH, Math.min(rawWidth, clampedMax));
+    const clampedMax = Math.min(SIDEBAR_MAX_WIDTH, viewportWidth);
+    return Math.max(SIDEBAR_MIN_WIDTH, Math.min(rawWidth, clampedMax));
   };
 
   const finalizeResize = async () => {

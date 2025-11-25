@@ -82,11 +82,7 @@
 - `exportDiagram()`: 导出 XML
 - `exportSVG()`: 导出 SVG（Promise 队列避免串扰）
 
-### 2. DrawioEditor.tsx - 备用编辑器
-
-react-drawio 组件实现，当原生 iframe 方案不可用时使用。
-
-### 3. UnifiedSidebar.tsx - 统一侧边栏
+### 2. UnifiedSidebar.tsx - 统一侧边栏
 
 **Props**: `isOpen`, `activeTab`, `onTabChange`, `onClose`, `currentProjectId`, `projectUuid`, `onVersionRestore`, ...
 
@@ -97,7 +93,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 - HeroUI Tabs 导航：聊天/设置/版本
 - 两段式布局：Tab 区 + 内容区
 
-### 4. SettingsSidebar.tsx - 设置侧边栏
+### 3. SettingsSidebar.tsx - 设置侧边栏
 
 **Props**: `isOpen`, `onClose`, `onSettingsChange`
 
@@ -109,7 +105,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 
 **特性**: 底部操作条（有修改时显示取消/保存）、供应商切换（OpenAI Responses/Chat Completions/DeepSeek）
 
-### 5. ChatSidebar.tsx - 聊天侧边栏
+### 4. ChatSidebar.tsx - 聊天侧边栏
 
 **Props**: `isOpen`, `onClose`
 
@@ -123,7 +119,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 - 工具状态卡片（进行中/成功/失败）
 - 模型信息条（图标 + 模型名 + 时间戳）
 
-#### 5.1 聊天子组件（app/components/chat/）
+#### 4.1 聊天子组件（app/components/chat/）
 
 **核心组件**: ChatSessionHeader、ChatSessionMenu、MessageList、MessageItem、MessageContent、ChatInputArea、ChatInputActions
 
@@ -131,7 +127,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 
 **统一导出**: `app/components/chat/index.ts`
 
-### 6. ThemeToggle.tsx - 主题切换
+### 5. ThemeToggle.tsx - 主题切换
 
 **功能**: 深色/浅色模式切换、localStorage 持久化、系统主题检测、平滑动画（300ms）、避免 SSR 闪烁
 
@@ -140,7 +136,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 - 浅色：`class="light" data-theme="drawio2go"`
 - 深色：`class="dark" data-theme="drawio2go-dark"`
 
-### 7. TopBar.tsx - 顶部操作栏
+### 6. TopBar.tsx - 顶部操作栏
 
 **Props**: `selectionLabel`, `currentProjectName`, `onOpenProjectSelector`, `onLoad`, `onSave`, `isSidebarOpen`, `onToggleSidebar`
 
@@ -155,7 +151,7 @@ react-drawio 组件实现，当原生 iframe 方案不可用时使用。
 - Electron: 显示 `选中了X个对象`
 - 浏览器: 固定文案 `网页无法使用该功能`
 
-### 8. ProjectSelector.tsx - 工程选择模态
+### 7. ProjectSelector.tsx - 工程选择模态
 
 **Props**: `isOpen`, `onClose`, `currentProjectId`, `onSelectProject`, `projects`, `isLoading`, `onCreateProject`
 
@@ -253,4 +249,58 @@ import { Button } from '@heroui/react';
 
 - Try-catch 包装异步操作
 - 用户友好的错误提示
-- 降级方案（如 DrawioEditor 备用方案）
+
+## 代码腐化清理记录
+
+### 2025-11-24 清理
+
+**执行的操作**：
+
+- 删除未实现的 TODO 函数（ChatSidebar.tsx）、未使用的国际化资源、空目录
+- 新增 DOM 缓存工具（dom-parser-cache.ts），统一 Parser/Serializer 缓存
+- 新增 UUID 生成工具（utils.generateProjectUUID），移除重复实现
+- 新增会话数据服务（chat-session-service.ts），ChatSidebar 从 1088 行减至 745 行
+- 新增会话存储订阅机制（conversation-created/updated/deleted、messages-updated 事件）
+- 修复默认工程创建路径，统一使用 prepareXmlContext + persistWipVersion 管线
+- 新增统一日志工具（logger.ts），移除 useCurrentProject 中的 emoji 日志
+- 统一错误处理与超时策略（8 秒超时，runStorageTask + withTimeout）
+- XML 规范化集中到 writers 管线，移除重复调用
+- 用 HeroUI Alert 替代原生 alert，提取魔术值到常量
+
+**影响文件**：约 25 个文件
+
+**下次关注**：
+
+- ChatSidebar 可进一步拆分动作/视图层，目标 500 行以内
+- 考虑为存储层添加统一的事务/批处理接口
+
+### 2025-11-23 清理（日期与订阅统一）
+
+**执行的操作**：
+
+- `VersionSidebar.tsx` 删除本地 `loadVersions` 状态，改用 `useStorageXMLVersions` 的订阅机制
+- 所有日期展示改用 `format-utils.ts`（formatVersionTimestamp/formatConversationDate）
+- 聊天与版本子组件（MessageItem/ChatSessionMenu/ConversationList/MessagePreviewPanel/VersionCard/VersionCompare/ProjectSelector）统一日期格式
+
+**影响文件**：9 个文件
+
+**下次关注**：
+
+- 订阅数据与分页/筛选共存时的性能与去抖策略
+- 日期格式工具是否需要支持多语言/时区参数
+
+### 2025-11-23 清理
+
+**执行的操作**：
+
+- 删除 `DrawioEditor.tsx` 死代码（整个文件未被使用，唯一引用已被注释）
+- 删除 `page.tsx` 中已注释的 `DrawioEditor` 导入
+- 更新本文档，移除对已删除组件的描述
+- 补充 `toolConstants.ts` 中缺失的 `drawio_overwrite` 工具标签
+
+**影响文件**：3 个（`DrawioEditor.tsx` 已删除, `page.tsx`, `toolConstants.ts`）
+
+**下次关注**：
+
+- `DrawioEditorNative.tsx` 的 `handleMessage` 长函数（163 行）可考虑拆分为事件处理器映射
+- 魔法数字（如 10000ms 超时）可提取为命名常量

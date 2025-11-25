@@ -1,8 +1,8 @@
-import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { select } from "xpath";
 
 import { executeToolOnClient } from "./tool-executor";
 import { normalizeDiagramXml } from "./drawio-xml-utils";
+import { getDomParser, getXmlSerializer } from "./dom-parser-cache";
 import type {
   DrawioEditBatchRequest,
   DrawioEditBatchResult,
@@ -18,6 +18,22 @@ import type {
   RemoveElementOperation,
 } from "@/app/types/drawio-tools";
 import type { GetXMLResult, ReplaceXMLResult } from "@/app/types/drawio-tools";
+
+function ensureParser(): DOMParser {
+  const parser = getDomParser();
+  if (!parser) {
+    throw new Error("当前环境不支持 DOMParser");
+  }
+  return parser;
+}
+
+function ensureSerializer(): XMLSerializer {
+  const serializer = getXmlSerializer();
+  if (!serializer) {
+    throw new Error("当前环境不支持 XMLSerializer");
+  }
+  return serializer;
+}
 
 export async function executeDrawioRead(
   xpathExpression?: string,
@@ -109,7 +125,7 @@ export async function executeDrawioEditBatch(
     }
   }
 
-  const serializer = new XMLSerializer();
+  const serializer = ensureSerializer();
   const updatedXml = serializer.serializeToString(document);
 
   const replaceResult = (await executeToolOnClient(
@@ -120,6 +136,16 @@ export async function executeDrawioEditBatch(
 
   if (!replaceResult?.success) {
     console.error("[DrawIO XML Service] 批量编辑写回失败:", replaceResult);
+
+    // drawio_syntax_error 表示前端在解析失败时已自行回滚，避免重复回滚
+    const alreadyRolledBack = replaceResult?.error === "drawio_syntax_error";
+
+    if (alreadyRolledBack) {
+      throw new Error(
+        replaceResult?.message ||
+          "批量编辑失败：DrawIO 报告语法错误，已自动回滚到修改前状态",
+      );
+    }
 
     let rollbackSucceeded = false;
     let rollbackErrorMessage: string | undefined;
@@ -187,7 +213,7 @@ async function fetchDiagramXml(): Promise<string> {
 }
 
 function parseXml(xml: string): Document {
-  const parser = new DOMParser();
+  const parser = ensureParser();
   const document = parser.parseFromString(xml, "text/xml");
   const parseErrors = document.getElementsByTagName("parsererror");
   if (parseErrors.length > 0) {
@@ -197,7 +223,7 @@ function parseXml(xml: string): Document {
 }
 
 function convertNodeToResult(node: Node): DrawioQueryResult | null {
-  const serializer = new XMLSerializer();
+  const serializer = ensureSerializer();
   const matchedXPath = buildXPathForNode(node);
 
   switch (node.nodeType) {
@@ -443,7 +469,7 @@ function setTextContent(
 }
 
 function createElementFromXml(document: Document, xml: string): Element {
-  const parser = new DOMParser();
+  const parser = ensureParser();
   const fragment = parser.parseFromString(xml, "text/xml");
   const parseErrors = fragment.getElementsByTagName("parsererror");
   if (parseErrors.length > 0) {

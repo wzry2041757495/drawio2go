@@ -35,6 +35,7 @@ import {
   type SmartDiffResult,
 } from "@/app/lib/svg-smart-diff";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
+import { formatVersionTimestamp } from "@/app/lib/format-utils";
 
 interface VersionCompareProps {
   versionA: XMLVersion;
@@ -66,26 +67,17 @@ const MAX_SCALE = 4;
 const SCALE_STEP = 0.2;
 
 function formatVersionMeta(version: XMLVersion) {
-  return `${version.semantic_version} · ${new Date(
+  return `${version.semantic_version} · ${formatVersionTimestamp(
     version.created_at,
-  ).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+    "full",
+  )}`;
 }
 
 function formatVersionLabel(version: XMLVersion) {
-  return `${version.semantic_version} (${new Date(
+  return `${version.semantic_version} (${formatVersionTimestamp(
     version.created_at,
-  ).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })})`;
+    "compact",
+  )})`;
 }
 
 function createSvgUrl(svg?: string) {

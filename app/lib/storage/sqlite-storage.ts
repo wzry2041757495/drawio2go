@@ -19,6 +19,25 @@ import {
   resolvePageMetadataFromXml,
 } from "./page-metadata-validators";
 
+type ConversationEventType =
+  | "conversation-created"
+  | "conversation-updated"
+  | "conversation-deleted"
+  | "messages-updated";
+
+function dispatchConversationEvent(
+  event: ConversationEventType,
+  detail: {
+    projectUuid?: string;
+    conversationId?: string;
+    conversationIds?: string[];
+    messageIds?: string[];
+  },
+) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(event, { detail }));
+}
+
 function parseMetadata(value: unknown): Record<string, unknown> | null {
   if (value == null) return null;
   if (typeof value === "string") {
@@ -327,7 +346,13 @@ export class SQLiteStorage implements StorageAdapter {
     conversation: CreateConversationInput,
   ): Promise<Conversation> {
     await this.ensureElectron();
-    return window.electronStorage!.createConversation(conversation);
+    const created =
+      await window.electronStorage!.createConversation(conversation);
+    dispatchConversationEvent("conversation-created", {
+      projectUuid: created.project_uuid,
+      conversationId: created.id,
+    });
+    return created;
   }
 
   async updateConversation(
@@ -335,18 +360,48 @@ export class SQLiteStorage implements StorageAdapter {
     updates: UpdateConversationInput,
   ): Promise<void> {
     await this.ensureElectron();
+    const conversation = await window.electronStorage!.getConversation(id);
     await window.electronStorage!.updateConversation(id, updates);
+    dispatchConversationEvent("conversation-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
   }
 
   async deleteConversation(id: string): Promise<void> {
     await this.ensureElectron();
+    const conversation = await window.electronStorage!.getConversation(id);
     await window.electronStorage!.deleteConversation(id);
+    dispatchConversationEvent("conversation-deleted", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
+    dispatchConversationEvent("messages-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
   }
 
   async batchDeleteConversations(ids: string[]): Promise<void> {
     await this.ensureElectron();
     if (!ids || ids.length === 0) return;
+    const conversations = await Promise.all(
+      ids.map((id) => window.electronStorage!.getConversation(id)),
+    );
     await window.electronStorage!.batchDeleteConversations(ids);
+    conversations.forEach((conversation, index) => {
+      const conversationId = ids[index];
+      dispatchConversationEvent("conversation-deleted", {
+        projectUuid: conversation?.project_uuid,
+        conversationId,
+        conversationIds: ids,
+      });
+      dispatchConversationEvent("messages-updated", {
+        projectUuid: conversation?.project_uuid,
+        conversationId,
+        conversationIds: ids,
+      });
+    });
   }
 
   async exportConversations(ids: string[]): Promise<Blob> {
@@ -371,16 +426,47 @@ export class SQLiteStorage implements StorageAdapter {
 
   async createMessage(message: CreateMessageInput): Promise<Message> {
     await this.ensureElectron();
-    return window.electronStorage!.createMessage(message);
+    const created = await window.electronStorage!.createMessage(message);
+    const conversation = await window.electronStorage!.getConversation(
+      message.conversation_id,
+    );
+    dispatchConversationEvent("messages-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: message.conversation_id,
+      messageIds: [created.id],
+    });
+    return created;
   }
 
   async deleteMessage(id: string): Promise<void> {
     await this.ensureElectron();
     await window.electronStorage!.deleteMessage(id);
+    dispatchConversationEvent("messages-updated", {
+      messageIds: [id],
+    });
   }
 
   async createMessages(messages: CreateMessageInput[]): Promise<Message[]> {
     await this.ensureElectron();
-    return window.electronStorage!.createMessages(messages);
+    const created = await window.electronStorage!.createMessages(messages);
+    const conversationIds = Array.from(
+      new Set(messages.map((msg) => msg.conversation_id)),
+    );
+
+    for (const conversationId of conversationIds) {
+      const conversation =
+        await window.electronStorage!.getConversation(conversationId);
+      const relatedIds = created
+        .filter((msg) => msg.conversation_id === conversationId)
+        .map((msg) => msg.id);
+
+      dispatchConversationEvent("messages-updated", {
+        projectUuid: conversation?.project_uuid,
+        conversationId,
+        messageIds: relatedIds,
+      });
+    }
+
+    return created;
   }
 }

@@ -39,6 +39,7 @@ import {
 } from "./version-utils";
 import { decompressBlob } from "@/app/lib/compression-utils";
 import { countSubVersions, isSubVersion } from "@/app/lib/version-utils";
+import { formatVersionTimestamp } from "@/app/lib/format-utils";
 
 interface VersionCardProps {
   version: XMLVersion;
@@ -204,27 +205,14 @@ export function VersionCard({
   );
 
   // 格式化创建时间
-  const createdAtFull = new Date(resolvedVersion.created_at).toLocaleString(
-    "zh-CN",
-    {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    },
+  const createdAtFull = formatVersionTimestamp(
+    resolvedVersion.created_at,
+    "full",
   );
 
-  // 紧凑格式时间（折叠状态）
-  const createdAtCompact = new Date(resolvedVersion.created_at).toLocaleString(
-    "zh-CN",
-    {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    },
+  const createdAtCompact = formatVersionTimestamp(
+    resolvedVersion.created_at,
+    "compact",
   );
 
   // 管理 preview_svg 的 Object URL（需要先解压）

@@ -13,10 +13,13 @@
 - **svg-export-utils.ts**: DrawIO 多页面 SVG 导出工具（页面拆分、单页 XML 重建、结果序列化）
 - **compression-utils.ts**: Web/Node 共享的 `CompressionStream` / `DecompressionStream` deflate-raw 压缩工具
 - **drawio-xml-utils.ts**: XML 归一化工具，支持裸 XML / data URI / Base64，并自动解压 `<diagram>` 内的 DrawIO 压缩内容（deflate + base64 + encodeURIComponent）
+- **storage/writers.ts**: 统一的 WIP/历史版本写入管线（归一化 + 页面元数据 + 关键帧/Diff 计算 + 事件派发）
 - **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id + 几何语义匹配的元素级高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
 - **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
-- **utils.ts**: 通用工具函数（debounce 防抖函数，支持 flush/cancel 方法）
+- **format-utils.ts**: 统一的日期格式化工具（版本时间戳、会话日期）
+- **utils.ts**: 通用工具函数（debounce 防抖函数，支持 flush/cancel 方法；runStorageTask、withTimeout）
+- **logger.ts**: 轻量日志工厂（`createLogger(componentName)`），自动加组件前缀并支持 debug/info/warn/error 级别过滤
 
 ### svg-export-utils.ts
 
@@ -149,6 +152,7 @@ interface SmartDiffStats {
 - 使用统一存储抽象层（Electron: SQLite, Web: IndexedDB）
 - 保存时自动解码 base64，并通过 `drawio-xml-updated` 自定义事件通知编辑器
 - 提供 `getDrawioXML()`、`replaceDrawioXML()`、`saveDrawioXML()` 三个接口
+- XML 归一化在 `storage/writers.prepareXmlContext` 统一处理，前端桥接层不再重复调用 `normalizeDiagramXml`
 - **WIP 工作区自动保存**：
   - 编辑器变更自动保存到 WIP 版本（v0.0.0）
   - WIP 版本不计入历史记录，仅用于实时保存，永远视为关键帧
@@ -482,3 +486,58 @@ const xml = await restoreXMLFromVersion("version-uuid", storage);
 - `drawio_read` 查询结果结构
 - `drawio_edit_batch` 支持的操作及返回值
 - 存储层接口和表结构类型
+
+## 代码腐化清理记录
+
+### 2025-11-23 清理（统一写入管线）
+
+**执行的操作**：
+
+- 新增 `storage/writers.ts` 统一 WIP/历史版本写入管线（归一化、元数据、事件派发）
+- 新增 `format-utils.ts` 统一日期格式化（formatVersionTimestamp, formatConversationDate）
+- 在 `drawio-xml-utils.ts` 中新增 `validateXMLFormat()` 统一 XML 验证逻辑
+- 在 `drawio-xml-service.ts` 引入 DOMParser/XMLSerializer 缓存机制
+- 在 `utils.ts` 新增 `runStorageTask()` 和 `withTimeout()` 工具函数
+- `drawio-tools.ts`、`drawio-ai-tools.ts` 改用统一写入管线，删除重复逻辑
+
+**影响文件**：7 个文件
+
+**下次关注**：
+
+- writers 管线事件顺序与前端订阅的兼容性
+- 日期格式化的时区一致性（UTC→本地）验证
+
+### 2025-11-24 清理（DOM 缓存与 UUID 统一）
+
+**执行的操作**：
+
+- 新增 `dom-parser-cache.ts` 统一 DOMParser/XMLSerializer 缓存，`drawio-xml-utils`、`drawio-xml-service`、`svg-smart-diff` 复用
+- `utils.ts` 增加 `generateProjectUUID()`，`useCurrentProject` / `useStorageProjects` 使用统一的工程 UUID 生成策略
+
+**影响文件**：`app/lib/dom-parser-cache.ts`、`app/lib/drawio-xml-utils.ts`、`app/lib/drawio-xml-service.ts`、`app/lib/svg-smart-diff.ts`、`app/lib/utils.ts`、`app/hooks/useCurrentProject.ts`、`app/hooks/useStorageProjects.ts`
+
+### 2025-11-23 清理
+
+**执行的操作**：
+
+- 修复 `drawio-xml-service.ts` 双重回滚职责冲突：当前端已通过 `drawio_syntax_error` 完成回滚时，服务端跳过二次回滚
+- 清理重复的类型别名：`ReplaceResult` → 直接使用 `ReplaceXMLResult` 接口
+
+**影响文件**：2 个（`drawio-xml-service.ts`, `../types/drawio-tools.ts`）
+
+**下次关注**：
+
+- `drawio-tools.ts` 与 `useStorageXMLVersions.ts` 的 WIP 写入逻辑差异（当前为合理的功能区分，暂不合并）
+- XML 归一化调用链的性能优化机会（多处调用 `normalizeDiagramXml`）
+
+### 2025-11-24 清理（日志与规范化定位）
+
+**执行的操作**：
+
+- 新增 `logger.ts` 统一日志工厂，支持组件级前缀与日志级别过滤
+- `drawio-tools.ts` 通过 `prepareXmlContext` 复用 writers 管线完成 XML 归一化与验证，移除重复的 `normalizeDiagramXml` 调用
+- `drawio-xml-service.ts` 内部创建节点改为复用 DOMParser 缓存（`ensureParser`）
+
+**下次关注**：
+
+- 是否需要在存储层暴露全局日志级别配置入口

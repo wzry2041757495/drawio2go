@@ -34,6 +34,25 @@ import { runIndexedDbMigrations } from "./migrations/indexeddb";
 import { v4 as uuidv4 } from "uuid";
 import { createDefaultDiagramXml } from "./default-diagram-xml";
 
+type ConversationEventType =
+  | "conversation-created"
+  | "conversation-updated"
+  | "conversation-deleted"
+  | "messages-updated";
+
+function dispatchConversationEvent(
+  event: ConversationEventType,
+  detail: {
+    projectUuid?: string;
+    conversationId?: string;
+    conversationIds?: string[];
+    messageIds?: string[];
+  },
+) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(event, { detail }));
+}
+
 /**
  * IndexedDB 存储实现（Web 环境）
  * 使用 idb 库提供 Promise 化的 IndexedDB API
@@ -511,6 +530,10 @@ export class IndexedDBStorage implements StorageAdapter {
     };
 
     await db.put("conversations", fullConversation);
+    dispatchConversationEvent("conversation-created", {
+      projectUuid: fullConversation.project_uuid,
+      conversationId: fullConversation.id,
+    });
     return fullConversation;
   }
 
@@ -533,10 +556,15 @@ export class IndexedDBStorage implements StorageAdapter {
     };
 
     await db.put("conversations", updated);
+    dispatchConversationEvent("conversation-updated", {
+      projectUuid: updated.project_uuid,
+      conversationId: updated.id,
+    });
   }
 
   async deleteConversation(id: string): Promise<void> {
     const db = await this.ensureDB();
+    const conversation = await db.get("conversations", id);
 
     // 级联删除消息
     const tx = db.transaction(
@@ -556,6 +584,15 @@ export class IndexedDBStorage implements StorageAdapter {
     await tx.objectStore("conversation_sequences").delete(id);
 
     await tx.done;
+
+    dispatchConversationEvent("conversation-deleted", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
+    dispatchConversationEvent("messages-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
   }
 
   async batchDeleteConversations(ids: string[]): Promise<void> {
@@ -568,8 +605,12 @@ export class IndexedDBStorage implements StorageAdapter {
     const messagesStore = tx.objectStore("messages");
     const convStore = tx.objectStore("conversations");
     const seqStore = tx.objectStore("conversation_sequences");
+    const conversationProjects = new Map<string, string | undefined>();
 
     for (const id of ids) {
+      const conversation = await convStore.get(id);
+      conversationProjects.set(id, conversation?.project_uuid);
+
       const range = IDBKeyRange.only(id);
       const cursor = await messagesStore
         .index("conversation_id")
@@ -587,6 +628,19 @@ export class IndexedDBStorage implements StorageAdapter {
     }
 
     await tx.done;
+
+    ids.forEach((conversationId) => {
+      dispatchConversationEvent("conversation-deleted", {
+        projectUuid: conversationProjects.get(conversationId),
+        conversationId,
+        conversationIds: ids,
+      });
+      dispatchConversationEvent("messages-updated", {
+        projectUuid: conversationProjects.get(conversationId),
+        conversationId,
+        conversationIds: ids,
+      });
+    });
   }
 
   async exportConversations(ids: string[]): Promise<Blob> {
@@ -742,12 +796,32 @@ export class IndexedDBStorage implements StorageAdapter {
     await store.put(fullMessage);
     await tx.done;
 
+    const conversation = await db.get("conversations", message.conversation_id);
+    dispatchConversationEvent("messages-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: message.conversation_id,
+      messageIds: [fullMessage.id],
+    });
+
     return fullMessage;
   }
 
   async deleteMessage(id: string): Promise<void> {
     const db = await this.ensureDB();
+    const existing = await db.get("messages", id);
     await db.delete("messages", id);
+
+    if (existing) {
+      const conversation = await db.get(
+        "conversations",
+        existing.conversation_id,
+      );
+      dispatchConversationEvent("messages-updated", {
+        projectUuid: conversation?.project_uuid,
+        conversationId: existing.conversation_id,
+        messageIds: [id],
+      });
+    }
   }
 
   async createMessages(messages: CreateMessageInput[]): Promise<Message[]> {
@@ -789,6 +863,21 @@ export class IndexedDBStorage implements StorageAdapter {
     }
 
     await tx.done;
+
+    const conversationIds = Array.from(
+      new Set(messages.map((msg) => msg.conversation_id)),
+    );
+    for (const conversationId of conversationIds) {
+      const conversation = await db.get("conversations", conversationId);
+      const relatedMessageIds = inserted
+        .filter((msg) => msg.conversation_id === conversationId)
+        .map((msg) => msg.id);
+      dispatchConversationEvent("messages-updated", {
+        projectUuid: conversation?.project_uuid,
+        conversationId,
+        messageIds: relatedMessageIds,
+      });
+    }
 
     return inserted;
   }
