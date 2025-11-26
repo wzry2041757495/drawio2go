@@ -58,16 +58,19 @@
 ## 验收标准
 
 ### TypeScript编译
+
 - [ ] 运行 `pnpm tsc --noEmit` 无类型错误
 - [ ] 所有新类型定义完整且正确
 
 ### 类型完整性
+
 - [ ] `ProviderConfig` 包含所有必需字段和正确的类型
 - [ ] `ModelConfig` 正确关联到 `providerId`
 - [ ] `RuntimeLLMConfig` 正确合并所有配置字段
 - [ ] 所有时间戳字段使用 `number` 类型
 
 ### 默认配置
+
 - [ ] `DEFAULT_PROVIDERS` 包含完整的DeepSeek供应商配置
 - [ ] 所有默认模型都有正确的初始参数
 - [ ] `initializeDefaultLLMConfig()` 函数逻辑清晰
@@ -77,6 +80,7 @@
 **前置依赖**: 无
 
 **后续依赖**:
+
 - Milestone 2（存储层方法）依赖此里程碑的类型定义
 - Milestone 3-7（所有UI和API）依赖此里程碑的类型定义
 
