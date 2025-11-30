@@ -3,7 +3,6 @@
 import { type FormEvent } from "react";
 import { TextArea } from "@heroui/react";
 import { type LLMConfig } from "@/app/types/chat";
-import ErrorBanner from "./ErrorBanner";
 import ChatInputActions from "./ChatInputActions";
 
 interface ChatInputAreaProps {
@@ -12,7 +11,6 @@ interface ChatInputAreaProps {
   isChatStreaming: boolean;
   configLoading: boolean;
   llmConfig: LLMConfig | null;
-  error: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel?: () => void;
   onNewChat: () => void;
@@ -25,7 +23,6 @@ export default function ChatInputArea({
   isChatStreaming,
   configLoading,
   llmConfig,
-  error,
   onSubmit,
   onCancel,
   onNewChat,
@@ -53,8 +50,6 @@ export default function ChatInputArea({
 
   return (
     <div className="chat-input-area">
-      <ErrorBanner error={error} />
-
       <form onSubmit={onSubmit} className="chat-input-container">
         {/* 多行文本输入框 */}
         <TextArea

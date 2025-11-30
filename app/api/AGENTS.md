@@ -26,7 +26,7 @@ app/api/
 
 ### `/api/chat` - 聊天端点
 
-**文件**: `/home/aaa/Code/drawio2go/app/api/chat/route.ts`
+**文件**: `drawio2go/app/api/chat/route.ts`
 
 #### 功能描述
 
@@ -93,7 +93,7 @@ if (providerType === "openai-reasoning") {
 
 ### `/api/test` - 连接测试端点
 
-**文件**: `/home/aaa/Code/drawio2go/app/api/test/route.ts`
+**文件**: `drawio2go/app/api/test/route.ts`
 
 #### 功能描述
 
@@ -136,7 +136,7 @@ interface TestRequest {
 
 ### DrawIO 工具定义
 
-**来源**: `/home/aaa/Code/drawio2go/app/lib/drawio-ai-tools.ts`
+**来源**: `drawio2go/app/lib/drawio-ai-tools.ts`
 
 ```typescript
 export const drawioTools = {
@@ -182,7 +182,7 @@ stopWhen: stepCountIs(normalizedConfig.maxToolRounds);
 
 ## 类型定义
 
-**来源**: `/home/aaa/Code/drawio2go/app/types/chat.ts`
+**来源**: `drawio2go/app/types/chat.ts`
 
 ### LLMConfig
 
@@ -211,7 +211,7 @@ type ProviderType =
 
 ## 配置工具
 
-**来源**: `/home/aaa/Code/drawio2go/app/lib/config-utils.ts`
+**来源**: `drawio2go/app/lib/config-utils.ts`
 
 ### 默认配置
 

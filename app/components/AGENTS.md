@@ -123,7 +123,7 @@
 
 **核心组件**: ChatSessionHeader、ChatSessionMenu、MessageList、MessageItem、MessageContent、ChatInputArea、ChatInputActions
 
-**辅助组件**: EmptyState、ErrorBanner（HeroUI Alert）、ToolCallCard、ThinkingBlock
+**辅助组件**: EmptyState、ToolCallCard、ThinkingBlock
 
 **统一导出**: `app/components/chat/index.ts`
 

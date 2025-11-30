@@ -12,7 +12,6 @@ export { default as MessageList } from "./MessageList";
 export { default as MessageItem } from "./MessageItem";
 export { default as MessageContent } from "./MessageContent";
 export { default as EmptyState } from "./EmptyState";
-export { default as ErrorBanner } from "./ErrorBanner";
 export { default as ChatInputArea } from "./ChatInputArea";
 export { default as ChatInputActions } from "./ChatInputActions";
 export { default as ToolCallCard } from "./ToolCallCard";

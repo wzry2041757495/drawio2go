@@ -31,6 +31,7 @@ import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
 import type { XMLVersion } from "@/app/lib/storage/types";
+import { useToast } from "../toast";
 import { PageSVGViewer } from "./PageSVGViewer";
 import {
   createBlobFromSource,
@@ -40,7 +41,7 @@ import {
 import { decompressBlob } from "@/app/lib/compression-utils";
 import { countSubVersions, isSubVersion } from "@/app/lib/version-utils";
 import { formatVersionTimestamp } from "@/app/lib/format-utils";
-import { useAppTranslation } from "@/app/i18n/hooks";
+import { useAppTranslation, useI18n } from "@/app/i18n/hooks";
 
 interface VersionCardProps {
   version: XMLVersion;
@@ -92,7 +93,9 @@ export function VersionCard({
   const [viewerInitialPage, setViewerInitialPage] = React.useState(0);
   const pageObjectUrlsRef = React.useRef<string[]>([]);
   const { getXMLVersion, loadVersionSVGFields } = useStorageXMLVersions();
+  const { t } = useI18n();
   const { i18n } = useAppTranslation("version");
+  const { push } = useToast();
   const [resolvedVersion, setResolvedVersion] =
     React.useState<XMLVersion>(version);
   const isSubVersionEntry = React.useMemo(
@@ -398,7 +401,10 @@ export function VersionCard({
       console.log(`✅ 版本 ${version.semantic_version} 导出成功`);
     } catch (error) {
       console.error("导出版本失败:", error);
-      alert("导出失败");
+      push({
+        variant: "danger",
+        description: t("toasts.exportFailed"),
+      });
     } finally {
       setIsExporting(false);
     }

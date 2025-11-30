@@ -8,7 +8,6 @@ import {
   useCallback,
   type FormEvent,
 } from "react";
-import { Alert } from "@heroui/react";
 import { AlertTriangle } from "lucide-react";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -16,6 +15,8 @@ import {
   useStorageConversations,
   useStorageXMLVersions,
 } from "@/app/hooks";
+import { useToast } from "@/app/components/toast";
+import { useI18n } from "@/app/i18n/hooks";
 import { DEFAULT_PROJECT_UUID } from "@/app/lib/storage";
 import type {
   ChatUIMessage,
@@ -49,8 +50,6 @@ interface ChatSidebarProps {
   currentProjectId?: string;
   isSocketConnected?: boolean;
 }
-
-const NOTICE_DURATION_MS = 3200;
 
 // ========== 主组件 ==========
 
@@ -101,10 +100,13 @@ export default function ChatSidebar({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{
-    message: string;
-    status: "success" | "warning" | "danger";
-  } | null>(null);
+  const { t } = useI18n();
+  const { push } = useToast();
+  const lastErrorRef = useRef<{
+    chat?: string;
+    settings?: string;
+    conversations?: string;
+  }>({});
 
   // ========== 引用 ==========
   const sendingSessionIdRef = useRef<string | null>(null);
@@ -132,18 +134,44 @@ export default function ChatSidebar({
     [llmConfig],
   );
 
-  const showNotice = useCallback(
-    (message: string, status: "success" | "warning" | "danger") => {
-      setNotice({ message, status });
+  const pushErrorToast = useCallback(
+    (message: string, title = t("toasts.operationFailedTitle")) => {
+      push({
+        variant: "danger",
+        title,
+        description: message,
+      });
     },
-    [],
+    [push, t],
   );
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), NOTICE_DURATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+  const extractErrorMessage = useCallback((error: unknown): string | null => {
+    if (!error) return null;
+    if (typeof error === "string") return error;
+    if (error instanceof Error) return error.message;
+    if (typeof error === "object" && "message" in error) {
+      const maybeMessage = (error as { message?: unknown }).message;
+      if (typeof maybeMessage === "string") return maybeMessage;
+    }
+    return null;
+  }, []);
+
+  const showNotice = useCallback(
+    (message: string, status: "success" | "warning" | "danger") => {
+      const title =
+        status === "success"
+          ? t("toasts.operationSuccessTitle")
+          : status === "warning"
+            ? t("toasts.operationWarningTitle")
+            : t("toasts.operationFailedTitle");
+      push({
+        variant: status,
+        title,
+        description: message,
+      });
+    },
+    [push, t],
+  );
 
   const ensureMessageMetadata = useCallback(
     (message: ChatUIMessage): ChatUIMessage => {
@@ -181,6 +209,18 @@ export default function ChatSidebar({
     [],
   );
 
+  const handleSaveError = useCallback(
+    (message: string) => {
+      const normalizedMessage = message?.trim() ?? "";
+      setSaveError(normalizedMessage || null);
+
+      if (normalizedMessage) {
+        push({ variant: "danger", description: normalizedMessage });
+      }
+    },
+    [push],
+  );
+
   if (!chatServiceRef.current) {
     chatServiceRef.current = createChatSessionService(
       {
@@ -195,7 +235,7 @@ export default function ChatSidebar({
         defaultXmlVersionId,
         onMessagesChange: handleMessagesChange,
         onSavingChange: setIsSaving,
-        onSaveError: setSaveError,
+        onSaveError: handleSaveError,
       },
     );
   }
@@ -256,12 +296,17 @@ export default function ChatSidebar({
     async (sessions: ExportSessionPayload[], defaultFilename: string) => {
       const success = await exportSessionsAsJson(sessions, defaultFilename);
       if (success) {
-        showNotice("导出成功", "success");
+        showNotice(t("toasts.sessionExportSuccess"), "success");
       } else {
-        showNotice("导出失败，请重试", "danger");
+        showNotice(
+          t("toasts.sessionExportFailed", {
+            error: t("toasts.unknownError"),
+          }),
+          "danger",
+        );
       }
     },
-    [showNotice],
+    [showNotice, t],
   );
 
   // ========== 初始化 ==========
@@ -465,6 +510,31 @@ export default function ChatSidebar({
     resolveConversationId,
   ]);
 
+  useEffect(() => {
+    const message = extractErrorMessage(settingsError);
+    if (message && lastErrorRef.current.settings !== message) {
+      lastErrorRef.current.settings = message;
+      pushErrorToast(message, t("toasts.settingsLoadFailed"));
+    }
+  }, [extractErrorMessage, settingsError, pushErrorToast, t]);
+
+  useEffect(() => {
+    const message = extractErrorMessage(conversationsError);
+    if (message && lastErrorRef.current.conversations !== message) {
+      lastErrorRef.current.conversations = message;
+      pushErrorToast(message, t("toasts.conversationsSyncFailed"));
+    }
+  }, [conversationsError, extractErrorMessage, pushErrorToast, t]);
+
+  useEffect(() => {
+    const message = extractErrorMessage(chatError);
+
+    if (message && lastErrorRef.current.chat !== message) {
+      lastErrorRef.current.chat = message;
+      pushErrorToast(message, t("toasts.chatRequestFailed"));
+    }
+  }, [chatError, extractErrorMessage, pushErrorToast, t]);
+
   // ========== 事件处理函数 ==========
 
   const submitMessage = async () => {
@@ -565,7 +635,7 @@ export default function ChatSidebar({
     if (!activeConversation) return;
 
     if (conversations.length === 1) {
-      showNotice("至少需要保留一个会话", "warning");
+      showNotice(t("toasts.sessionDeleteKeepOne"), "warning");
       return;
     }
 
@@ -577,15 +647,22 @@ export default function ChatSidebar({
         removeConversationsFromState([activeConversation.id]);
       } catch (error) {
         console.error("[ChatSidebar] 删除对话失败:", error);
-        showNotice("删除失败，请稍后重试", "danger");
+        const errorMessage =
+          extractErrorMessage(error) ?? t("toasts.unknownError");
+        showNotice(
+          t("toasts.sessionDeleteFailed", { error: errorMessage }),
+          "danger",
+        );
       }
     }
   }, [
     activeConversation,
+    extractErrorMessage,
     conversations.length,
     deleteConversationFromStorage,
     removeConversationsFromState,
     showNotice,
+    t,
   ]);
 
   const handleExportSession = async () => {
@@ -657,15 +734,22 @@ export default function ChatSidebar({
         }
       } catch (error) {
         console.error("[ChatSidebar] 批量删除对话失败:", error);
-        showNotice("批量删除失败，请稍后重试", "danger");
+        const errorMessage =
+          extractErrorMessage(error) ?? t("toasts.unknownError");
+        showNotice(
+          t("toasts.batchDeleteFailed", { error: errorMessage }),
+          "danger",
+        );
       }
     },
     [
       activeConversationId,
       batchDeleteConversations,
       conversations.length,
+      extractErrorMessage,
       removeConversationsFromState,
       showNotice,
+      t,
     ],
   );
 
@@ -677,14 +761,22 @@ export default function ChatSidebar({
         const defaultPath = `chat-export-${new Date().toISOString().split("T")[0]}.json`;
         const success = await exportBlobContent(blob, defaultPath);
         if (!success) {
-          showNotice("导出失败，请重试", "danger");
+          showNotice(
+            t("toasts.chatExportFailed", { error: t("toasts.unknownError") }),
+            "danger",
+          );
         }
       } catch (error) {
         console.error("[ChatSidebar] 批量导出对话失败:", error);
-        showNotice("导出失败，请稍后重试", "danger");
+        const errorMessage =
+          extractErrorMessage(error) ?? t("toasts.unknownError");
+        showNotice(
+          t("toasts.chatExportFailed", { error: errorMessage }),
+          "danger",
+        );
       }
     },
-    [exportConversations, showNotice],
+    [exportConversations, extractErrorMessage, showNotice, t],
   );
 
   const handleToolCallToggle = (key: string) => {
@@ -701,28 +793,11 @@ export default function ChatSidebar({
     }));
   };
 
-  const combinedError =
-    settingsError?.message ||
-    conversationsError?.message ||
-    chatError?.message ||
-    null;
   const showSocketWarning = !isSocketConnected;
-  const noticeBanner = notice ? (
-    <Alert status={notice.status} className="mb-3">
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>
-          {notice.status === "success" ? "操作成功" : "提示"}
-        </Alert.Title>
-        <Alert.Description>{notice.message}</Alert.Description>
-      </Alert.Content>
-    </Alert>
-  ) : null;
 
   if (currentView === "history") {
     return (
       <div className="chat-sidebar-content">
-        {noticeBanner}
         <ChatHistoryView
           currentProjectId={currentProjectId}
           conversations={conversations}
@@ -737,7 +812,6 @@ export default function ChatSidebar({
 
   return (
     <div className="chat-sidebar-content">
-      {noticeBanner}
       {/* 消息内容区域 - 无分隔线一体化设计 */}
       <div className="chat-messages-area">
         {/* 会话标题栏 */}
@@ -793,7 +867,6 @@ export default function ChatSidebar({
         isChatStreaming={isChatStreaming}
         configLoading={configLoading}
         llmConfig={llmConfig}
-        error={combinedError}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         onNewChat={handleNewChat}

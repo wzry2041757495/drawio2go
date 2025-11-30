@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { Alert, Button, Skeleton } from "@heroui/react";
+import { Button, Skeleton } from "@heroui/react";
 import {
   VersionTimeline,
   type VersionTimelineViewMode,
@@ -20,10 +20,10 @@ import {
   type CreateHistoricalVersionResult,
 } from "@/app/hooks/useStorageXMLVersions";
 import { History, Save } from "lucide-react";
+import { useToast } from "@/app/components/toast";
 import type { XMLVersion } from "@/app/lib/storage/types";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
-
-const VERSION_FEEDBACK_DURATION = 4000;
+import { useI18n } from "@/app/i18n/hooks";
 
 interface VersionSidebarProps {
   projectUuid: string | null;
@@ -40,14 +40,12 @@ export function VersionSidebar({
   onVersionRestore,
   editorRef,
 }: VersionSidebarProps) {
+  const { t } = useI18n();
+  const { push } = useToast();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [versions, setVersions] = useState<XMLVersion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [creationFeedback, setCreationFeedback] = useState<{
-    message: string;
-    tone: "success" | "warning";
-  } | null>(null);
   const [timelineViewMode, setTimelineViewMode] =
     useState<VersionTimelineViewMode>({ type: "main" });
 
@@ -144,15 +142,6 @@ export function VersionSidebar({
     setTimelineViewMode({ type: "main" });
   }, [projectUuid, setTimelineViewMode]);
 
-  useEffect(() => {
-    if (!creationFeedback) return;
-    const timer = window.setTimeout(
-      () => setCreationFeedback(null),
-      VERSION_FEEDBACK_DURATION,
-    );
-    return () => window.clearTimeout(timer);
-  }, [creationFeedback]);
-
   const handleReload = useCallback(async () => {
     if (!projectUuid) return;
     setIsLoading(true);
@@ -173,12 +162,19 @@ export function VersionSidebar({
       if (result) {
         const tone = result.svgAttached ? "success" : "warning";
         const message = result.svgAttached
-          ? `已保存 ${result.pageCount} 页版本，并缓存 SVG 预览。`
-          : `版本已保存（${result.pageCount} 页），但 SVG 导出失败已自动降级。`;
-        setCreationFeedback({ message, tone });
+          ? t("toasts.versionCreateSuccess", { pageCount: result.pageCount })
+          : t("toasts.versionCreateDegraded", { pageCount: result.pageCount });
+        push({
+          variant: tone,
+          title:
+            tone === "success"
+              ? t("toasts.versionCreateSuccessTitle")
+              : t("toasts.versionCreateDegradedTitle"),
+          description: message,
+        });
       }
     },
-    [],
+    [push, t],
   );
 
   // 如果没有选择项目，显示空状态
@@ -269,22 +265,6 @@ export function VersionSidebar({
 
       {/* 滚动内容区域 */}
       <div className="sidebar-content">
-        {creationFeedback && (
-          <Alert
-            status={creationFeedback.tone === "success" ? "success" : "warning"}
-            className="mb-4"
-          >
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>
-                {creationFeedback.tone === "success"
-                  ? "版本已保存"
-                  : "已降级保存"}
-              </Alert.Title>
-              <Alert.Description>{creationFeedback.message}</Alert.Description>
-            </Alert.Content>
-          </Alert>
-        )}
         {isLoading ? (
           <div className="space-y-4">
             <Skeleton className="h-28 rounded-xl" />

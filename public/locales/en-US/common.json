@@ -1,5 +1,38 @@
 {
   "toast": {
     "close": "Close notification"
+  },
+  "toasts": {
+    "noContentToSave": "Nothing to save.",
+    "fileSaved": "File saved to: {{filePath}}",
+    "saveFailed": "Save failed: {{error}}",
+    "loadFailed": "Load failed: {{error}}",
+    "projectSwitchFailed": "Failed to switch project.",
+    "projectCreateFailed": "Failed to create project.",
+    "versionRollbackFailed": "Version rollback failed.",
+    "exportFailed": "Export failed.",
+    "versionCreateSuccessTitle": "Version saved",
+    "versionCreateSuccess": "Saved {{pageCount}} pages and cached SVG previews.",
+    "versionCreateDegradedTitle": "Saved with fallback",
+    "versionCreateDegraded": "Version saved ({{pageCount}} pages), but SVG export failed and was downgraded.",
+    "diagramUpdateFailedTitle": "Diagram update failed",
+    "diagramUpdateFailed": "Diagram update failed: {{error}}. Changes were rolled back.",
+    "operationFailedTitle": "Action failed",
+    "operationSuccessTitle": "Success",
+    "operationWarningTitle": "Notice",
+    "settingsLoadFailed": "Settings load failed",
+    "conversationsSyncFailed": "Conversation sync failed",
+    "chatRequestFailed": "Chat request failed",
+    "sessionExportSuccess": "Session exported successfully",
+    "sessionExportFailed": "Session export failed: {{error}}",
+    "chatExportFailed": "Chat export failed: {{error}}",
+    "sessionDeleteKeepOne": "Keep at least one session.",
+    "sessionDeleteFailed": "Failed to delete session: {{error}}",
+    "batchDeleteFailed": "Batch deletion failed: {{error}}",
+    "autoSaveFailed": "Auto-saving messages failed. We'll keep retrying in the background. Please check storage or network.",
+    "requestFailed": "Request failed: {{error}}",
+    "saveSuccess": "Saved successfully",
+    "close": "Close",
+    "unknownError": "Unknown error"
   }
 }

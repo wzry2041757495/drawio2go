@@ -1,5 +1,38 @@
 {
   "toast": {
     "close": "关闭通知"
+  },
+  "toasts": {
+    "noContentToSave": "没有可保存的内容",
+    "fileSaved": "文件已保存到: {{filePath}}",
+    "saveFailed": "保存失败: {{error}}",
+    "loadFailed": "加载失败: {{error}}",
+    "projectSwitchFailed": "切换工程失败",
+    "projectCreateFailed": "创建工程失败",
+    "versionRollbackFailed": "版本回滚失败",
+    "exportFailed": "导出失败",
+    "versionCreateSuccessTitle": "版本已保存",
+    "versionCreateSuccess": "已保存 {{pageCount}} 页版本，并缓存 SVG 预览。",
+    "versionCreateDegradedTitle": "已降级保存",
+    "versionCreateDegraded": "版本已保存（{{pageCount}} 页），但 SVG 导出失败已自动降级。",
+    "diagramUpdateFailedTitle": "图表更新失败",
+    "diagramUpdateFailed": "图表更新失败：{{error}}。已自动回滚到修改前状态",
+    "operationFailedTitle": "操作失败",
+    "operationSuccessTitle": "操作成功",
+    "operationWarningTitle": "提示",
+    "settingsLoadFailed": "设置加载失败",
+    "conversationsSyncFailed": "会话同步失败",
+    "chatRequestFailed": "聊天请求失败",
+    "sessionExportSuccess": "会话导出成功",
+    "sessionExportFailed": "会话导出失败：{{error}}",
+    "chatExportFailed": "聊天记录导出失败：{{error}}",
+    "sessionDeleteKeepOne": "至少需要保留一个会话",
+    "sessionDeleteFailed": "删除会话失败：{{error}}",
+    "batchDeleteFailed": "批量删除失败：{{error}}",
+    "autoSaveFailed": "消息自动保存失败，将在后台继续重试。请检查存储或网络状态。",
+    "requestFailed": "请求失败：{{error}}",
+    "saveSuccess": "保存成功",
+    "close": "关闭",
+    "unknownError": "未知错误"
   }
 }

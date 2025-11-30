@@ -13,6 +13,8 @@ import { useStorageProjects } from "./hooks/useStorageProjects";
 import { useStorageXMLVersions } from "./hooks/useStorageXMLVersions";
 import { useDrawioEditor } from "./hooks/useDrawioEditor";
 import { WIP_VERSION } from "./lib/storage/constants";
+import { useToast } from "./components/toast";
+import { useI18n } from "./i18n/hooks";
 
 export default function Home() {
   // 存储 Hook
@@ -35,6 +37,9 @@ export default function Home() {
   const { saveXML, getAllXMLVersions, rollbackToVersion } =
     useStorageXMLVersions();
 
+  const { t } = useI18n();
+  const { push } = useToast();
+
   // DrawIO 编辑器 Hook
   const { editorRef, loadProjectXml, replaceWithXml } = useDrawioEditor(
     currentProject?.uuid,
@@ -51,9 +56,6 @@ export default function Home() {
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] =
     useState<boolean>(false);
-  const [mergeErrorMessage, setMergeErrorMessage] = useState<string | null>(
-    null,
-  );
 
   // 初始化 Socket.IO 连接
   const { isConnected } = useDrawioSocket(editorRef);
@@ -140,8 +142,6 @@ export default function Home() {
 
   // 监听 DrawIO 合并错误并展示提示
   useEffect(() => {
-    let toastTimer: number | null = null;
-
     const handleMergeError = (event: Event) => {
       const customEvent = event as CustomEvent<{
         error?: unknown;
@@ -156,28 +156,19 @@ export default function Home() {
         "未知错误";
 
       console.error("[DrawIO] 图表更新失败:", error, message);
-      setMergeErrorMessage(
-        `图表更新失败：${mergedMessage}。已自动回滚到修改前状态`,
-      );
-
-      if (toastTimer) {
-        window.clearTimeout(toastTimer);
-      }
-
-      toastTimer = window.setTimeout(() => {
-        setMergeErrorMessage(null);
-      }, 8000);
+      push({
+        variant: "danger",
+        title: t("toasts.diagramUpdateFailedTitle"),
+        description: t("toasts.diagramUpdateFailed", { error: mergedMessage }),
+      });
     };
 
     window.addEventListener("drawio-merge-error", handleMergeError);
 
     return () => {
       window.removeEventListener("drawio-merge-error", handleMergeError);
-      if (toastTimer) {
-        window.clearTimeout(toastTimer);
-      }
     };
-  }, []);
+  }, [push, t]);
 
   // 自动保存图表到统一存储层
   const handleAutoSave = async (xml: string) => {
@@ -206,7 +197,10 @@ export default function Home() {
       const currentXml = await editorRef.current?.exportDiagram();
 
       if (!currentXml) {
-        alert("没有可保存的内容");
+        push({
+          description: t("toasts.noContentToSave"),
+          variant: "warning",
+        });
         return;
       }
 
@@ -217,9 +211,15 @@ export default function Home() {
           settings.defaultPath,
         );
         if (result.success) {
-          alert(`文件已保存到: ${result.filePath}`);
+          push({
+            description: t("toasts.fileSaved", { filePath: result.filePath }),
+            variant: "success",
+          });
         } else {
-          alert(`保存失败: ${result.message}`);
+          push({
+            description: t("toasts.saveFailed", { error: result.message }),
+            variant: "danger",
+          });
         }
       } else {
         // 浏览器环境下载文件
@@ -233,7 +233,10 @@ export default function Home() {
       }
     } catch (error) {
       console.error("手动保存失败:", error);
-      alert("保存失败");
+      push({
+        description: t("toasts.saveFailed", { error: String(error) }),
+        variant: "danger",
+      });
     }
   };
 
@@ -247,10 +250,16 @@ export default function Home() {
           await replaceWithXml(result.xml, true); // 使用 load 动作完全重载
         } catch (error) {
           console.error("加载文件失败:", error);
-          alert(`加载失败: ${error}`);
+          push({
+            description: t("toasts.loadFailed", { error: String(error) }),
+            variant: "danger",
+          });
         }
       } else if (result.message !== "用户取消打开") {
-        alert(`加载失败: ${result.message}`);
+        push({
+          description: t("toasts.loadFailed", { error: result.message }),
+          variant: "danger",
+        });
       }
     } else {
       // 浏览器环境上传文件
@@ -268,7 +277,10 @@ export default function Home() {
               await replaceWithXml(xml, true); // 使用 load 动作完全重载
             } catch (error) {
               console.error("加载文件失败:", error);
-              alert(`加载失败: ${error}`);
+              push({
+                description: t("toasts.loadFailed", { error: String(error) }),
+                variant: "danger",
+              });
             }
           };
           reader.readAsText(file);
@@ -310,7 +322,10 @@ export default function Home() {
       console.log("✅ 版本回滚成功");
     } catch (error) {
       console.error("❌ 版本回滚失败:", error);
-      alert("版本回滚失败");
+      push({
+        description: t("toasts.versionRollbackFailed"),
+        variant: "danger",
+      });
     }
   };
 
@@ -329,7 +344,10 @@ export default function Home() {
       // 切换工程后会自动触发 useEffect 加载新工程的 XML
     } catch (error) {
       console.error("切换工程失败:", error);
-      alert("切换工程失败");
+      push({
+        description: t("toasts.projectSwitchFailed"),
+        variant: "danger",
+      });
     }
   };
 
@@ -341,7 +359,10 @@ export default function Home() {
       setShowProjectSelector(false);
     } catch (error) {
       console.error("创建工程失败:", error);
-      alert("创建工程失败");
+      push({
+        description: t("toasts.projectCreateFailed"),
+        variant: "danger",
+      });
     }
   };
 
@@ -414,7 +435,7 @@ export default function Home() {
   return (
     <main className={`main-container ${isSidebarOpen ? "sidebar-open" : ""}`}>
       {/* 顶部通知区域：Socket 断连 & DrawIO 合并错误 */}
-      {(mergeErrorMessage || !isConnected) && (
+      {!isConnected && (
         <div
           style={{
             position: "fixed",
@@ -429,61 +450,20 @@ export default function Home() {
             pointerEvents: "none",
           }}
         >
-          {!isConnected && (
-            <div
-              style={{
-                background: "#ff6b6b",
-                color: "white",
-                padding: "8px 12px",
-                textAlign: "center",
-                fontSize: "14px",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                pointerEvents: "auto",
-              }}
-            >
-              ⚠️ Socket.IO 未连接，AI 工具功能不可用
-            </div>
-          )}
-
-          {mergeErrorMessage && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                background: "#ff6b6b",
-                color: "white",
-                padding: "10px 12px",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                fontSize: "14px",
-                lineHeight: 1.5,
-                pointerEvents: "auto",
-              }}
-            >
-              <span role="img" aria-label="error">
-                ⚠️
-              </span>
-              <div style={{ flex: 1 }}>{mergeErrorMessage}</div>
-              <button
-                type="button"
-                onClick={() => setMergeErrorMessage(null)}
-                style={{
-                  background: "rgba(255,255,255,0.16)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "6px 10px",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  lineHeight: 1.2,
-                }}
-              >
-                关闭
-              </button>
-            </div>
-          )}
+          <div
+            style={{
+              background: "#ff6b6b",
+              color: "white",
+              padding: "8px 12px",
+              textAlign: "center",
+              fontSize: "14px",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              pointerEvents: "auto",
+            }}
+          >
+            ⚠️ Socket.IO 未连接，AI 工具功能不可用
+          </div>
         </div>
       )}
 

@@ -23,16 +23,16 @@
 
 ### svg-export-utils.ts
 
-- `parsePages(xml)`: 解析 `<diagram>` 列表，返回 `{ id, name, index, xmlContent, element }`
-- `createSinglePageXml(diagram)`: 复制 diagram 并生成完整 mxfile 字符串，保持 host/agent 等元数据
-- `exportAllPagesSVG(editor, fullXml, options)`: 顺序执行 `loadDiagram → exportSVG` 并可接收 `onProgress`，结束后自动恢复原始 XML
-- `serializeSVGsToBlob` / `deserializeSVGsFromBlob`: **异步** 工具，内部使用 `compression-utils` 将 JSON 结果以 `deflate-raw` 压缩后写入 Blob，再在读取时自动解压
+- `parsePages(xml)`: 解析 `<diagram>` 列表，返回页面元数据
+- `createSinglePageXml(diagram)`: 生成单页 mxfile，保持元数据
+- `exportAllPagesSVG(editor, fullXml)`: 顺序导出多页 SVG，自动恢复原始 XML
+- `serializeSVGsToBlob` / `deserializeSVGsFromBlob`: 使用 `compression-utils` 压缩/解压 SVG 数据
 
 ### compression-utils.ts
 
-- `compressBlob(blob)`：使用原生 `CompressionStream("deflate-raw")` 压缩 Blob（Node.js v17+ 和现代浏览器均支持）
-- `decompressBlob(blob)`：配套解压实现，使用原生 `DecompressionStream`
-- 该模块是 svg 存储和 preview_svg 压缩的唯一入口，避免重复实现
+- 统一入口：使用原生 `CompressionStream/DecompressionStream` 实现 deflate-raw 压缩
+- 支持 Node.js v17+ 和现代浏览器
+- 避免重复实现压缩逻辑
 
 ### svg-smart-diff.ts
 
@@ -40,25 +40,10 @@
 
 #### 核心功能
 
-- **元素级匹配**: 先通过 `data-cell-id` 自动匹配，剩余元素按照几何尺寸、相对位置、标签类型、文本内容进行模糊匹配
-- **差异分类**:
-  - **匹配元素** (`matched`): 两个版本中完全相同的元素
-  - **变更元素** (`changed`): ID 相同但内容不同的元素
-  - **仅 A 存在** (`onlyA`): 被删除的元素
-  - **仅 B 存在** (`onlyB`): 新增的元素
-- **视觉归一化**: 自动缩放和居中对齐不同尺寸的 SVG
-- **智能高亮**: 使用混合模式和滤镜高亮差异元素
-
-**匹配策略升级（2025-11-17）**
-
-1. **Cell 集合解析**：为每个 `data-cell-id` 叶子节点提取 `bbox`、中心点、面积、长宽比以及裁剪后的文本内容，统一归一化坐标。
-2. **多阶段匹配**：
-   - 阶段 1：`data-cell-id` 精确匹配（自动处理重复 ID，按出现顺序一对一匹配）。
-   - 阶段 2：针对剩余元素构建候选对，综合尺寸（35%）+相对位置（25%）+文本（25%）+长宽比（15%）打分，使用最大匹配贪心策略筛选分值 ≥0.58 的配对。
-3. **高亮基准选择**：仍然根据画布面积→元素数量的优先级挑选底层版本，保证差异渲染在更大的画布上呈现。
-4. **自动补充 ID**：未携带 `data-cell-id` 的元素在差异 SVG 中会自动生成 `auto-x`，确保定位稳定。
-
-> 受限于 DrawIO 导出的绝对坐标不可靠，新的匹配算法将重心放在几何/文本相似度，避免因整体平移而误判新增或删除。
+- **多阶段匹配**: data-cell-id 精确匹配 → 剩余元素按几何尺寸/位置/文本打分
+- **差异分类**: matched / changed / onlyA / onlyB 四个类别
+- **视觉高亮**: 自动缩放对齐，使用混合模式和滤镜显示差异
+- **自动 ID 补充**: 未标记元素自动生成 `auto-x` 确保定位稳定
 
 #### 主要函数
 
@@ -89,26 +74,116 @@ interface SmartDiffStats {
 
 #### 视觉样式
 
-- **匹配元素**: 低透明度 (32%)，去饱和度，multiply 混合模式
-- **删除元素**: 红色发光效果 (`--smart-diff-removed`)
-- **新增元素**: 绿色发光效果 (`--smart-diff-added`)
-- **变更元素**: 黄色发光效果，同时显示新旧版本
+使用 multiply 混合模式和 CSS 变量高亮：匹配(32%透明度)、删除(红)、新增(绿)、变更(黄)
 
 #### 使用场景
 
-- `VersionCompare` 组件的 `smart` 对比模式
-- 自动生成版本差异可视化
-- 提供详细的差异统计信息
+- `VersionCompare` 组件的版本差异可视化
+- 提供详细的匹配统计（matched / changed / onlyA / onlyB）
 
 ### storage/
 
-统一存储抽象层（适配器模式）
+统一存储抽象层（适配器模式），详见 `app/lib/storage/AGENTS.md`
 
-- **current-project.ts**: 当前工程 ID 持久化工具
+**核心设计原则：**
+
+- **适配器模式**: 定义统一接口，支持 SQLite (Electron) 和 IndexedDB (Web)
+- **环境自适应**: 运行时检测环境，自动选择实现
+- **类型安全**: 完整 TypeScript 类型定义
+
+**主要文件：**
+
+- **adapter.ts**: 抽象基类 `StorageAdapter`，定义统一接口
+- **sqlite-storage.ts**: SQLite 实现（Electron）
+- **indexeddb-storage.ts**: IndexedDB 实现（Web）
+- **storage-factory.ts**: 工厂函数，运行时创建实例
+- **types.ts**: 共享类型定义
+- **constants.ts**: 常量（表名、WIP_VERSION 等）
+- **current-project.ts**: 当前工程 ID 持久化
 - **xml-version-engine.ts**: XML 版本恢复引擎（Diff 重放）
-- **page-metadata-validators.ts**: `page_count` / `page_names` / SVG Blob 校验与规范化的共享工具，IndexedDB 与 SQLite 实现必须调用保持一致行为
-- **migrations/indexeddb/**: IndexedDB v1 迁移脚本（当前仅 `v1.ts`），`IndexedDBStorage.initialize()` 会在 `upgrade` 回调内执行，禁止再删除/重建 Object Store
-- **electron/storage/migrations/**: Electron 端 SQLite 迁移脚本（当前为 `v1.js`），主进程 `SQLiteManager` 初始化时自动运行并写入 `user_version`
+
+#### 核心 API
+
+所有存储实现继承 `StorageAdapter` 接口：
+
+```typescript
+// Projects 表操作
+abstract getProject(uuid: string): Promise<Project | null>;
+abstract getAllProjects(): Promise<Project[]>;
+abstract saveProject(project: Project): Promise<void>;
+abstract deleteProject(uuid: string): Promise<void>;
+
+// XMLVersions 表操作
+abstract getXMLVersion(id: string): Promise<XMLVersion | null>;
+abstract getLatestXML(project_uuid: string): Promise<XMLVersion | null>;
+abstract saveXMLVersion(version: XMLVersion): Promise<void>;
+abstract deleteXMLVersion(id: string): Promise<void>;
+
+// Conversations 表操作
+abstract getConversation(id: string): Promise<Conversation | null>;
+abstract getAllConversations(): Promise<Conversation[]>;
+abstract saveConversation(conversation: Conversation): Promise<void>;
+abstract deleteConversation(id: string): Promise<void>;
+abstract clearAllConversations(): Promise<void>;
+
+// Settings 表操作
+abstract getSetting(key: string): Promise<string | null>;
+abstract saveSetting(key: string, value: string): Promise<void>;
+abstract deleteSetting(key: string): Promise<void>;
+```
+
+#### 表结构概览
+
+| 表名              | 主要字段                                                                             | 说明                 |
+| ----------------- | ------------------------------------------------------------------------------------ | -------------------- |
+| **Projects**      | uuid, name, created_at, updated_at                                                   | 项目元数据           |
+| **XMLVersions**   | id, project_uuid, semantic_version, is_keyframe, xml_content, page_count, created_at | XML 版本与关键帧管理 |
+| **Conversations** | id, project_uuid, title, created_at, updated_at                                      | 聊天会话             |
+| **Messages**      | id, conversation_id, role, content, model_name, xml_version_id, created_at           | 消息明细             |
+| **Settings**      | key, value, updated_at                                                               | 应用全局设置         |
+
+#### 版本管理架构
+
+**混合存储策略：**
+
+- **WIP 工作区** (v0.0.0): 实时自动保存，不计历史
+- **关键帧** (is_keyframe=true): 存储完整 XML，周期性创建
+- **Diff 链** (is_keyframe=false): 存储与父版本的差异，使用 diff-match-patch
+
+**恢复流程：**
+
+1. 关键帧直接返回完整 XML
+2. 非关键帧向上追溯关键帧
+3. 从关键帧依次应用 Diff 补丁
+
+#### 使用示例
+
+```typescript
+import { createStorage } from "@/lib/storage";
+
+// 创建存储实例
+const storage = await createStorage();
+await storage.initialize();
+
+// 保存项目
+const project = {
+  uuid: "...",
+  name: "my-project",
+  created_at: Date.now(),
+  updated_at: Date.now(),
+};
+await storage.saveProject(project);
+
+// 恢复历史版本
+import { restoreXMLFromVersion } from "@/lib/storage/xml-version-engine";
+const xml = await restoreXMLFromVersion("version-id", storage);
+```
+
+**迁移机制** (2025-11-17):
+
+- IndexedDB: `migrations/indexeddb/v*.ts` 负责初始化和升级
+- SQLite: 主进程 `migrations/v*.js` 根据 `pragma user_version` 依次执行
+- 升级逻辑必须幂等，禁止强制清库
 
 ## DrawIO Socket.IO 调用流程
 
@@ -119,21 +194,11 @@ interface SmartDiffStats {
 
 ## DrawIO XML 转接层（`drawio-xml-service.ts`）
 
-### 核心设计原则
-
-- **无推断 (No Inference)**: 不对 XML 做领域特化解析，只处理调用者提供的 XPath 与原始字符串
-- **XPath 驱动**: 所有查询与编辑均使用标准 XPath 表达式定位节点
-- **原子性**: `drawio_edit_batch` 全部成功后才写回前端，任一操作失败立即返回错误，不修改原始 XML
-- **Base64 解码**: 每次从前端读取 XML 后都会自动检测并解码 `data:image/svg+xml;base64,` 前缀
-
-### 提供的函数
-
-- `executeDrawioRead(xpath?: string)`: 返回结构化的查询结果（元素 / 属性 / 文本），并在 `matched_xpath` 字段中携带命中路径
-- `executeDrawioEditBatch({ operations })`: 执行批量操作，遵守 `allow_no_match` 语义并保持原子性
-
-### 支持的操作类型
-
-`set_attribute`, `remove_attribute`, `insert_element`, `remove_element`, `replace_element`, `set_text_content`
+- **XPath 驱动**: 所有查询与编辑通过 XPath 定位节点
+- **原子性**: 批量操作全部成功后才写回，失败时无副作用
+- **无推断**: 仅处理 XPath 与原始字符串，不做领域特化解析
+- **支持操作**: `set_attribute`, `remove_attribute`, `insert_element`, `remove_element`, `replace_element`, `set_text_content`
+- **主要函数**: `executeDrawioRead()` 查询，`executeDrawioEditBatch()` 批量编辑
 
 ## DrawIO AI 工具（`drawio-ai-tools.ts`）
 
@@ -150,333 +215,138 @@ interface SmartDiffStats {
 ## 浏览器端存储工具（`drawio-tools.ts`）
 
 - 使用统一存储抽象层（Electron: SQLite, Web: IndexedDB）
-- 保存时自动解码 base64，并通过 `drawio-xml-updated` 自定义事件通知编辑器
 - 提供 `getDrawioXML()`、`replaceDrawioXML()`、`saveDrawioXML()` 三个接口
-- XML 归一化在 `storage/writers.prepareXmlContext` 统一处理，前端桥接层不再重复调用 `normalizeDiagramXml`
-- **WIP 工作区自动保存**：
-  - 编辑器变更自动保存到 WIP 版本（v0.0.0）
-  - WIP 版本不计入历史记录，仅用于实时保存，永远视为关键帧
-  - 每次写入都会刷新 `created_at`，用于在 UI 中显示“最后更新”时间
-  - WIP 不会参与关键帧 + Diff 链路计算，也不会被当作历史版本的 diff 基线
-  - 用户手动创建版本时从 WIP 复制并生成语义化版本号
-  - 详见 `storage/constants.ts` 中的 WIP_VERSION 常量
+- 通过 `drawio-xml-updated` 自定义事件通知编辑器更新
+- XML 归一化在 `storage/writers.prepareXmlContext` 统一处理
+- **WIP 工作区**: 实时自动保存到 v0.0.0，不计入历史版本，每次写入刷新时间戳
 
 ## 配置规范化工具（`config-utils.ts`）
 
-提供 LLM 配置的规范化和验证功能：
+- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`, `DEFAULT_LLM_CONFIG`
+- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `normalizeLLMConfig()`
+- **用途**: 验证 provider 合法性，规范化 API URL，设置默认值
 
-- **默认常量**:
-  - `DEFAULT_SYSTEM_PROMPT`: 默认系统提示词（DrawIO XML 专用）
-  - `DEFAULT_API_URL`: 默认 API 地址
-  - `DEFAULT_LLM_CONFIG`: 完整的默认配置对象
+## 其他工具函数
 
-- **核心函数**:
-  - `isProviderType()`: 验证 provider 类型是否合法
-  - `normalizeApiUrl()`: 规范化 API URL（自动添加 /v1 后缀）
-  - `normalizeLLMConfig()`: 规范化完整配置（设置默认值、验证类型）
-
-- **使用场景**:
-  - API 路由中规范化用户输入
-  - 存储设置时自动验证和补全
-  - 确保配置格式一致性
-
-## 统一存储抽象层（`storage/`）
-
-### 设计原则
-
-- **适配器模式**: 定义统一存储接口，支持多种存储后端
-- **环境适配**: 运行时检测环境，自动选择合适的存储实现
-  - **Electron**: SQLite 数据库（通过 better-sqlite3）
-  - **Web**: IndexedDB（通过 idb）
-- **类型安全**: 完整 TypeScript 类型定义
-- **表结构统一**: 所有环境使用相同的表结构和字段命名
-
-### 文件结构
-
-- **adapter.ts**: 抽象基类 `StorageAdapter`，定义统一接口
-- **sqlite-storage.ts**: SQLite 实现（Electron 环境）
-- **indexeddb-storage.ts**: IndexedDB 实现（Web 环境）
-- **storage-factory.ts**: 存储工厂，运行时创建存储实例
-- **types.ts**: 存储层类型定义
-- **constants.ts**: 常量定义（表名、默认值、WIP_VERSION 等）
-- **current-project.ts**: 当前工程 ID 持久化工具（读取/写入 `settings` 表）
-- **xml-version-engine.ts**: XML 版本恢复引擎（通过 Diff 链重放恢复历史版本）
-- **index.ts**: 统一导出
-
-### 表结构
-
-#### Projects 表
-
-项目元数据表，管理 DrawIO 项目信息
+### version-utils.ts - 语义化版本管理
 
 ```typescript
-interface Project {
-  uuid: string; // 主键，唯一标识符
-  name: string; // 项目名称
-  description?: string; // 项目描述
-  created_at: number; // 创建时间戳
-  updated_at: number; // 更新时间戳
-}
+export function parseVersion(version: string): {
+  major: number;
+  minor: number;
+  patch: number;
+};
+export function formatVersion({ major, minor, patch }): string;
+export function recommendNextVersion(
+  versions: string[],
+  type: "major" | "minor" | "patch",
+): string;
+export function sortVersions(versions: string[]): string[];
 ```
 
-#### XMLVersions 表
+**使用场景：** 版本号解析、版本排序、推荐下一个版本号
 
-XML 版本管理表，关联项目存储历史版本
+### format-utils.ts - 日期格式化
 
 ```typescript
-interface XMLVersion {
-  id: string; // UUID 主键
-  project_uuid: string; // 关联项目
-  semantic_version: string; // 当前固定为 "latest"
-  source_version_id: string; // 父版本 UUID，关键帧为 ZERO_SOURCE_VERSION_ID
-  is_keyframe: boolean; // true = 存储完整 XML，false = 存储 diff-match-patch 字符串
-  diff_chain_depth: number; // 距离最近关键帧的链长
-  xml_content: string; // 根据 is_keyframe 存储完整 XML 或 diff 字符串
-  metadata: Record<string, unknown> | null; // 预留字段（当前为空）
-  page_count: number; // DrawIO 页面数量，>=1
-  page_names?: string; // JSON 字符串，记录所有页面名称
-  preview_svg?: Blob | Buffer; // 第一页 SVG 预览
-  pages_svg?: Blob | Buffer; // 所有页面 SVG 序列化数据
-  preview_image?: Blob | Buffer;
-  created_at: number; // 创建时间戳
-}
+export function formatVersionTimestamp(timestamp: number): string;
+export function formatConversationDate(timestamp: number): string;
 ```
 
-#### Conversations 表
+**使用场景：** 版本创建时间显示、对话日期显示
 
-聊天会话表，关联项目与 XML 版本
+### utils.ts - 通用工具
+
+**防抖函数** (支持 flush/cancel):
 
 ```typescript
-interface Conversation {
-  id: string;
-  project_uuid: string;
-  title: string;
-  created_at: number;
-  updated_at: number;
-}
+export function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number,
+): DebouncedFunction<T>;
 ```
 
-#### Messages 表
-
-聊天消息明细表，记录模型元数据与工具调用
+**异步工具**:
 
 ```typescript
-interface Message {
-  id: string;
-  conversation_id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  tool_invocations?: string; // JSON 字符串
-  model_name?: string | null; // 关联的 LLM 模型
-  xml_version_id?: string; // 关联的 XML 版本 UUID
-  created_at: number;
-}
+export function runStorageTask<T>(
+  fn: () => Promise<T>,
+  timeout?: number,
+): Promise<T>;
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeout: number,
+): Promise<T>;
 ```
 
-#### Settings 表
-
-应用设置表，存储全局配置
+**项目 UUID 生成**:
 
 ```typescript
-interface Settings {
-  key: string; // 设置键（主键）
-  value: string; // JSON 序列化的设置值
-  updated_at: number; // 更新时间戳
-}
+export function generateProjectUUID(): string;
 ```
 
-### 核心 API
-
-所有存储实现都继承自 `StorageAdapter` 并实现以下方法：
+### dom-parser-cache.ts - DOM 缓存
 
 ```typescript
-abstract class StorageAdapter {
-  // 初始化存储
-  abstract initialize(): Promise<void>;
-
-  // Projects 表操作
-  abstract getProject(uuid: string): Promise<Project | null>;
-  abstract getAllProjects(): Promise<Project[]>;
-  abstract saveProject(project: Project): Promise<void>;
-  abstract deleteProject(uuid: string): Promise<void>;
-
-  // XMLVersions 表操作
-  abstract getXMLVersion(
-    id: string,
-    projectUuid?: string,
-  ): Promise<XMLVersion | null>;
-  abstract getLatestXML(project_uuid: string): Promise<XMLVersion | null>;
-  abstract saveXMLVersion(version: XMLVersion): Promise<void>;
-  abstract deleteXMLVersion(id: string, projectUuid?: string): Promise<void>;
-
-  // Conversations 表操作
-  abstract getConversation(id: string): Promise<Conversation | null>;
-  abstract getAllConversations(): Promise<Conversation[]>;
-  abstract saveConversation(conversation: Conversation): Promise<void>;
-  abstract deleteConversation(id: string): Promise<void>;
-  abstract clearAllConversations(): Promise<void>;
-
-  // Settings 表操作
-  abstract getSetting(key: string): Promise<string | null>;
-  abstract saveSetting(key: string, value: string): Promise<void>;
-  abstract deleteSetting(key: string): Promise<void>;
-}
+export function ensureParser(): {
+  parser: DOMParser;
+  serializer: XMLSerializer;
+};
 ```
 
-> ⚠️ **2025-11-17 更新**：`getConversationsByXMLVersion` 已彻底移除，所有对话必须通过 `getConversationsByProject(projectUuid)` 查询。前端 Hook（`useStorageConversations`）和 Electron IPC 不再暴露 XML 版本维度查询，避免跨端行为不一致。
+统一 DOMParser/XMLSerializer 缓存，避免重复创建实例
 
-### 辅助工具
-
-#### current-project.ts - 当前工程 ID 持久化
-
-**功能**: 管理当前激活工程 ID 的存储和读取
+### logger.ts - 日志工厂
 
 ```typescript
-// 读取当前工程 ID（从 settings 表）
-export async function getStoredCurrentProjectId(
-  storage: StorageAdapter,
-): Promise<string | null>;
-
-// 持久化当前工程 ID
-export async function persistCurrentProjectId(
-  projectId: string,
-  storage: StorageAdapter,
-): Promise<void>;
+export function createLogger(componentName: string): Logger;
 ```
 
-**使用场景**:
+支持 debug/info/warn/error 级别，自动加组件前缀
 
-- `useCurrentProject` Hook 加载和切换工程时
-- 确保刷新页面后恢复到上次激活的工程
+## 工具链工作流
 
-#### xml-version-engine.ts - XML 版本恢复引擎
+### 编辑流程
 
-**功能**: 通过 Diff 链重放恢复任意历史版本的完整 XML
+1. **前端编辑**: 用户在 DrawIO 编辑器修改图表
+2. **自动保存**: 变更自动保存到 WIP 版本 (v0.0.0)
+3. **版本创建**: 用户点击"创建版本"，从 WIP 复制并生成语义化版本号
+4. **版本存储**:
+   - 第一个版本存储为关键帧 (is_keyframe=true)
+   - 后续版本与前一版本计算 Diff (is_keyframe=false)
+   - 差异率 >70% 或链长 >10 时自动创建关键帧
 
-**核心函数**:
+### AI 工具调用流程
 
-```typescript
-export async function restoreXMLFromVersion(
-  versionId: string,
-  storage: StorageAdapter,
-): Promise<string>;
+```
+用户提示词
+  ↓
+LLM 决策调用工具
+  ↓
+drawio_read (查询 XML) 或 drawio_edit_batch (修改 XML)
+  ↓
+Socket.IO 传递到前端
+  ↓
+前端 drawio-tools.ts 执行
+  ↓
+返回结果给 LLM
+  ↓
+LLM 继续对话或生成新的工具调用
 ```
 
-**工作原理**:
+### XML 处理流程
 
-1. **查找目标版本**: 根据 `versionId` 获取版本记录
-2. **关键帧检测**: 如果是关键帧（`is_keyframe=true`），直接返回完整 XML
-3. **构建 Diff 链**: 向上追溯 `source_version_id`，直到找到关键帧
-4. **Diff 重放**: 从关键帧开始，依次应用 Diff 补丁（使用 `diff-match-patch`）
-5. **返回结果**: 返回完整恢复的 XML 内容
-
-**使用场景**:
-
-- 版本回滚功能（恢复到历史版本）
-- 版本导出功能（导出历史版本的完整 DrawIO 文件）
-- 版本对比功能（对比不同版本的 XML 差异）
-
-**错误处理**:
-
-- 版本不存在 → 抛出错误
-- Diff 链断裂（找不到父版本）→ 抛出错误
-- Diff 应用失败 → 抛出错误
-
-### 使用方式
-
-#### 1. 通过工厂创建实例
-
-```typescript
-import { createStorage } from "@/lib/storage";
-
-const storage = await createStorage();
-await storage.initialize();
 ```
-
-#### 2. 推荐通过 Hooks 使用
-
-```typescript
-import { useStorageSettings, useStorageProjects } from "@/hooks";
-
-// Hooks 内部自动处理存储实例创建和初始化
-const { settings, saveSettings } = useStorageSettings();
+原始 XML (data: URI 或 Base64 或裸 XML)
+  ↓
+drawio-xml-utils.ts 归一化
+  ↓
+自动解压 <diagram> 内的 DrawIO 压缩内容
+  ↓
+验证 XML 格式
+  ↓
+存储或编辑
 ```
-
-#### 3. 使用版本恢复引擎
-
-```typescript
-import { restoreXMLFromVersion } from "@/lib/storage/xml-version-engine";
-import { getStorage } from "@/lib/storage";
-
-// 恢复历史版本
-const storage = await getStorage();
-const xml = await restoreXMLFromVersion("version-uuid", storage);
-```
-
-### SQLite 实现细节
-
-- **数据库文件**: `electron/storage/drawio2go.db`
-- **同步 API**: 使用 better-sqlite3 的同步 API
-- **事务支持**: 支持事务操作保证原子性
-- **索引优化**: 为常用查询字段创建索引
-
-### IndexedDB 实现细节
-
-- **数据库名称**: `drawio2go`
-- **对象存储**: 每个表对应一个对象存储（Object Store）
-- **索引**: 为查询字段创建索引提升性能
-
-### 数据库迁移机制（2025-11-17 生效）
-
-- **Web (IndexedDB)**: `app/lib/storage/migrations/indexeddb/` 维护版本化脚本，当前 `v1` 负责创建 `settings/projects/xml_versions/conversations/messages` 及其索引。`IndexedDBStorage.initialize()` 的 `openDB(..., { upgrade })` 仅调用迁移脚本，不再删除已有 Object Store。
-- **Electron (SQLite)**: 主进程 `SQLiteManager` 在初始化时调用 `electron/storage/migrations/runSQLiteMigrations()`，根据 `pragma user_version` 依次执行 `v1` 脚本并写回最新版本号。
-- **版本策略**: 现有结构视为 v1，后续 schema 升级只需新增迁移文件并递增版本号，无需强制清库。IndexedDB/SQLite 的升级逻辑必须保持幂等。
-
-### 架构决策
-
-#### 单项目模式 vs 多项目支持
-
-**当前实现：单项目模式**
-
-- 所有数据存储在固定的 "default" 项目下
-- 简化用户体验，无需手动管理项目
-- 适合个人使用场景
-
-**设计原因：**
-
-- 避免过早引入复杂的项目管理概念
-- 保持界面简洁，降低学习成本
-- 当前用户需求集中在单图表编辑
-
-**未来扩展（如需要）：**
-
-- 支持多项目/工作区切换
-- 添加项目创建、删除、重命名功能
-- 项目级别的配置隔离
-
-#### 版本管理架构（已实现）
-
-**当前实现：WIP 工作区 + 关键帧 + Diff 混合存储**
-
-- **WIP 工作区**（v0.0.0）：实时自动保存，不计入历史版本
-- **关键帧快照**：存储完整 XML 内容（`is_keyframe=true`）
-- **Diff 链**：使用 diff-match-patch 存储与父版本的差异
-- **自动刷新关键帧**：差异率 >70% 或链长 >10 时自动创建关键帧
-
-**核心特性：**
-
-- **语义化版本号**：支持 major.minor.patch 版本格式
-- **版本树结构**：通过 `source_version_id` 构建版本依赖关系
-- **空间优化**：Diff 存储减少空间占用，关键帧保证恢复性能
-- **版本回滚**：支持恢复到任意历史版本
-- **版本导出**：支持导出任意版本为 DrawIO 文件
-
-**相关文件：**
-
-- `storage/xml-version-engine.ts` - 版本恢复引擎（Diff 重放）
-- `storage/constants.ts` - 版本常量（WIP_VERSION, ZERO_SOURCE_VERSION_ID）
-- `app/components/version/` - 版本管理 UI 组件
-- `app/hooks/useStorageXMLVersions.ts` - 版本管理 Hook
 
 ## 类型定义
 
@@ -487,57 +357,175 @@ const xml = await restoreXMLFromVersion("version-uuid", storage);
 - `drawio_edit_batch` 支持的操作及返回值
 - 存储层接口和表结构类型
 
-## 代码腐化清理记录
+## 常见使用模式
 
-### 2025-11-23 清理（统一写入管线）
+### 保存 XML 到存储
 
-**执行的操作**：
+```typescript
+import { saveDrawioXML } from "@/lib/drawio-tools";
 
-- 新增 `storage/writers.ts` 统一 WIP/历史版本写入管线（归一化、元数据、事件派发）
-- 新增 `format-utils.ts` 统一日期格式化（formatVersionTimestamp, formatConversationDate）
-- 在 `drawio-xml-utils.ts` 中新增 `validateXMLFormat()` 统一 XML 验证逻辑
-- 在 `drawio-xml-service.ts` 引入 DOMParser/XMLSerializer 缓存机制
-- 在 `utils.ts` 新增 `runStorageTask()` 和 `withTimeout()` 工具函数
-- `drawio-tools.ts`、`drawio-ai-tools.ts` 改用统一写入管线，删除重复逻辑
+// 自动处理 Base64 解码、XML 验证、元数据提取
+await saveDrawioXML(xmlContent, { skipValidation: false });
+```
 
-**影响文件**：7 个文件
+### 恢复历史版本
 
-**下次关注**：
+```typescript
+import { restoreXMLFromVersion } from "@/lib/storage/xml-version-engine";
+import { getStorage } from "@/lib/storage";
 
-- writers 管线事件顺序与前端订阅的兼容性
-- 日期格式化的时区一致性（UTC→本地）验证
+const storage = await getStorage();
+const xml = await restoreXMLFromVersion("version-id", storage);
+// 可用于版本回滚、导出等功能
+```
 
-### 2025-11-24 清理（DOM 缓存与 UUID 统一）
+### 生成版本差异预览
 
-**执行的操作**：
+```typescript
+import { generateSmartDiffSvg } from "@/lib/svg-smart-diff";
 
-- 新增 `dom-parser-cache.ts` 统一 DOMParser/XMLSerializer 缓存，`drawio-xml-utils`、`drawio-xml-service`、`svg-smart-diff` 复用
-- `utils.ts` 增加 `generateProjectUUID()`，`useCurrentProject` / `useStorageProjects` 使用统一的工程 UUID 生成策略
+const result = generateSmartDiffSvg(oldSvgString, newSvgString);
+console.log(result.stats); // { matched, changed, onlyA, onlyB, coverage }
+// 用于版本对比组件显示差异高亮
+```
 
-**影响文件**：`app/lib/dom-parser-cache.ts`、`app/lib/drawio-xml-utils.ts`、`app/lib/drawio-xml-service.ts`、`app/lib/svg-smart-diff.ts`、`app/lib/utils.ts`、`app/hooks/useCurrentProject.ts`、`app/hooks/useStorageProjects.ts`
+### AI 工具使用
 
-### 2025-11-23 清理
+```typescript
+// 在 LLM 工具定义中使用
+const tools = [
+  {
+    name: "drawio_read",
+    description: "读取 DrawIO XML 内容或特定部分",
+    inputSchema: {
+      type: "object",
+      properties: {
+        xpath: { type: "string", description: "可选 XPath 表达式" }
+      }
+    }
+  },
+  {
+    name: "drawio_edit_batch",
+    description: "批量修改 DrawIO XML",
+    inputSchema: {
+      type: "object",
+      properties: {
+        operations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { enum: ["set_attribute", "remove_attribute", ...] },
+              xpath: { type: "string" },
+              ...
+            }
+          }
+        }
+      }
+    }
+  }
+];
+```
 
-**执行的操作**：
+## 代码优化与清理历史
 
-- 修复 `drawio-xml-service.ts` 双重回滚职责冲突：当前端已通过 `drawio_syntax_error` 完成回滚时，服务端跳过二次回滚
-- 清理重复的类型别名：`ReplaceResult` → 直接使用 `ReplaceXMLResult` 接口
+- **2025-11-23**: 新增 `storage/writers.ts` 统一 WIP/历史版本写入管线，新增 `format-utils.ts` 日期格式化工具
+- **2025-11-24**: 新增 `dom-parser-cache.ts` 统一 DOM 缓存，统一工程 UUID 生成策略，新增 `logger.ts` 日志工厂
 
-**影响文件**：2 个（`drawio-xml-service.ts`, `../types/drawio-tools.ts`）
+## 性能优化建议
 
-**下次关注**：
+### XML 处理优化
 
-- `drawio-tools.ts` 与 `useStorageXMLVersions.ts` 的 WIP 写入逻辑差异（当前为合理的功能区分，暂不合并）
-- XML 归一化调用链的性能优化机会（多处调用 `normalizeDiagramXml`）
+- **缓存 DOMParser**: 使用 `dom-parser-cache.ts` 避免重复创建实例
+- **批量编辑**: 优先使用 `drawio_edit_batch` 而非多次单个操作
+- **XPath 查询**: 避免过于复杂的 XPath 表达式，优先使用简单的路径定位
+- **XML 归一化**: 仅在保存时执行，读取时跳过验证加快速度
 
-### 2025-11-24 清理（日志与规范化定位）
+### 版本管理优化
 
-**执行的操作**：
+- **关键帧周期**: 配置自动创建关键帧的间隔（差异率 >70% 或链长 >10）
+- **Diff 链清理**: 定期删除不再需要的中间版本（避免链过长）
+- **版本导出**: 大文件导出前考虑分页处理
 
-- 新增 `logger.ts` 统一日志工厂，支持组件级前缀与日志级别过滤
-- `drawio-tools.ts` 通过 `prepareXmlContext` 复用 writers 管线完成 XML 归一化与验证，移除重复的 `normalizeDiagramXml` 调用
-- `drawio-xml-service.ts` 内部创建节点改为复用 DOMParser 缓存（`ensureParser`）
+### 存储访问优化
 
-**下次关注**：
+- **批量查询**: 使用 `getAllProjects()` 而非循环调用 `getProject()`
+- **事务操作**: 多个相关操作应放在事务中处理（SQLite）
+- **索引利用**: 查询时使用索引字段（project_uuid, created_at 等）
 
-- 是否需要在存储层暴露全局日志级别配置入口
+## 常见问题与解决方案
+
+### 版本恢复失败
+
+**问题**: "Diff 链断裂" 错误
+**原因**: 中间版本被删除，恢复链中断
+**解决**:
+
+- 检查版本列表确认是否有断层
+- 从最近的可恢复版本重新分支
+- 避免删除非 WIP 版本
+
+### XML 保存失败
+
+**问题**: "Invalid XML" 或 "Encoding error"
+**原因**: XML 编码格式不规范（Base64、data:URI 等）
+**解决**:
+
+- 确保调用 `drawio-xml-utils.normalizeDiagramXml()`
+- 检查是否包含 DrawIO 压缩内容（deflate + base64）
+- 验证字符编码为 UTF-8
+
+### 跨域 Socket.IO 连接失败
+
+**问题**: "Socket connection failed"
+**原因**: CORS 配置或服务器离线
+**解决**:
+
+- 检查 Socket.IO 服务器配置
+- 确认前后端域名/端口一致
+- 查看浏览器网络标签页日志
+
+### 大文件导出超时
+
+**问题**: "Timeout" 错误
+**原因**: 多页 SVG 导出耗时过长
+**解决**:
+
+- 增加超时时间（`withTimeout` 参数）
+- 考虑分页导出
+- 检查编辑器性能（大量图形元素）
+
+## 开发建议
+
+### 添加新工具函数
+
+1. 在 `app/lib/` 中新建文件 (如 `new-tool.ts`)
+2. 导出公共接口和类型定义
+3. 在 `app/lib/index.ts` 统一导出
+4. 更新本文档 (工具文件清单)
+5. 编写使用示例和测试
+
+### 修改存储层
+
+1. **Schema 变更**: 新增迁移文件 `migrations/indexeddb/vN.ts` 和 `migrations/vN.js`
+2. **递增版本号**: 更新迁移脚本中的版本检查
+3. **向后兼容**: 迁移脚本必须处理旧版本数据
+4. **测试**: 验证 Web 和 Electron 端均能正确升级
+
+### 添加 AI 工具
+
+1. 在 `drawio-ai-tools.ts` 中定义新工具
+2. 使用 Zod 定义参数 schema
+3. 在 `tool-executor.ts` 中注册路由
+4. 更新服务端工具处理逻辑
+5. 编写测试覆盖 success/error 路径
+
+## 关键注意事项
+
+1. **XML 规范化必须进行**: 保存前务必调用 `drawio-xml-utils.ts` 的规范化函数，处理各种编码格式
+2. **Diff 链断裂会失败**: 版本恢复依赖完整的 Diff 链，删除中间版本会导致恢复失败
+3. **WIP 版本特殊性**: WIP (v0.0.0) 不计历史，不能被恢复，用户操作前应告知此限制
+4. **跨端行为一致性**: 存储层接口统一，Web/Electron 实现必须保证行为完全一致
+5. **迁移脚本幂等性**: 数据库迁移脚本必须可重复执行，不能因重复运行而损坏数据
+6. **Socket.IO 原子性**: `drawio_edit_batch` 操作必须全部成功或全部失败，不允许部分修改
+7. **日志级别控制**: 生产环境应关闭 debug 级别日志，避免性能影响

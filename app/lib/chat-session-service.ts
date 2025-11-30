@@ -42,7 +42,7 @@ export interface ChatSessionServiceOptions {
     messages: ChatUIMessage[],
   ) => void;
   onSavingChange?: (saving: boolean) => void;
-  onSaveError?: (error: string | null) => void;
+  onSaveError?: (message: string) => void;
 }
 
 export interface SaveOptions {
@@ -680,7 +680,7 @@ export function createChatSessionService(
     if (!payload.conversationId) return;
 
     let conversationId = payload.conversationId;
-    onSaveError?.(null);
+    onSaveError?.("");
 
     try {
       if (payload.resolveConversationId) {
@@ -739,7 +739,7 @@ export function createChatSessionService(
       }
 
       onSavingChange?.(false);
-      onSaveError?.(null);
+      onSaveError?.("");
       return;
     }
 
@@ -752,7 +752,7 @@ export function createChatSessionService(
     );
 
     onSavingChange?.(true);
-    onSaveError?.(null);
+    onSaveError?.("");
 
     const maxRetries = 3;
 
@@ -768,7 +768,7 @@ export function createChatSessionService(
         notifyMessagesChange(conversationId, normalizedMessages);
 
         onSavingChange?.(false);
-        onSaveError?.(null);
+        onSaveError?.("");
         pendingSavePayload = null;
         return;
       } catch (error) {
@@ -780,9 +780,10 @@ export function createChatSessionService(
         if (attempt >= maxRetries) {
           const message =
             error instanceof Error ? error.message : "消息保存失败";
+          const userMessage =
+            "消息自动保存失败，将在后台继续重试。请检查存储或网络状态。";
           onSavingChange?.(false);
-          onSaveError?.(message);
-          alert("消息自动保存失败，将在后台继续重试。请检查存储或网络状态。");
+          onSaveError?.(userMessage || message);
         } else {
           await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
         }
