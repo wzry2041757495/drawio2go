@@ -6,6 +6,7 @@ import {
   TooltipRoot,
   type ButtonProps,
 } from "@heroui/react";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface ChatInputActionsProps {
   isSendDisabled: boolean;
@@ -22,6 +23,7 @@ export default function ChatInputActions({
   onNewChat,
   onHistory,
 }: ChatInputActionsProps) {
+  const { t } = useAppTranslation("chat");
   const canCancel = Boolean(isChatStreaming && onCancel);
   const sendButtonVariant: ButtonProps["variant"] = canCancel
     ? "danger"
@@ -42,7 +44,7 @@ export default function ChatInputActions({
             size="sm"
             variant="tertiary"
             isIconOnly
-            aria-label="新建聊天"
+            aria-label={t("aria.newChat")}
             onPress={onNewChat}
           >
             <svg
@@ -60,7 +62,7 @@ export default function ChatInputActions({
             </svg>
           </Button>
           <TooltipContent placement="top">
-            <p>新建聊天</p>
+            <p>{t("input.newChat")}</p>
           </TooltipContent>
         </TooltipRoot>
 
@@ -69,7 +71,7 @@ export default function ChatInputActions({
             size="sm"
             variant="tertiary"
             isIconOnly
-            aria-label="历史对话"
+            aria-label={t("aria.history")}
             onPress={onHistory}
           >
             <svg
@@ -88,7 +90,7 @@ export default function ChatInputActions({
             </svg>
           </Button>
           <TooltipContent placement="top">
-            <p>历史对话</p>
+            <p>{t("input.openHistory")}</p>
           </TooltipContent>
         </TooltipRoot>
       </div>
@@ -134,7 +136,7 @@ export default function ChatInputActions({
               <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
             </svg>
           )}
-          {canCancel ? "取消" : "发送"}
+          {canCancel ? t("input.stop") : t("input.send")}
         </Button>
       </div>
     </div>

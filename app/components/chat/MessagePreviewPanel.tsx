@@ -16,12 +16,6 @@ interface MessagePreviewPanelProps {
   onOpenConversation: () => void;
 }
 
-const roleLabel: Record<Message["role"], string> = {
-  user: "用户",
-  assistant: "AI",
-  system: "系统",
-};
-
 const roleIcon: Record<Message["role"], ReactNode> = {
   user: <User size={14} />,
   assistant: <Bot size={14} />,
@@ -36,7 +30,7 @@ export default function MessagePreviewPanel({
   onClose,
   onOpenConversation,
 }: MessagePreviewPanelProps) {
-  const { i18n } = useAppTranslation("chat");
+  const { t, i18n } = useAppTranslation("chat");
 
   if (!isOpen || !conversation) return null;
 
@@ -52,7 +46,8 @@ export default function MessagePreviewPanel({
         <div className="history-preview__title">
           <p className="history-preview__name">{conversation.title}</p>
           <p className="history-preview__meta">
-            {messages.length} 条消息预览 · {updatedLabel}
+            {t("conversations.messageCount", { count: messages.length })} ·{" "}
+            {t("conversations.lastUpdated", { time: updatedLabel })}
           </p>
         </div>
         <div className="history-preview__actions">
@@ -60,15 +55,15 @@ export default function MessagePreviewPanel({
             size="sm"
             variant="secondary"
             onPress={onOpenConversation}
-            aria-label="打开对话"
+            aria-label={t("conversations.actions.open")}
           >
-            打开
+            {t("conversations.actions.open")}
           </Button>
           <Button
             size="sm"
             variant="tertiary"
             isIconOnly
-            aria-label="关闭预览"
+            aria-label={t("aria.closeHistory")}
             onPress={onClose}
           >
             <X size={16} />
@@ -80,12 +75,12 @@ export default function MessagePreviewPanel({
         {loading ? (
           <div className="history-preview__loading">
             <Spinner size="sm" />
-            <span>加载预览...</span>
+            <span>{t("messages.loading")}</span>
           </div>
         ) : messages.length === 0 ? (
           <div className="history-preview__empty">
             <MessageSquare size={20} />
-            <p>暂无消息</p>
+            <p>{t("messages.emptyConversation")}</p>
           </div>
         ) : (
           <ul className="history-preview__list">
@@ -95,10 +90,12 @@ export default function MessagePreviewPanel({
                   className={`history-preview__tag history-preview__tag--${msg.role}`}
                 >
                   {roleIcon[msg.role]}
-                  {roleLabel[msg.role]}
+                  {t(`messages.roles.${msg.role}`)}
                 </span>
                 <p className="history-preview__text">
-                  {msg.content?.slice(0, 160) || "（空消息）"}
+                  {msg.content?.slice(0, 160) ||
+                    t("messages.emptyMessage", { defaultValue: "" }) ||
+                    ""}
                 </p>
               </li>
             ))}

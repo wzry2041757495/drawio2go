@@ -3,6 +3,7 @@
 import { Button, TooltipContent, TooltipRoot } from "@heroui/react";
 import { Download, History, Trash2 } from "lucide-react";
 import type { ChatSession } from "@/app/types/chat";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface ChatSessionHeaderProps {
   activeSession: ChatSession | null;
@@ -23,9 +24,19 @@ export default function ChatSessionHeader({
   onExportSession,
   onExportAllSessions,
 }: ChatSessionHeaderProps) {
+  const { t } = useAppTranslation(["chat", "common"]);
+
   if (!activeSession) {
     return null;
   }
+
+  const messageCountLabel = t("messages.counts.messageCount", {
+    count: activeSession.messages.length,
+  });
+
+  const savingLabel = t("messages.saving");
+  const savedLabel = t("messages.saved");
+  const saveErrorLabel = t("common:toasts.autoSaveFailed");
 
   return (
     <div className="chat-session-header">
@@ -33,15 +44,18 @@ export default function ChatSessionHeader({
         <div className="chat-session-title-block">
           <span className="chat-session-title">{activeSession.title}</span>
           <span className="chat-session-meta">
-            {activeSession.messages.length} 条消息
+            {messageCountLabel}
             {isSaving && (
-              <span className="chat-session-meta-status"> · 保存中...</span>
+              <span className="chat-session-meta-status"> · {savingLabel}</span>
             )}
             {!isSaving && saveError && (
               <span className="chat-session-meta-error">
                 {" "}
-                · 保存失败，将自动重试
+                · {saveErrorLabel}
               </span>
+            )}
+            {!isSaving && !saveError && (
+              <span className="chat-session-meta-status"> · {savedLabel}</span>
             )}
           </span>
         </div>
@@ -50,12 +64,14 @@ export default function ChatSessionHeader({
             size="sm"
             variant="secondary"
             onPress={onHistoryClick}
-            aria-label="查看历史对话"
+            aria-label={t("aria.history")}
           >
             <History size={16} />
-            历史
+            {t("sidebar.history")}
           </Button>
-          <TooltipContent placement="bottom">查看历史对话</TooltipContent>
+          <TooltipContent placement="bottom">
+            {t("sidebar.history")}
+          </TooltipContent>
         </TooltipRoot>
       </div>
       <div className="chat-session-actions">
@@ -64,13 +80,13 @@ export default function ChatSessionHeader({
             size="sm"
             variant="danger"
             isIconOnly
-            aria-label="删除会话"
+            aria-label={t("aria.delete")}
             onPress={onDeleteSession}
           >
             <Trash2 size={16} />
           </Button>
           <TooltipContent placement="top">
-            <p>删除会话</p>
+            <p>{t("conversations.actions.delete")}</p>
           </TooltipContent>
         </TooltipRoot>
 
@@ -79,13 +95,13 @@ export default function ChatSessionHeader({
             size="sm"
             variant="tertiary"
             isIconOnly
-            aria-label="导出当前会话"
+            aria-label={t("aria.export")}
             onPress={onExportSession}
           >
             <Download size={16} />
           </Button>
           <TooltipContent placement="top">
-            <p>导出当前会话</p>
+            <p>{t("conversations.actions.export")}</p>
           </TooltipContent>
         </TooltipRoot>
 
@@ -93,14 +109,14 @@ export default function ChatSessionHeader({
           <Button
             size="sm"
             variant="tertiary"
-            aria-label="导出所有会话"
+            aria-label={t("aria.export")}
             onPress={onExportAllSessions}
           >
             <Download size={16} />
-            全部导出
+            {t("conversations.actions.exportAll")}
           </Button>
           <TooltipContent placement="top">
-            <p>导出所有会话</p>
+            <p>{t("conversations.actions.exportAll")}</p>
           </TooltipContent>
         </TooltipRoot>
       </div>

@@ -100,7 +100,7 @@ export default function ChatSidebar({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { t } = useI18n();
+  const { t, i18n } = useI18n();
   const { push } = useToast();
   const lastErrorRef = useRef<{
     chat?: string;
@@ -294,7 +294,10 @@ export default function ChatSidebar({
 
   const exportSessions = useCallback(
     async (sessions: ExportSessionPayload[], defaultFilename: string) => {
-      const success = await exportSessionsAsJson(sessions, defaultFilename);
+      const success = await exportSessionsAsJson(sessions, defaultFilename, {
+        t,
+        locale: i18n.language,
+      });
       if (success) {
         showNotice(t("toasts.sessionExportSuccess"), "success");
       } else {
@@ -306,7 +309,7 @@ export default function ChatSidebar({
         );
       }
     },
-    [showNotice, t],
+    [showNotice, t, i18n.language],
   );
 
   // ========== 初始化 ==========
@@ -333,8 +336,8 @@ export default function ChatSidebar({
             '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>',
             currentProjectId,
             undefined,
-            "默认版本",
-            "初始版本",
+            t("chat:messages.defaultVersion"),
+            t("chat:messages.initialVersion"),
           );
           defaultVersionId = defaultXml;
         } else {
@@ -351,7 +354,7 @@ export default function ChatSidebar({
     }
 
     initialize();
-  }, [getLLMConfig, getAllXMLVersions, saveXML, currentProjectId]);
+  }, [getLLMConfig, getAllXMLVersions, saveXML, currentProjectId, t]);
 
   useEffect(() => {
     const projectUuid = currentProjectId ?? DEFAULT_PROJECT_UUID;
@@ -366,7 +369,10 @@ export default function ChatSidebar({
         if (list.length === 0) {
           if (creatingDefaultConversationRef.current) return;
           creatingDefaultConversationRef.current = true;
-          createConversation("新对话", projectUuid)
+          const defaultConversationTitle = t(
+            "chat:messages.defaultConversation",
+          );
+          createConversation(defaultConversationTitle, projectUuid)
             .then((newConv) => {
               setConversationMessages((prev) => ({
                 ...prev,
@@ -397,7 +403,7 @@ export default function ChatSidebar({
       isUnmounted = true;
       unsubscribe?.();
     };
-  }, [currentProjectId, chatService, createConversation]);
+  }, [createConversation, currentProjectId, t, chatService]);
 
   useEffect(() => {
     if (!activeConversationId) return undefined;
@@ -552,12 +558,16 @@ export default function ChatSidebar({
 
       // 生成临时 ID 用于追踪正在创建的对话
       const tempConversationId = `temp-${Date.now()}`;
+      const conversationTitle = t("chat:messages.defaultConversation");
 
       // 立即启动异步创建对话，不等待完成
-      const createPromise = createConversation("新对话", currentProjectId)
+      const createPromise = createConversation(
+        conversationTitle,
+        currentProjectId,
+      )
         .then((newConv) => {
           console.log(
-            `[ChatSidebar] 异步创建对话完成: ${newConv.id} (标题: 新对话)`,
+            `[ChatSidebar] 异步创建对话完成: ${newConv.id} (标题: ${conversationTitle})`,
           );
 
           setActiveConversationId(newConv.id);
@@ -619,13 +629,16 @@ export default function ChatSidebar({
 
   const handleNewChat = useCallback(async () => {
     try {
-      const newConv = await createConversation("新对话", currentProjectId);
+      const newConv = await createConversation(
+        t("chat:messages.defaultConversation"),
+        currentProjectId,
+      );
       setActiveConversationId(newConv.id);
       setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
     } catch (error) {
       console.error("[ChatSidebar] 创建新对话失败:", error);
     }
-  }, [createConversation, currentProjectId]);
+  }, [createConversation, currentProjectId, t]);
 
   const handleHistory = () => {
     setCurrentView("history");
@@ -639,7 +652,9 @@ export default function ChatSidebar({
       return;
     }
 
-    if (confirm(`确定要删除会话 "${activeConversation.title}" 吗？`)) {
+    if (
+      confirm(t("chat:aria.deleteConfirm", { title: activeConversation.title }))
+    ) {
       try {
         await deleteConversationFromStorage(activeConversation.id);
 
@@ -719,7 +734,7 @@ export default function ChatSidebar({
       if (!ids || ids.length === 0) return;
       const remaining = conversations.length - ids.length;
       if (remaining <= 0) {
-        const confirmed = confirm("删除后将自动创建一个空会话，确定继续吗？");
+        const confirmed = confirm(t("chat:aria.deleteAllConfirm"));
         if (!confirmed) return;
       }
 
@@ -759,7 +774,10 @@ export default function ChatSidebar({
       try {
         const blob = await exportConversations(ids);
         const defaultPath = `chat-export-${new Date().toISOString().split("T")[0]}.json`;
-        const success = await exportBlobContent(blob, defaultPath);
+        const success = await exportBlobContent(blob, defaultPath, {
+          t,
+          locale: i18n.language,
+        });
         if (!success) {
           showNotice(
             t("toasts.chatExportFailed", { error: t("toasts.unknownError") }),
@@ -776,7 +794,7 @@ export default function ChatSidebar({
         );
       }
     },
-    [exportConversations, extractErrorMessage, showNotice, t],
+    [exportConversations, extractErrorMessage, showNotice, t, i18n.language],
   );
 
   const handleToolCallToggle = (key: string) => {
@@ -841,8 +859,8 @@ export default function ChatSidebar({
               <AlertTriangle size={16} />
             </span>
             <div className="chat-inline-warning-text">
-              <p>Socket.IO 未连接</p>
-              <p>AI 工具功能暂时不可用</p>
+              <p>{t("chat:status.socketDisconnected")}</p>
+              <p>{t("chat:status.socketWarning")}</p>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Sparkles } from "lucide-react";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface ThinkingBlockProps {
   reasoning: string;
@@ -15,6 +16,7 @@ export default function ThinkingBlock({
   expanded,
   onToggle,
 }: ThinkingBlockProps) {
+  const { t } = useAppTranslation("chat");
   const Icon = isStreaming ? Loader2 : Sparkles;
   const iconClassName = `thinking-block-icon ${
     isStreaming ? "thinking-block-icon--spinning" : ""
@@ -33,7 +35,11 @@ export default function ThinkingBlock({
           <span className={iconClassName} aria-hidden>
             <Icon size={16} />
           </span>
-          <span>{isStreaming ? "思考中..." : "思考过程"}</span>
+          <span>
+            {isStreaming
+              ? t("messages.thinking.streaming")
+              : t("messages.thinking.title")}
+          </span>
         </div>
         <svg
           className={`thinking-block-chevron ${expanded ? "thinking-block-chevron--open" : ""}`.trim()}
@@ -53,7 +59,7 @@ export default function ThinkingBlock({
       {expanded && (
         <div className="thinking-block-body">
           <pre className="thinking-block-content">
-            {reasoning || "暂无思考内容"}
+            {reasoning || t("messages.thinking.empty")}
           </pre>
         </div>
       )}

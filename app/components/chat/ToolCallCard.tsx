@@ -8,6 +8,7 @@ import {
   getToolSummary,
   getToolStatusMeta,
 } from "./utils/toolUtils";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface ToolCallCardProps {
   part: ToolMessagePart;
@@ -20,8 +21,9 @@ export default function ToolCallCard({
   expanded,
   onToggle,
 }: ToolCallCardProps) {
-  const title = getToolTitle(part.type);
-  const meta = getToolStatusMeta(part.state);
+  const { t } = useAppTranslation("chat");
+  const title = getToolTitle(part.type, t);
+  const meta = getToolStatusMeta(part.state, t);
   const StatusIcon = meta.Icon;
   const [copiedInput, setCopiedInput] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
@@ -41,7 +43,7 @@ export default function ToolCallCard({
       setCopiedInput(true);
       setTimeout(() => setCopiedInput(false), 2000);
     } catch (error) {
-      console.error("复制失败:", error);
+      console.error("[ToolCallCard] copy input failed:", error);
     }
   };
 
@@ -52,18 +54,20 @@ export default function ToolCallCard({
       setCopiedOutput(true);
       setTimeout(() => setCopiedOutput(false), 2000);
     } catch (error) {
-      console.error("复制失败:", error);
+      console.error("[ToolCallCard] copy output failed:", error);
     }
   };
 
   // 复制错误信息
   const handleCopyError = async () => {
     try {
-      await navigator.clipboard.writeText(part.errorText ?? "未知错误");
+      await navigator.clipboard.writeText(
+        part.errorText ?? t("toolCalls.error"),
+      );
       setCopiedError(true);
       setTimeout(() => setCopiedError(false), 2000);
     } catch (error) {
-      console.error("复制失败:", error);
+      console.error("[ToolCallCard] copy error failed:", error);
     }
   };
 
@@ -101,7 +105,7 @@ export default function ToolCallCard({
           </svg>
         </div>
       </button>
-      <div className="tool-call-summary">{getToolSummary(part)}</div>
+      <div className="tool-call-summary">{getToolSummary(part, t)}</div>
       {expanded ? (
         <div className="tool-call-body">
           {/* 错误信息区块 */}
@@ -115,18 +119,24 @@ export default function ToolCallCard({
                   marginBottom: "0.35rem",
                 }}
               >
-                <div className="tool-call-section-title">错误信息</div>
+                <div className="tool-call-section-title">
+                  {t("toolCalls.error")}
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyError}
                   className="tool-call-copy-icon-button"
-                  title={copiedError ? "已复制" : "复制错误信息"}
+                  title={
+                    copiedError
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyOutput")
+                  }
                 >
                   {copiedError ? <Check size={14} /> : <Copy size={14} />}
                 </button>
               </div>
               <div className="tool-call-error-text">
-                {part.errorText ?? "未知错误"}
+                {part.errorText ?? t("toolCalls.error")}
               </div>
             </div>
           )}
@@ -142,12 +152,18 @@ export default function ToolCallCard({
                   marginBottom: "0.35rem",
                 }}
               >
-                <div className="tool-call-section-title">输入参数</div>
+                <div className="tool-call-section-title">
+                  {t("toolCalls.parameters")}
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyInput}
                   className="tool-call-copy-icon-button"
-                  title={copiedInput ? "已复制" : "复制输入参数"}
+                  title={
+                    copiedInput
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyInput")
+                  }
                 >
                   {copiedInput ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -169,12 +185,18 @@ export default function ToolCallCard({
                   marginBottom: "0.35rem",
                 }}
               >
-                <div className="tool-call-section-title">执行结果</div>
+                <div className="tool-call-section-title">
+                  {t("toolCalls.result")}
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyOutput}
                   className="tool-call-copy-icon-button"
-                  title={copiedOutput ? "已复制" : "复制执行结果"}
+                  title={
+                    copiedOutput
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyOutput")
+                  }
                 >
                   {copiedOutput ? <Check size={14} /> : <Copy size={14} />}
                 </button>

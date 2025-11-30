@@ -1,1 +1,245 @@
-{}
+{
+  "sidebar": {
+    "title": "Chat Assistant",
+    "description": "Co-edit DrawIO with AI",
+    "newChat": "New chat",
+    "history": "History",
+    "back": "Back to chat",
+    "emptyState": {
+      "title": "Start a conversation",
+      "description": "Pick a project and chat with the AI assistant",
+      "action": "Create chat"
+    }
+  },
+  "messages": {
+    "loading": "Loading messages...",
+    "sending": "Sending...",
+    "streaming": "Generating reply...",
+    "saving": "Auto-saving",
+    "saved": "Saved",
+    "retrying": "Retrying...",
+    "emptyConversation": "No messages yet. Say hi!",
+    "loadMore": "Load more",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "typing": "Typing...",
+    "collapsed": "Content collapsed",
+    "defaultVersion": "Default version",
+    "initialVersion": "Initial version",
+    "defaultConversation": "New conversation",
+    "roles": {
+      "user": "User",
+      "assistant": "Assistant",
+      "system": "System"
+    },
+    "status": {
+      "draft": "Draft",
+      "pending": "Pending",
+      "sent": "Sent",
+      "failed": "Send failed",
+      "streaming": "Streaming",
+      "truncated": "Truncated"
+    },
+    "counts": {
+      "messageCount_one": "{{count}} message",
+      "messageCount_other": "{{count}} messages"
+    },
+    "labels": {
+      "model": "Model",
+      "timestamp": "Sent {{time}}"
+    },
+    "actions": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "retry": "Retry",
+      "delete": "Delete",
+      "editTitle": "Rename",
+      "regenerate": "Regenerate",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "scrollToLatest": "Scroll to latest",
+      "viewToolCall": "View tool call"
+    },
+    "emptyStates": {
+      "loading": {
+        "title": "Loading LLM configuration",
+        "hint": "Please wait..."
+      },
+      "noConfig": {
+        "title": "AI provider not configured",
+        "hint": "Save connection settings and try again"
+      },
+      "noMessages": {
+        "title": "Start chatting with the assistant",
+        "hint": "Type a message to begin"
+      }
+    },
+    "thinking": {
+      "streaming": "Thinking...",
+      "title": "Reasoning",
+      "empty": "No reasoning content"
+    },
+    "emptyMessage": "(Empty message)"
+  },
+  "input": {
+    "placeholder": "Type a message...",
+    "placeholderWithProject": "Ask {{project}}...",
+    "send": "Send",
+    "stop": "Stop",
+    "newChat": "New chat",
+    "openHistory": "History",
+    "reset": "Clear input",
+    "attachFile": "Attach file",
+    "shortcuts": {
+      "send": "Enter to send",
+      "newLine": "Shift+Enter for new line"
+    },
+    "characterCount": "{{current}} / {{max}} chars"
+  },
+  "toolCalls": {
+    "title": "Tool calls",
+    "parameters": "Input parameters",
+    "result": "Result",
+    "error": "Error",
+    "duration": "Took {{seconds}}s",
+    "callId": "Call ID",
+    "inputTruncated": "Input truncated",
+    "outputTruncated": "Output truncated",
+    "tools": {
+      "tool-drawio_read": "Read diagram",
+      "tool-drawio_edit_batch": "Batch edit diagram",
+      "tool-drawio_overwrite": "Overwrite diagram",
+      "default": "Unknown tool"
+    },
+    "status": {
+      "input-streaming": "Receiving input",
+      "input-available": "Input ready",
+      "call": "Calling",
+      "output-available": "Output ready",
+      "output-error": "Failed",
+      "result": "Result",
+      "default": "Queued"
+    },
+    "actions": {
+      "expand": "Expand details",
+      "collapse": "Collapse details",
+      "copyInput": "Copy input",
+      "copyOutput": "Copy output",
+      "retry": "Retry call"
+    },
+    "summary": {
+      "input": "Input {{bytes}} bytes",
+      "output": "Output {{bytes}} bytes",
+      "error": "Error: {{message}}"
+    }
+  },
+  "conversations": {
+    "title": "Conversations",
+    "current": "Current",
+    "emptyState": {
+      "title": "No conversations",
+      "description": "Create one to start chatting",
+      "action": "New conversation"
+    },
+    "actions": {
+      "rename": "Rename",
+      "delete": "Delete",
+      "export": "Export",
+      "exportAll": "Export all",
+      "open": "Open",
+      "duplicate": "Duplicate",
+      "selectAll": "Select all",
+      "clearSelection": "Clear selection"
+    },
+    "confirmDelete": "Delete selected conversations?",
+    "defaultName": "New conversation {{number}}",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "selectedCount_one": "{{count}} conversation selected",
+    "selectedCount_other": "{{count}} conversations selected",
+    "lastUpdated": "Updated {{time}}",
+    "createdAt": "Created {{time}}",
+    "export": {
+      "title": "Chat Export",
+      "sectionTitle": "Conversation {{index}}: {{title}}",
+      "sessionId": "Session ID",
+      "createdAt": "Created at",
+      "updatedAt": "Updated at",
+      "emptyMessage": "(Empty message)",
+      "jsonFilter": "JSON file",
+      "markdownFilter": "Markdown file"
+    }
+  },
+  "history": {
+    "title": "History",
+    "filter": {
+      "label": "Filter",
+      "all": "All",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This week",
+      "thisMonth": "This month"
+    },
+    "sort": {
+      "label": "Sort",
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "mostMessages": "Most messages"
+    },
+    "search": {
+      "placeholder": "Search conversations...",
+      "noResults": "No matching conversations"
+    },
+    "selectionMode": "Bulk select",
+    "selectionModeExit": "Exit bulk select",
+    "selectionCount": "Selected {{selected}} / {{total}}",
+    "range": {
+      "from": "Start date",
+      "to": "End date"
+    }
+  },
+  "status": {
+    "socketDisconnected": "Socket.IO disconnected",
+    "socketWarning": "AI tool features temporarily unavailable"
+  },
+  "errors": {
+    "loadFailed": "Failed to load messages",
+    "sendFailed": "Failed to send message",
+    "networkError": "Network error. Check your connection.",
+    "timeout": "Request timed out. Try again.",
+    "invalidMessage": "Invalid message format",
+    "retryLimit": "Retry limit reached",
+    "emptyProject": "Select a project before chatting",
+    "noSelection": "Select at least one conversation",
+    "noResult": "No results"
+  },
+  "aria": {
+    "sidebar": "Chat sidebar",
+    "messageList": "Message list",
+    "input": "Chat input",
+    "send": "Send message",
+    "stop": "Stop generation",
+    "newChat": "Start new chat",
+    "history": "Open history",
+    "scrollToBottom": "Scroll to latest message",
+    "copy": "Copy message",
+    "retry": "Retry send",
+    "delete": "Delete message",
+    "expand": "Expand content",
+    "collapse": "Collapse content",
+    "toggleTool": "Toggle tool call details",
+    "openPreview": "Open preview",
+    "selectConversation": "Select conversation {{title}}",
+    "deselectConversation": "Deselect conversation {{title}}",
+    "selectAll": "Select all conversations",
+    "clearSelection": "Clear selection",
+    "closeHistory": "Close history",
+    "search": "Search conversations",
+    "filter": "Filter conversations",
+    "sort": "Sort conversations",
+    "export": "Export conversation",
+    "rename": "Rename conversation",
+    "deleteConfirm": "Delete conversation \"{{title}}\"?",
+    "deleteAllConfirm": "An empty conversation will be created after deletion. Continue?"
+  }
+}

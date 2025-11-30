@@ -4,6 +4,7 @@ import { type FormEvent } from "react";
 import { TextArea } from "@heroui/react";
 import { type LLMConfig } from "@/app/types/chat";
 import ChatInputActions from "./ChatInputActions";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface ChatInputAreaProps {
   input: string;
@@ -28,6 +29,7 @@ export default function ChatInputArea({
   onNewChat,
   onHistory,
 }: ChatInputAreaProps) {
+  const { t } = useAppTranslation("chat");
   const isSendDisabled =
     !input.trim() || isChatStreaming || configLoading || !llmConfig;
 
@@ -53,13 +55,14 @@ export default function ChatInputArea({
       <form onSubmit={onSubmit} className="chat-input-container">
         {/* 多行文本输入框 */}
         <TextArea
-          placeholder="描述你想要对图表进行的修改，或上传（粘贴）图像来复制图表..."
+          placeholder={t("input.placeholder")}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           rows={3}
           disabled={configLoading || !llmConfig}
           onKeyDown={handleKeyDown}
           className="w-full"
+          aria-label={t("aria.input")}
         />
 
         {/* 按钮组 */}

@@ -86,3 +86,36 @@ export function formatConversationDate(
     mode === "date" ? CONVERSATION_DATE_OPTIONS : CONVERSATION_DATETIME_OPTIONS;
   return new Date(timestamp).toLocaleString(activeLocale, options);
 }
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const WEEK = 7 * DAY;
+
+/**
+ * 相对时间格式化，优先使用 chat/common 命名空间的 time 文案，超出 4 周回退到日期格式
+ */
+export function formatRelativeTime(
+  timestamp: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  t: (key: string, options?: any) => string,
+): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  if (diff < MINUTE) return t("common:time.justNow");
+
+  const minutes = Math.floor(diff / MINUTE);
+  if (minutes < 60) return t("common:time.minutesAgo", { count: minutes });
+
+  const hours = Math.floor(diff / HOUR);
+  if (hours < 24) return t("common:time.hoursAgo", { count: hours });
+
+  const days = Math.floor(diff / DAY);
+  if (days < 7) return t("common:time.daysAgo", { count: days });
+
+  const weeks = Math.floor(diff / WEEK);
+  if (weeks < 4) return t("common:time.weeksAgo", { count: weeks });
+
+  return formatConversationDate(timestamp, "date");
+}

@@ -1,1 +1,245 @@
-{}
+{
+  "sidebar": {
+    "title": "聊天助手",
+    "description": "与 AI 协作编辑 DrawIO",
+    "newChat": "新建对话",
+    "history": "历史记录",
+    "back": "返回聊天",
+    "emptyState": {
+      "title": "开始新对话",
+      "description": "选择一个项目并开始与 AI 助手对话",
+      "action": "创建对话"
+    }
+  },
+  "messages": {
+    "loading": "正在加载消息...",
+    "sending": "正在发送...",
+    "streaming": "正在生成回复...",
+    "saving": "正在自动保存",
+    "saved": "已保存",
+    "retrying": "重试中...",
+    "emptyConversation": "暂无消息，开始对话吧",
+    "loadMore": "加载更多",
+    "collapseAll": "折叠全部",
+    "expandAll": "展开全部",
+    "typing": "正在输入...",
+    "collapsed": "内容已折叠",
+    "defaultVersion": "默认版本",
+    "initialVersion": "初始版本",
+    "defaultConversation": "新对话",
+    "roles": {
+      "user": "用户",
+      "assistant": "助手",
+      "system": "系统"
+    },
+    "status": {
+      "draft": "草稿",
+      "pending": "待发送",
+      "sent": "已发送",
+      "failed": "发送失败",
+      "streaming": "生成中",
+      "truncated": "内容已截断"
+    },
+    "counts": {
+      "messageCount_one": "{{count}} 条消息",
+      "messageCount_other": "{{count}} 条消息"
+    },
+    "labels": {
+      "model": "模型",
+      "timestamp": "发送于 {{time}}"
+    },
+    "actions": {
+      "copy": "复制",
+      "copied": "已复制",
+      "retry": "重试",
+      "delete": "删除",
+      "editTitle": "重命名",
+      "regenerate": "重新生成",
+      "expand": "展开",
+      "collapse": "收起",
+      "scrollToLatest": "滚动到最新",
+      "viewToolCall": "查看工具调用"
+    },
+    "emptyStates": {
+      "loading": {
+        "title": "正在加载 LLM 配置",
+        "hint": "请稍候..."
+      },
+      "noConfig": {
+        "title": "尚未配置 AI 供应商",
+        "hint": "请在设置中保存连接参数后重试"
+      },
+      "noMessages": {
+        "title": "开始与 AI 助手对话",
+        "hint": "输入消息开始聊天"
+      }
+    },
+    "thinking": {
+      "streaming": "思考中...",
+      "title": "思考过程",
+      "empty": "暂无思考内容"
+    },
+    "emptyMessage": "（空消息）"
+  },
+  "input": {
+    "placeholder": "输入消息...",
+    "placeholderWithProject": "向 {{project}} 提问...",
+    "send": "发送",
+    "stop": "停止",
+    "newChat": "新建聊天",
+    "openHistory": "历史",
+    "reset": "清空输入",
+    "attachFile": "附加文件",
+    "shortcuts": {
+      "send": "Enter 发送",
+      "newLine": "Shift+Enter 换行"
+    },
+    "characterCount": "{{current}} / {{max}} 字符"
+  },
+  "toolCalls": {
+    "title": "工具调用",
+    "parameters": "输入参数",
+    "result": "执行结果",
+    "error": "错误信息",
+    "duration": "耗时 {{seconds}} 秒",
+    "callId": "调用 ID",
+    "inputTruncated": "输入过长已截断",
+    "outputTruncated": "输出过长已截断",
+    "tools": {
+      "tool-drawio_read": "读取图表",
+      "tool-drawio_edit_batch": "批量编辑图表",
+      "tool-drawio_overwrite": "覆盖保存图表",
+      "default": "未知工具"
+    },
+    "status": {
+      "input-streaming": "正在接收输入",
+      "input-available": "输入已就绪",
+      "call": "调用中",
+      "output-available": "输出已返回",
+      "output-error": "执行失败",
+      "result": "执行结果",
+      "default": "等待执行"
+    },
+    "actions": {
+      "expand": "展开详情",
+      "collapse": "收起详情",
+      "copyInput": "复制输入",
+      "copyOutput": "复制输出",
+      "retry": "重试执行"
+    },
+    "summary": {
+      "input": "输入 {{bytes}} 字节",
+      "output": "输出 {{bytes}} 字节",
+      "error": "错误：{{message}}"
+    }
+  },
+  "conversations": {
+    "title": "会话列表",
+    "current": "当前会话",
+    "emptyState": {
+      "title": "暂无会话",
+      "description": "创建一个新会话开始对话",
+      "action": "新建会话"
+    },
+    "actions": {
+      "rename": "重命名",
+      "delete": "删除",
+      "export": "导出",
+      "exportAll": "全部导出",
+      "open": "打开",
+      "duplicate": "复制会话",
+      "selectAll": "全选",
+      "clearSelection": "清除选择"
+    },
+    "confirmDelete": "确定要删除所选会话吗？",
+    "defaultName": "新会话 {{number}}",
+    "messageCount_one": "{{count}} 条消息",
+    "messageCount_other": "{{count}} 条消息",
+    "selectedCount_one": "已选择 {{count}} 个会话",
+    "selectedCount_other": "已选择 {{count}} 个会话",
+    "lastUpdated": "更新于 {{time}}",
+    "createdAt": "创建于 {{time}}",
+    "export": {
+      "title": "聊天导出",
+      "sectionTitle": "会话 {{index}}：{{title}}",
+      "sessionId": "会话 ID",
+      "createdAt": "创建时间",
+      "updatedAt": "更新时间",
+      "emptyMessage": "（空消息）",
+      "jsonFilter": "JSON 文件",
+      "markdownFilter": "Markdown 文件"
+    }
+  },
+  "history": {
+    "title": "历史记录",
+    "filter": {
+      "label": "筛选",
+      "all": "全部",
+      "today": "今天",
+      "yesterday": "昨天",
+      "thisWeek": "本周",
+      "thisMonth": "本月"
+    },
+    "sort": {
+      "label": "排序",
+      "newest": "最新优先",
+      "oldest": "最早优先",
+      "mostMessages": "消息最多"
+    },
+    "search": {
+      "placeholder": "搜索会话...",
+      "noResults": "未找到匹配的会话"
+    },
+    "selectionMode": "批量选择模式",
+    "selectionModeExit": "退出批量模式",
+    "selectionCount": "已选 {{selected}} / {{total}}",
+    "range": {
+      "from": "起始日期",
+      "to": "结束日期"
+    }
+  },
+  "status": {
+    "socketDisconnected": "Socket.IO 未连接",
+    "socketWarning": "AI 工具功能暂时不可用"
+  },
+  "errors": {
+    "loadFailed": "加载消息失败",
+    "sendFailed": "发送消息失败",
+    "networkError": "网络错误，请检查连接",
+    "timeout": "请求超时，请稍后重试",
+    "invalidMessage": "消息格式无效",
+    "retryLimit": "已达到重试次数上限",
+    "emptyProject": "请先选择项目再开始聊天",
+    "noSelection": "请选择至少一个会话",
+    "noResult": "暂无结果"
+  },
+  "aria": {
+    "sidebar": "聊天侧栏",
+    "messageList": "消息列表",
+    "input": "聊天输入框",
+    "send": "发送消息",
+    "stop": "停止生成",
+    "newChat": "开始新对话",
+    "history": "打开历史记录",
+    "scrollToBottom": "滚动到最新消息",
+    "copy": "复制消息",
+    "retry": "重试发送",
+    "delete": "删除消息",
+    "expand": "展开内容",
+    "collapse": "收起内容",
+    "toggleTool": "展开工具调用详情",
+    "openPreview": "打开预览",
+    "selectConversation": "选择会话 {{title}}",
+    "deselectConversation": "取消选择 {{title}}",
+    "selectAll": "全选会话",
+    "clearSelection": "清除选择",
+    "closeHistory": "关闭历史记录",
+    "search": "搜索会话",
+    "filter": "筛选会话",
+    "sort": "排序会话",
+    "export": "导出会话",
+    "rename": "重命名会话",
+    "deleteConfirm": "确定要删除会话 \"{{title}}\" 吗？",
+    "deleteAllConfirm": "删除后将自动创建一个空会话，确定继续吗？"
+  }
+}

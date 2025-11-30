@@ -11,6 +11,7 @@ import {
   Trash2,
   Download,
 } from "lucide-react";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface HistoryToolbarProps {
   searchQuery: string;
@@ -43,16 +44,18 @@ export default function HistoryToolbar({
   onDeleteSelected,
   onExportSelected,
 }: HistoryToolbarProps) {
+  const { t } = useAppTranslation("chat");
+
   return (
     <div className="history-toolbar">
       <Button
         variant="tertiary"
         size="sm"
         onPress={onBack}
-        aria-label="返回聊天"
+        aria-label={t("sidebar.back")}
       >
         <ArrowLeft size={16} />
-        返回
+        {t("sidebar.back")}
       </Button>
 
       <div className="history-toolbar__search">
@@ -62,8 +65,8 @@ export default function HistoryToolbar({
           type="search"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="搜索对话标题"
-          aria-label="搜索对话"
+          placeholder={t("history.search.placeholder")}
+          aria-label={t("aria.search")}
         />
       </div>
 
@@ -71,7 +74,7 @@ export default function HistoryToolbar({
         <div className="history-toolbar__date">
           <CalendarRange size={16} aria-hidden />
           <input
-            aria-label="开始日期"
+            aria-label={t("history.range.from")}
             className="history-toolbar__date-input"
             type="date"
             value={dateRange.start}
@@ -81,7 +84,7 @@ export default function HistoryToolbar({
           />
           <span className="history-toolbar__date-sep">—</span>
           <input
-            aria-label="结束日期"
+            aria-label={t("history.range.to")}
             className="history-toolbar__date-input"
             type="date"
             value={dateRange.end}
@@ -97,7 +100,9 @@ export default function HistoryToolbar({
           onPress={onToggleSelectionMode}
         >
           <ListChecks size={16} />
-          {selectionMode ? "退出批量" : "批量操作"}
+          {selectionMode
+            ? t("history.selectionModeExit")
+            : t("history.selectionMode")}
         </Button>
       </div>
 
@@ -105,14 +110,17 @@ export default function HistoryToolbar({
         <div className="history-toolbar__bulk">
           <Button size="sm" variant="secondary" onPress={onSelectAll}>
             <CheckSquare2 size={16} />
-            全选
+            {t("conversations.actions.selectAll")}
           </Button>
           <Button size="sm" variant="tertiary" onPress={onClearSelection}>
             <Square size={16} />
-            清除
+            {t("conversations.actions.clearSelection")}
           </Button>
           <span className="history-toolbar__count">
-            已选 {selectedCount}/{totalCount}
+            {t("history.selectionCount", {
+              selected: selectedCount,
+              total: totalCount,
+            })}
           </span>
           <Button
             size="sm"
@@ -121,7 +129,7 @@ export default function HistoryToolbar({
             isDisabled={selectedCount === 0}
           >
             <Download size={16} />
-            导出
+            {t("conversations.actions.export")}
           </Button>
           <Button
             size="sm"
@@ -130,7 +138,7 @@ export default function HistoryToolbar({
             isDisabled={selectedCount === 0}
           >
             <Trash2 size={16} />
-            删除
+            {t("conversations.actions.delete")}
           </Button>
         </div>
       )}

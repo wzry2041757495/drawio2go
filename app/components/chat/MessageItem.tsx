@@ -4,6 +4,8 @@ import { Bot, UserRound } from "lucide-react";
 import MessageContent from "./MessageContent";
 import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
 import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
+import { formatRelativeTime } from "@/app/lib/format-utils";
+import { useAppTranslation } from "@/app/i18n/hooks";
 
 interface MessageItemProps {
   message: ChatUIMessage;
@@ -24,21 +26,16 @@ export default function MessageItem({
   onToolCallToggle,
   onThinkingBlockToggle,
 }: MessageItemProps) {
+  const { t } = useAppTranslation(["chat", "common"]);
   const metadata = (message.metadata as MessageMetadata | undefined) ?? {};
   const modelName = metadata.modelName || DEFAULT_LLM_CONFIG.modelName;
   const timestamp = metadata.createdAt
     ? new Date(metadata.createdAt)
     : new Date();
-  const formattedTime = new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(timestamp);
+  const formattedTime = formatRelativeTime(timestamp.getTime(), t);
 
   const isUser = message.role === "user";
-  const metaLabel = `${modelName} · ${formattedTime}`;
+  const metaLabel = `${t("messages.labels.model")}: ${modelName} · ${t("messages.labels.timestamp", { time: formattedTime })}`;
 
   return (
     <div

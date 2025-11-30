@@ -179,15 +179,15 @@ export function HistoryModal() {
 
 ### 工具函数 (`utils/toolUtils.ts`)
 
-- `getToolTitle(type)` - 获取工具调用标题
-- `getToolSummary(part)` - 获取工具状态摘要
-- `getToolStatusMeta(state)` - 获取工具状态元数据（图标、标签、样式）
+- `getToolTitle(type, t)` - 获取工具调用标题（传入 i18n 的 t 确保多语言）
+- `getToolSummary(part, t)` - 获取工具状态摘要（含输入/输出字节、错误信息）
+- `getToolStatusMeta(state, t)` - 获取工具状态元数据（图标、标签、样式）
 - `getToolExpansionKey(...)` - 生成工具卡片展开状态的唯一键
 
 ### 工具常量 (`constants/toolConstants.ts`)
 
-- `TOOL_LABELS` - 工具名称映射（支持 drawio_read、drawio_edit_batch、drawio_overwrite）
-- `TOOL_STATUS_META` - 工具状态元数据（包含 Icon、label、tone）
+- `TOOL_LABEL_KEYS` - 工具名称映射（支持 drawio_read、drawio_edit_batch、drawio_overwrite）
+- `TOOL_STATUS_META` - 工具状态元数据定义（包含 Icon、labelKey、tone）
 - `ToolMessagePart` - 工具消息部分的类型定义
 
 ### Markdown 组件 (`constants/markdownComponents.tsx`)
