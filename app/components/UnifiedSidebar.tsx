@@ -18,6 +18,9 @@ import { SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from "./constants/sidebar";
 import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("UnifiedSidebar");
 
 export type SidebarTab = "chat" | "settings" | "version";
 
@@ -86,7 +89,7 @@ export default function UnifiedSidebar({
         sidebarWidthRef.current.toString(),
       );
     } catch (e) {
-      console.error("Failed to save sidebar width:", e);
+      logger.error("Failed to save sidebar width:", e);
     }
   };
 
@@ -104,7 +107,7 @@ export default function UnifiedSidebar({
           applySidebarWidth(width);
         }
       } catch (e) {
-        console.error("Failed to load sidebar width:", e);
+        logger.error("Failed to load sidebar width:", e);
       }
     };
 
@@ -120,7 +123,7 @@ export default function UnifiedSidebar({
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {
-      console.warn("Failed to capture pointer event:", err);
+      logger.warn("Failed to capture pointer event:", err);
     }
   };
 
@@ -137,7 +140,7 @@ export default function UnifiedSidebar({
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
     } catch (err) {
-      console.warn("Failed to release pointer capture:", err);
+      logger.warn("Failed to release pointer capture:", err);
     }
     await finalizeResize();
   };

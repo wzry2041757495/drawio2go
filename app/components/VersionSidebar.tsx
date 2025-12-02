@@ -24,6 +24,9 @@ import { useToast } from "@/app/components/toast";
 import type { XMLVersion } from "@/app/lib/storage/types";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("VersionSidebar");
 
 interface VersionSidebarProps {
   projectUuid: string | null;
@@ -150,7 +153,7 @@ export function VersionSidebar({
     try {
       await getAllXMLVersions(projectUuid);
     } catch (err) {
-      console.error(tVersion("sidebar.loadError.description"), err);
+      logger.error(tVersion("sidebar.loadError.description"), err);
       setError(tVersion("sidebar.loadError.description"));
     } finally {
       setIsLoading(false);

@@ -1,5 +1,8 @@
 "use client";
 
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("VersionComponentsUtils");
 /**
  * 版本组件共享工具方法
  * - BinarySource: 统一的二进制来源类型
@@ -104,7 +107,7 @@ export function parsePageNames(raw?: string | null) {
       return `Page ${index + 1}`;
     });
   } catch (error) {
-    console.warn("page_names 解析失败", error);
+    logger.warn("page_names 解析失败", error);
     return [];
   }
 }

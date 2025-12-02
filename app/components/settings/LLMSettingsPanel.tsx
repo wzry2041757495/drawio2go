@@ -1,6 +1,6 @@
 "use client";
 
-import { type Key, useMemo } from "react";
+import { useMemo } from "react";
 import {
   TextField,
   Label,
@@ -11,12 +11,12 @@ import {
   Slider,
   FieldError,
 } from "@heroui/react";
-import type { Selection } from "react-aria-components";
 import { LLMConfig, ProviderType } from "@/app/types/chat";
 import { getProviderOptions } from "./constants";
 import SystemPromptEditor from "./SystemPromptEditor";
 import ConnectionTester from "./ConnectionTester";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
 
 interface LLMSettingsPanelProps {
   config: LLMConfig;
@@ -34,31 +34,6 @@ export default function LLMSettingsPanel({
   const { t } = useAppTranslation("settings");
   const { t: tValidation } = useAppTranslation("validation");
   const providerOptions = useMemo(() => getProviderOptions(t), [t]);
-  const extractSingleKey = (keys: Selection): string | null => {
-    if (keys === "all") return null;
-    const keyArray = [...keys];
-    if (!keyArray.length) return null;
-    const first = keyArray[0];
-    if (typeof first === "number" || typeof first === "bigint") {
-      return String(first);
-    }
-    return first as string;
-  };
-  const normalizeSelection = (
-    keys: Selection | Key | null,
-  ): Selection | null => {
-    if (keys === null) return null;
-    if (keys === "all") return "all";
-    if (
-      typeof keys === "string" ||
-      typeof keys === "number" ||
-      typeof keys === "bigint"
-    ) {
-      return new Set([keys]) as Selection;
-    }
-    return keys;
-  };
-
   const temperatureMin = 0;
   const temperatureMax = 2;
 

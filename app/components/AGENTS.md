@@ -95,19 +95,19 @@
 
 ### 3. SettingsSidebar.tsx - 设置侧边栏
 
-**Props**: `isOpen`, `onClose`, `onSettingsChange`
+**Props**: `onSettingsChange`
 
 **三个面板**:
 
-- **FileSettingsPanel**: 文件保存路径
 - **LLMSettingsPanel**: LLM 提供商、API 配置、系统提示词
 - **VersionSettingsPanel**: AI 自动版本快照开关（`autoVersionOnAIEdit`）
+- **GeneralSettingsPanel**: 语言切换 + 默认文件路径选择（Electron 环境支持 `selectFolder`）
 
 **特性**: 底部操作条（有修改时显示取消/保存）、供应商切换（OpenAI Responses/Chat Completions/DeepSeek）
 
 ### 4. ChatSidebar.tsx - 聊天侧边栏
 
-**Props**: `isOpen`, `onClose`
+**Props**: `currentProjectId?`, `isSocketConnected?`
 
 **核心功能**:
 
@@ -261,6 +261,28 @@ import { Button } from '@heroui/react';
 - 用户友好的错误提示
 
 ## 代码腐化清理记录
+
+### 2025-12-02 清理（Components 快速清理）
+
+**执行的操作**：
+
+- 删除 FileSettingsPanel 组件及其导出（未被任何 UI 引用）
+- 删除未调用的文件操作函数（fileOperations.ts: showOpenDialog/readFile/selectFile）
+- 删除未使用的 props（ChatSidebarProps.isOpen/onClose、ChatHistoryView.currentProjectId 等）
+- 合并 Select 工具函数重复（5 个组件 → lib/select-utils.ts 统一导入）
+- 迁移 console.log/error 到 logger.ts（约 15 个文件，50+ 处调用）
+- 修复 MessageList 渲染副作用（setTimeout → useEffect + cleanup）
+- 合并 ToolCallCard 复制函数（3 个相似函数 → 1 个通用 handleCopy）
+
+**影响文件**：22 个（+160/-217 行）
+
+**下次关注**：
+
+- ChatSidebar 仍需重构（958 行），建议拆出 useChatSessionsController hook
+- 提炼 usePanZoomStage hook（PageSVGViewer + VersionCompare 缩放逻辑重复）
+- 封装 useLLMConfig/useOperationToast（配置加载逻辑在 3 处重复）
+
+---
 
 ### 2025-11-24 清理
 

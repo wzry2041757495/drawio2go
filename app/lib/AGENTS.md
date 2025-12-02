@@ -18,6 +18,7 @@
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
 - **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
 - **format-utils.ts**: 统一的日期格式化工具（版本时间戳、会话日期）
+- **select-utils.ts**: HeroUI Select 选择值提取与标准化工具，消除重复实现
 - **utils.ts**: 通用工具函数（debounce 防抖函数，支持 flush/cancel 方法；runStorageTask、withTimeout）
 - **logger.ts**: 轻量日志工厂（`createLogger(componentName)`），自动加组件前缀并支持 debug/info/warn/error 级别过滤
 - **error-handler.ts**: 通用错误处理工具（AppError + i18n 翻译 + API/Toast 友好消息）

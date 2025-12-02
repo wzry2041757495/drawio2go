@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { Skeleton } from "@heroui/react";
 import { type LLMConfig, type ChatUIMessage } from "@/app/types/chat";
 import EmptyState from "./EmptyState";
@@ -30,15 +30,16 @@ export default function MessageList({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const skeletonItems = Array.from({ length: 3 });
 
-  // 自动滚动到底部
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // 监听消息内容与流式状态变化，自动滚动到底部（支持流式追加而不改变长度的场景）
+  useEffect(() => {
+    if (messages.length === 0) return;
 
-  // 监听消息变化，自动滚动到底部
-  if (messages.length > 0) {
-    setTimeout(scrollToBottom, 100);
-  }
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [messages, status]);
 
   // 渲染空状态
   if (configLoading) {

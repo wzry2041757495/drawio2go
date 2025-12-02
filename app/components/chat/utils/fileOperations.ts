@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ChatFileOperations");
+
 /**
  * 文件操作相关的工具函数
  */
@@ -18,7 +22,7 @@ export const showSaveDialog = async (
     try {
       return await window.electron.showSaveDialog(options);
     } catch (error) {
-      console.error("保存对话框失败:", error);
+      logger.error("保存对话框失败:", error);
       return null;
     }
   }
@@ -35,7 +39,7 @@ export const showOpenDialog = async (
     try {
       return await window.electron.showOpenDialog(options);
     } catch (error) {
-      console.error("打开对话框失败:", error);
+      logger.error("打开对话框失败:", error);
       return null;
     }
   }
@@ -54,7 +58,7 @@ export const writeFile = async (
       await window.electron.writeFile(filePath, content);
       return true;
     } catch (error) {
-      console.error("写入文件失败:", error);
+      logger.error("写入文件失败:", error);
       return false;
     }
   }
@@ -69,7 +73,7 @@ export const readFile = async (filePath: string): Promise<string | null> => {
     try {
       return await window.electron.readFile(filePath);
     } catch (error) {
-      console.error("读取文件失败:", error);
+      logger.error("读取文件失败:", error);
       return null;
     }
   }
@@ -104,7 +108,7 @@ export const selectFile = (accept: string): Promise<string | null> => {
           const text = await file.text();
           resolve(text);
         } catch (error) {
-          console.error("读取文件失败:", error);
+          logger.error("读取文件失败:", error);
           resolve(null);
         }
       } else {

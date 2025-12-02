@@ -11,6 +11,9 @@ import {
 } from "react";
 import { DrawioSelectionInfo } from "../types/drawio-tools";
 import { debounce } from "@/app/lib/utils";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("DrawioEditorNative");
 
 type DrawioExportFormat = "xml" | "svg";
 
@@ -75,10 +78,10 @@ function decodeBase64DataURI(dataUri: string): string {
       const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
       const decoded = new TextDecoder("utf-8").decode(bytes);
 
-      console.log("🔓 Base64 data URI 已解码");
+      logger.debug("Base64 data URI 已解码");
       return decoded;
     } catch (error) {
-      console.error("❌ Base64 解码失败:", error);
+      logger.error("Base64 解码失败:", error);
       return dataUri;
     }
   }
@@ -178,7 +181,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     const dispatchLoadCommand = useCallback(
       (xml: string | undefined, resolve?: () => void) => {
         if (!iframeRef.current || !iframeRef.current.contentWindow) {
-          console.warn("⚠️ iframe 未就绪，无法发送 load 命令");
+          logger.warn("iframe 未就绪，无法发送 load 命令");
           resolve?.();
           return;
         }
@@ -188,7 +191,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
           xml: xml || "",
           autosave: true,
         };
-        console.log("📤 发送 load 命令（完全加载）");
+        logger.debug("发送 load 命令（完全加载）");
         if (resolve) {
           sentLoadResolversRef.current.push(resolve);
         }
@@ -208,7 +211,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       const queuedLoads = [...pendingLoadQueueRef.current];
       pendingLoadQueueRef.current = [];
 
-      console.log(`⏩ 回放 ${queuedLoads.length} 个待执行的 load 请求`);
+      logger.debug(`回放 ${queuedLoads.length} 个待执行的 load 请求`);
 
       queuedLoads.forEach(({ xml, resolve }) => {
         dispatchLoadCommand(xml, resolve);
@@ -228,7 +231,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
             return;
           }
 
-          console.log("⏳ DrawIO 尚未就绪，已缓存 load 请求");
+          logger.debug("DrawIO 尚未就绪，已缓存 load 请求");
           pendingLoadQueueRef.current.push({ xml, resolve });
         });
       },
@@ -269,7 +272,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
                 resolve(payload);
               },
               timeout: setTimeout(() => {
-                console.warn(`⚠️ ${format} 导出超时 ${EXPORT_TIMEOUT_MS}ms`);
+                logger.warn(`${format} 导出超时 ${EXPORT_TIMEOUT_MS}ms`);
                 const queue = pendingExportsRef.current.get(formatKey);
                 if (queue) {
                   const index = queue.indexOf(entry);
@@ -290,7 +293,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
             queue.push(entry);
             pendingExportsRef.current.set(formatKey, queue);
 
-            console.log(`📤 发送 export 命令 (${format})`, svgOptions || "");
+            logger.debug(`发送 export 命令 (${format})`, svgOptions || "");
             iframeRef.current.contentWindow.postMessage(
               JSON.stringify(exportData),
               "*",
@@ -320,7 +323,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
             action: "merge",
             xml: xml || "",
           };
-          console.log("🔄 发送 merge 命令（增量更新，保留编辑状态）");
+          logger.debug("发送 merge 命令（增量更新，保留编辑状态）");
 
           // 清除之前的超时定时器（如果存在）
           if (mergeTimeoutRef.current) {
@@ -336,9 +339,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
 
           // 设置 10 秒超时回退机制
           mergeTimeoutRef.current = setTimeout(() => {
-            console.warn(
-              "⚠️ merge 操作超时（10秒未收到回调），回退到 load 操作",
-            );
+            logger.warn("merge 操作超时（10秒未收到回调），回退到 load 操作");
             loadDiagram(xml);
             mergeTimeoutRef.current = null;
           }, 10000); // 10 秒超时
@@ -382,7 +383,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
         }
 
         if (isRollback) {
-          console.log("[DrawIO] 接收到回滚 XML，跳过并发验证链路");
+          logger.debug("[DrawIO] 接收到回滚 XML，跳过并发验证链路");
         }
       };
 
@@ -410,8 +411,8 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     );
 
     useEffect(() => {
-      console.log("🔵 DrawioEditorNative 组件已挂载");
-      console.log("🔵 DrawIO URL:", drawioUrl);
+      logger.debug("DrawioEditorNative 组件已挂载");
+      logger.debug("DrawIO URL:", drawioUrl);
 
       // 监听来自 iframe 的消息
       const handleMessage = (event: MessageEvent) => {
@@ -422,15 +423,15 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
 
         try {
           const data = JSON.parse(event.data);
-          console.log("📩 收到来自 DrawIO 的消息:", data.event);
+          logger.debug("收到来自 DrawIO 的消息:", data.event);
 
           if (data.event === "init") {
-            console.log("✅ DrawIO iframe 初始化成功！");
+            logger.debug("DrawIO iframe 初始化成功！");
             setIsReady(true);
             replayPendingLoads();
 
             // 先导出当前 DrawIO 的 XML，用于对比
-            console.log("🔍 请求 export 以获取 DrawIO 当前 XML");
+            logger.debug("请求 export 以获取 DrawIO 当前 XML");
             // 使用 setTimeout 确保 setIsReady 状态已更新
             setTimeout(() => {
               requestExport("xml");
@@ -442,12 +443,12 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
                 !autosaveReceivedRef.current &&
                 !initializationCompleteRef.current
               ) {
-                console.log("⏰ 2秒内未收到 autosave，主动执行 export");
+                logger.debug("2秒内未收到 autosave，主动执行 export");
                 exportDiagram();
               }
             }, 2000);
           } else if (data.event === "export") {
-            console.log("📦 收到 export 响应");
+            logger.debug("收到 export 响应");
 
             // 读取所有可能的数据字段
             // - data.xml: XML 格式的 DrawIO 源文件
@@ -466,23 +467,19 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
             // 1. 优先尝试 SVG（如果有 data.data 字段）
             if (decodedSvg) {
               resolved = settleExport("svg", decodedSvg);
-              console.log(
-                `  🔍 尝试 SVG 格式: ${resolved ? "✅ 成功" : "❌ 失败"}`,
-              );
+              logger.debug(`  尝试 SVG 格式: ${resolved ? "成功" : "失败"}`);
             }
 
             // 2. 如果 SVG 失败，尝试 XML（如果有 data.xml 字段）
             if (!resolved && decodedXml) {
               resolved = settleExport("xml", decodedXml);
-              console.log(
-                `  🔍 尝试 XML 格式: ${resolved ? "✅ 成功" : "❌ 失败"}`,
-              );
+              logger.debug(`  尝试 XML 格式: ${resolved ? "成功" : "失败"}`);
             }
 
             // 3. 记录失败情况（用于调试）
             if (!resolved) {
-              console.warn("⚠️ 无法匹配任何待处理的导出请求");
-              console.warn("  响应中的数据:", {
+              logger.warn("无法匹配任何待处理的导出请求");
+              logger.warn("  响应中的数据:", {
                 hasXml: !!xmlData,
                 hasSvg: !!svgData,
                 format: data.format,
@@ -498,16 +495,16 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
                 const normalizedInitial = (initialXml || "").trim();
 
                 if (normalizedExported !== normalizedInitial) {
-                  console.log("🔄 检测到 XML 不同，执行 load 操作");
-                  console.log(
+                  logger.debug("检测到 XML 不同，执行 load 操作");
+                  logger.debug(
                     `  - 期望 XML 长度: ${normalizedInitial.length} 字符`,
                   );
-                  console.log(
+                  logger.debug(
                     `  - DrawIO XML 长度: ${normalizedExported.length} 字符`,
                   );
                   loadDiagram(initialXml, true);
                 } else {
-                  console.log("✅ XML 相同，跳过 load 操作");
+                  logger.debug("XML 相同，跳过 load 操作");
                 }
                 isFirstLoadRef.current = false; // 标记首次加载已完成
                 initializationCompleteRef.current = true; // 标记初始化完成
@@ -531,7 +528,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
 
             // 新增：检测 DrawIO 返回的 merge 错误
             if (data.error) {
-              console.error("[DrawIO] merge 错误:", data.error);
+              logger.error("[DrawIO] merge 错误:", data.error);
               window.dispatchEvent(
                 new CustomEvent("drawio-merge-error", {
                   detail: {
@@ -543,15 +540,15 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
               );
             }
 
-            console.log("✅ merge 操作完成");
+            logger.debug("merge 操作完成");
           } else if (data.event === "autosave" || data.event === "save") {
-            console.log("💾 DrawIO 保存事件触发");
+            logger.debug("DrawIO 保存事件触发");
             autosaveReceivedRef.current = true; // 标记已收到 autosave
             if (onSave && data.xml) {
               onSave(data.xml);
             }
           } else if (data.event === "load") {
-            console.log("✅ DrawIO 已加载内容");
+            logger.debug("DrawIO 已加载内容");
             const resolver = sentLoadResolversRef.current.shift();
             resolver?.();
           } else if (data.event === "drawio-selection") {
@@ -574,14 +571,14 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
             onSelectionChange?.(selectionInfo);
           }
         } catch (error) {
-          console.error("❌ 解析消息失败:", error);
+          logger.error("解析消息失败:", error);
         }
       };
 
       window.addEventListener("message", handleMessage);
 
       return () => {
-        console.log("🔴 DrawioEditorNative 组件将卸载");
+        logger.debug("DrawioEditorNative 组件将卸载");
         window.removeEventListener("message", handleMessage);
 
         // 清理所有定时器
@@ -605,22 +602,22 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     useEffect(() => {
       // 只在 isReady 为 true 且 initialXml 真正变化时才更新
       if (isReady && initialXml !== previousXmlRef.current) {
-        console.log("🔄 检测到 XML 更新");
-        console.log(
-          "🔄 之前的 XML:",
+        logger.debug("检测到 XML 更新");
+        logger.debug(
+          "之前的 XML:",
           previousXmlRef.current
             ? `存在 (${previousXmlRef.current?.length} 字符)`
             : "不存在",
         );
-        console.log(
-          "🔄 新的 XML:",
+        logger.debug(
+          "新的 XML:",
           initialXml ? `存在 (${initialXml?.length} 字符)` : "不存在",
         );
-        console.log("🔄 强制重载:", forceReload ? "是" : "否");
+        logger.debug("强制重载:", forceReload ? "是" : "否");
 
         // 如果需要强制重载（如用户手动加载文件），使用 load 动作
         if (forceReload) {
-          console.log("🔄 使用 load 动作（完全重载）");
+          logger.debug("使用 load 动作（完全重载）");
           loadDiagram(initialXml);
           isFirstLoadRef.current = false;
         } else {
@@ -634,7 +631,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
 
     // iframe 加载事件
     const handleIframeLoad = () => {
-      console.log("🌐 iframe onLoad 事件触发");
+      logger.debug("iframe onLoad 事件触发");
     };
 
     useEffect(() => {
@@ -652,11 +649,11 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
         enableWatcher()
           .then((result) => {
             if (!result?.success) {
-              console.warn("⚠️ 启用 DrawIO 选区监听失败:", result?.message);
+              logger.warn("启用 DrawIO 选区监听失败:", result?.message);
             }
           })
           .catch((error) => {
-            console.error("❌ 启用 DrawIO 选区监听异常:", error);
+            logger.error("启用 DrawIO 选区监听异常:", error);
           });
       }
     }, [isReady]);

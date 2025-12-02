@@ -6,7 +6,7 @@
 
 **关键特性：**
 
-- 多标签页设置面板（通用、LLM、文件、版本）
+- 多标签页设置面板（通用、LLM、版本）
 - LLM API 连接测试
 - 系统提示词编辑器（弹窗）
 - 语言切换
@@ -21,7 +21,6 @@
 | ------------------------ | ---------------- | ------------------------------------------------------------------------------ |
 | **GeneralSettingsPanel** | 通用设置         | 语言选择、默认文件路径                                                         |
 | **LLMSettingsPanel**     | LLM 配置         | API URL、Provider、API Key、Model Name、Temperature、MaxToolRounds、系统提示词 |
-| **FileSettingsPanel**    | 文件设置         | DrawIO 文件默认保存路径                                                        |
 | **VersionSettingsPanel** | 版本管理         | AI 编辑前自动创建版本快照                                                      |
 | **SystemPromptEditor**   | 系统提示词编辑器 | 弹窗编辑模式，支持恢复默认值                                                   |
 | **ConnectionTester**     | 连接测试器       | 测试 LLM API 连接可用性                                                        |
@@ -65,20 +64,6 @@ interface LLMSettingsPanelProps {
 - **System Prompt** - 系统提示词（弹窗编辑）
 - **连接测试** - 点击按钮测试当前配置的可用性
 
-### FileSettingsPanel（文件设置）
-
-```typescript
-interface FileSettingsPanelProps {
-  defaultPath: string;
-  onChange: (path: string) => void;
-  onBrowse: () => void;
-}
-```
-
-**配置项：**
-
-- **文件默认路径** - DrawIO 文件的默认保存位置，支持手动输入或浏览选择
-
 ### VersionSettingsPanel（版本管理）
 
 ```typescript
@@ -116,9 +101,6 @@ LLMSettingsPanel
 │   └── 弹窗编辑模式
 └── ConnectionTester（连接测试器）
     └── 弹窗显示测试结果
-
-FileSettingsPanel
-└── 文件路径输入 + 浏览按钮
 
 VersionSettingsPanel
 └── 自动版本化开关
@@ -212,7 +194,6 @@ import {
   SettingsNav,
   GeneralSettingsPanel,
   LLMSettingsPanel,
-  FileSettingsPanel,
   VersionSettingsPanel,
   type SettingsTab,
 } from "@/app/components/settings";
@@ -221,7 +202,6 @@ export function SettingsModal() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [config, setConfig] = useState<LLMConfig>(defaultConfig);
   const [generalPath, setGeneralPath] = useState("");
-  const [filePath, setFilePath] = useState("");
   const [version, setVersion] = useState({ autoVersionOnAIEdit: true });
 
   return (
@@ -243,7 +223,9 @@ export function SettingsModal() {
           />
         )}
 
-        {/* 其他面板... */}
+        {activeTab === "version" && (
+          <VersionSettingsPanel settings={version} onChange={setVersion} />
+        )}
       </div>
     </div>
   );
@@ -383,7 +365,6 @@ app/components/settings/
 ├── SettingsNav.tsx               # 设置导航栏（标签页）
 ├── GeneralSettingsPanel.tsx      # 通用设置面板
 ├── LLMSettingsPanel.tsx          # LLM 配置面板
-├── FileSettingsPanel.tsx         # 文件设置面板
 ├── VersionSettingsPanel.tsx      # 版本管理设置面板
 ├── SystemPromptEditor.tsx        # 系统提示词编辑器（弹窗）
 ├── ConnectionTester.tsx          # 连接测试器（弹窗）

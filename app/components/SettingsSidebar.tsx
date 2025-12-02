@@ -11,6 +11,9 @@ import { VersionSettingsPanel } from "./settings/VersionSettingsPanel";
 import { GeneralSettingsPanel } from "@/app/components/settings";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { useToast } from "@/app/components/toast";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("SettingsSidebar");
 
 interface SettingsSidebarProps {
   isOpen: boolean;
@@ -74,7 +77,7 @@ export default function SettingsSidebar({
         setVersionSettings({ autoVersionOnAIEdit });
         setSavedVersionSettings({ autoVersionOnAIEdit });
       } catch (e) {
-        console.error(t("errors.loadFailed"), e);
+        logger.error(t("errors.loadFailed"), e);
         setLlmConfig(DEFAULT_LLM_CONFIG);
         setSavedLlmConfig(DEFAULT_LLM_CONFIG);
         setVersionSettings({ autoVersionOnAIEdit: true });
@@ -136,7 +139,7 @@ export default function SettingsSidebar({
 
       push({ variant: "success", description: t("toasts.saveSuccess") });
     } catch (e) {
-      console.error(t("errors.saveFailed"), e);
+      logger.error(t("errors.saveFailed"), e);
       push({
         variant: "danger",
         description: t("toasts.saveFailed", {

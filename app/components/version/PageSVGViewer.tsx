@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import React, { type Key } from "react";
+import React from "react";
 import {
   Button,
   Card,
@@ -29,6 +29,10 @@ import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
 import { createBlobFromSource, type BinarySource } from "./version-utils";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
+
+const logger = createLogger("PageSVGViewer");
 
 interface PageSVGViewerProps {
   version: XMLVersion;
@@ -48,30 +52,6 @@ interface Point {
   x: number;
   y: number;
 }
-
-const extractSingleKey = (keys: Selection): string | null => {
-  if (keys === "all") return null;
-  const keyArray = [...keys];
-  if (!keyArray.length) return null;
-  const first = keyArray[0];
-  if (typeof first === "number" || typeof first === "bigint") {
-    return String(first);
-  }
-  return first as string;
-};
-
-const normalizeSelection = (keys: Selection | Key | null): Selection | null => {
-  if (keys === null) return null;
-  if (keys === "all") return "all";
-  if (
-    typeof keys === "string" ||
-    typeof keys === "number" ||
-    typeof keys === "bigint"
-  ) {
-    return new Set([keys]) as Selection;
-  }
-  return keys;
-};
 
 export function PageSVGViewer({
   version,
@@ -133,7 +113,7 @@ export function PageSVGViewer({
             targetVersion = enriched;
           } catch (err) {
             if (!cancelled) {
-              console.warn("加载 PageSVG 数据失败", err);
+              logger.warn("加载 PageSVG 数据失败", err);
               throw new Error(tVersion("viewer.error"));
             }
           }

@@ -10,6 +10,9 @@ import { filterSubVersions, isSubVersion } from "@/app/lib/version-utils";
 import type { XMLVersion } from "@/app/lib/storage/types";
 import type { VersionPair } from "@/app/hooks/useVersionCompare";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("VersionTimeline");
 
 // 虚拟滚动阈值 - 版本数量超过此值时启用虚拟滚动（极致紧凑优化）
 const VIRTUAL_SCROLL_THRESHOLD = 30;
@@ -115,7 +118,7 @@ export function VersionTimeline({
           hasWip: Boolean(wip),
         };
       } catch (error) {
-        console.error("版本排序失败:", error);
+        logger.error("版本排序失败:", error);
         return {
           timelineVersions: [],
           displayedHistoricalVersions: [],
@@ -130,7 +133,7 @@ export function VersionTimeline({
         .filter((version) => version.semantic_version !== WIP_VERSION)
         .sort((a, b) => b.created_at - a.created_at);
     } catch (error) {
-      console.error("全量历史版本排序失败:", error);
+      logger.error("全量历史版本排序失败:", error);
       return [];
     }
   }, [versions]);

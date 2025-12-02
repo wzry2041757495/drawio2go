@@ -9,6 +9,9 @@ import {
   getToolStatusMeta,
 } from "./utils/toolUtils";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ToolCallCard");
 
 interface ToolCallCardProps {
   part: ToolMessagePart;
@@ -36,40 +39,32 @@ export default function ToolCallCard({
   const isInProgress =
     part.state === "input-streaming" || part.state === "input-available";
 
-  // 复制输入参数
-  const handleCopyInput = async () => {
+  // 通用复制处理函数
+  const handleCopy = async (
+    text: string,
+    setStateFn: React.Dispatch<React.SetStateAction<boolean>>,
+    context: string,
+  ) => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(part.input, null, 2));
-      setCopiedInput(true);
-      setTimeout(() => setCopiedInput(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setStateFn(true);
+      setTimeout(() => setStateFn(false), 2000);
     } catch (error) {
-      console.error("[ToolCallCard] copy input failed:", error);
+      logger.error(`[ToolCallCard] copy ${context} failed:`, error);
     }
   };
+
+  // 复制输入参数
+  const handleCopyInput = () =>
+    handleCopy(JSON.stringify(part.input, null, 2), setCopiedInput, "input");
 
   // 复制输出结果
-  const handleCopyOutput = async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(part.output, null, 2));
-      setCopiedOutput(true);
-      setTimeout(() => setCopiedOutput(false), 2000);
-    } catch (error) {
-      console.error("[ToolCallCard] copy output failed:", error);
-    }
-  };
+  const handleCopyOutput = () =>
+    handleCopy(JSON.stringify(part.output, null, 2), setCopiedOutput, "output");
 
   // 复制错误信息
-  const handleCopyError = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        part.errorText ?? t("toolCalls.error"),
-      );
-      setCopiedError(true);
-      setTimeout(() => setCopiedError(false), 2000);
-    } catch (error) {
-      console.error("[ToolCallCard] copy error failed:", error);
-    }
-  };
+  const handleCopyError = () =>
+    handleCopy(part.errorText ?? t("toolCalls.error"), setCopiedError, "error");
 
   return (
     <div

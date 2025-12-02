@@ -42,6 +42,9 @@ import { decompressBlob } from "@/app/lib/compression-utils";
 import { countSubVersions, isSubVersion } from "@/app/lib/version-utils";
 import { formatVersionTimestamp } from "@/app/lib/format-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("VersionCard");
 
 interface VersionCardProps {
   version: XMLVersion;
@@ -131,7 +134,7 @@ export function VersionCard({
         }
       } catch (error) {
         if (!cancelled) {
-          console.warn("加载版本 SVG 数据失败", error);
+          logger.warn("加载版本 SVG 数据失败", error);
         }
       }
     })();
@@ -256,7 +259,7 @@ export function VersionCard({
         objectUrl = URL.createObjectURL(typedBlob);
         setPreviewUrl(objectUrl);
       } catch (error) {
-        console.warn("解压 preview_svg 失败", error);
+        logger.warn("解压 preview_svg 失败", error);
         if (!cancelled) {
           setPreviewUrl(null);
         }
@@ -348,7 +351,7 @@ export function VersionCard({
 
         setPageThumbs(thumbs);
       } catch (error) {
-        console.error("解析多页 SVG 失败", error);
+        logger.error("解析多页 SVG 失败", error);
         if (!cancelled) {
           setPagesError(
             (error as Error).message || tVersion("card.preview.pagesError"),
@@ -380,7 +383,7 @@ export function VersionCard({
       try {
         onRestore(version.id);
       } catch (error) {
-        console.error("回滚版本失败:", error);
+        logger.error("回滚版本失败:", error);
       }
     }
   };
@@ -403,9 +406,9 @@ export function VersionCard({
       a.click();
       URL.revokeObjectURL(url);
 
-      console.log(`✅ 版本 ${version.semantic_version} 导出成功`);
+      logger.debug(` 版本 ${version.semantic_version} 导出成功`);
     } catch (error) {
-      console.error("导出版本失败:", error);
+      logger.error("导出版本失败:", error);
       push({
         variant: "danger",
         description: tCommon("toasts.versionExportFailed", {

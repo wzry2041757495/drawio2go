@@ -1,6 +1,6 @@
 "use client";
 
-import React, { type Key } from "react";
+import React from "react";
 import {
   Button,
   TextField,
@@ -15,7 +15,6 @@ import {
   Select,
   ListBox,
 } from "@heroui/react";
-import type { Selection } from "react-aria-components";
 import {
   useStorageXMLVersions,
   type CreateHistoricalVersionResult,
@@ -27,36 +26,16 @@ import { WIP_VERSION } from "@/app/lib/storage/constants";
 import { isSubVersion } from "@/app/lib/version-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { ErrorCodes } from "@/app/errors/error-codes";
+import { createLogger } from "@/lib/logger";
+import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
+
+const logger = createLogger("CreateVersionDialog");
 
 type VersionType = "main" | "sub";
 
 const VERSION_DESCRIPTION_MAX = 500;
 const SUB_VERSION_MIN = 1;
 const SUB_VERSION_MAX = 999;
-
-const extractSingleKey = (keys: Selection): string | null => {
-  if (keys === "all") return null;
-  const keyArray = [...keys];
-  if (!keyArray.length) return null;
-  const first = keyArray[0];
-  if (typeof first === "number" || typeof first === "bigint") {
-    return String(first);
-  }
-  return first as string;
-};
-
-const normalizeSelection = (keys: Selection | Key | null): Selection | null => {
-  if (keys === null) return null;
-  if (keys === "all") return "all";
-  if (
-    typeof keys === "string" ||
-    typeof keys === "number" ||
-    typeof keys === "bigint"
-  ) {
-    return new Set([keys]) as Selection;
-  }
-  return keys;
-};
 
 interface CreateVersionDialogProps {
   projectUuid: string;
@@ -241,7 +220,7 @@ export function CreateVersionDialog({
         return;
       }
     } catch (err) {
-      console.error(
+      logger.error(
         "[CreateVersionDialog] Failed to check version uniqueness",
         err,
       );
@@ -335,7 +314,7 @@ export function CreateVersionDialog({
       }
       setError("");
     } catch (err) {
-      console.error(
+      logger.error(
         "[CreateVersionDialog] Failed to get recommended version",
         err,
       );
@@ -391,7 +370,7 @@ export function CreateVersionDialog({
         }
       })
       .catch((err) => {
-        console.error(
+        logger.error(
           "[CreateVersionDialog] Failed to prefill recommended version",
           err,
         );
@@ -463,7 +442,7 @@ export function CreateVersionDialog({
           }
         }
       } catch (err) {
-        console.error(
+        logger.error(
           "[CreateVersionDialog] Version uniqueness check failed",
           err,
         );
@@ -577,7 +556,7 @@ export function CreateVersionDialog({
       })
       .catch((err) => {
         if (!isMounted) return;
-        console.error("加载主版本列表失败:", err);
+        logger.error("加载主版本列表失败:", err);
         setParentOptions([]);
         setParentOptionsError(tVersion("create.status.parentLoadFailed"));
       })

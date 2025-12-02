@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import React, { type Key } from "react";
+import React from "react";
 import { createPortal } from "react-dom";
 import {
   Button,
@@ -38,6 +38,10 @@ import {
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
 import { formatVersionTimestamp } from "@/app/lib/format-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
+
+const logger = createLogger("VersionCompare");
 
 interface VersionCompareProps {
   versionA: XMLVersion;
@@ -67,30 +71,6 @@ type CompareLayout = "split" | "stack" | "overlay" | "smart";
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const SCALE_STEP = 0.2;
-
-const extractSingleKey = (keys: Selection): string | null => {
-  if (keys === "all") return null;
-  const keyArray = [...keys];
-  if (!keyArray.length) return null;
-  const first = keyArray[0];
-  if (typeof first === "number" || typeof first === "bigint") {
-    return String(first);
-  }
-  return first as string;
-};
-
-const normalizeSelection = (keys: Selection | Key | null): Selection | null => {
-  if (keys === null) return null;
-  if (keys === "all") return "all";
-  if (
-    typeof keys === "string" ||
-    typeof keys === "number" ||
-    typeof keys === "bigint"
-  ) {
-    return new Set([keys]) as Selection;
-  }
-  return keys;
-};
 
 function formatVersionMeta(version: XMLVersion, locale: string) {
   return `${version.semantic_version} · ${formatVersionTimestamp(
@@ -303,7 +283,7 @@ export function VersionCompare({
         setCurrentIndex(0);
         setOffset({ x: 0, y: 0 });
       } catch (err) {
-        console.error("加载版本对比失败", err);
+        logger.error("加载版本对比失败", err);
         setError(
           err instanceof Error ? err.message : tVersion("compare.status.error"),
         );

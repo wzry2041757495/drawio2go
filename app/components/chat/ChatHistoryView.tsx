@@ -6,6 +6,9 @@ import { useStorageConversations } from "@/app/hooks";
 import HistoryToolbar from "./HistoryToolbar";
 import ConversationList from "./ConversationList";
 import MessagePreviewPanel from "./MessagePreviewPanel";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ChatHistoryView");
 
 interface ChatHistoryViewProps {
   currentProjectId?: string;
@@ -88,7 +91,7 @@ export default function ChatHistoryView({
         if (cancelled) return;
         setPreviewMessages(messages.slice(0, 10));
       } catch (error) {
-        console.error("[ChatHistoryView] 预览消息加载失败:", error);
+        logger.error("[ChatHistoryView] 预览消息加载失败:", error);
         if (!cancelled) {
           setPreviewMessages([]);
         }

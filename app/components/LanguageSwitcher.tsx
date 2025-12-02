@@ -2,7 +2,6 @@
 
 import { Description, Label, ListBox, Select } from "@heroui/react";
 import { Languages } from "lucide-react";
-import type { Key } from "react";
 import type { Selection } from "react-aria-components";
 
 import i18n from "@/app/i18n/client";
@@ -13,34 +12,11 @@ import {
   type Locale,
 } from "@/app/i18n/config";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
 
 interface LanguageSwitcherProps {
   className?: string;
 }
-
-const extractSingleKey = (keys: Selection): string | null => {
-  if (keys === "all") return null;
-  const keyArray = [...keys];
-  if (!keyArray.length) return null;
-  const first = keyArray[0];
-  if (typeof first === "number" || typeof first === "bigint") {
-    return String(first);
-  }
-  return first as string;
-};
-
-const normalizeSelection = (keys: Selection | Key | null): Selection | null => {
-  if (keys === null) return null;
-  if (keys === "all") return "all";
-  if (
-    typeof keys === "string" ||
-    typeof keys === "number" ||
-    typeof keys === "bigint"
-  ) {
-    return new Set([keys]) as Selection;
-  }
-  return keys;
-};
 
 /**
  * 语言切换器

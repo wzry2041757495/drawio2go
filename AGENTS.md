@@ -257,6 +257,30 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 
 ## 代码腐化清理记录
 
+### 2025-12-02 清理（Components 模块）
+
+**执行的操作**：
+
+- 删除未使用组件 FileSettingsPanel 及其导出
+- 删除未调用的 Electron 函数（showOpenDialog/readFile/selectFile）
+- 删除未使用的 props（ChatSidebarProps.isOpen/onClose、ChatHistoryView.currentProjectId 等）
+- 合并 HeroUI Select 工具函数重复（5 处 → 1 处），新增 lib/select-utils.ts
+- 迁移所有 console.log/error 到统一日志系统 logger.ts（15+ 文件，50+ 处）
+- 修复 MessageList 渲染副作用（setTimeout → useEffect）
+- 合并 ToolCallCard 重复的复制函数（3 个 → 1 个通用函数）
+
+**影响文件**：22 个文件，+160/-217 行
+
+**下次关注**：
+
+- ChatSidebar 仍需重构（958 行，耦合度高），建议拆分 useChatSessionsController hook
+- 提炼 usePanZoomStage hook（PageSVGViewer 和 VersionCompare 重复缩放逻辑）
+- 封装 useLLMConfig 和 useOperationToast（3 处配置加载逻辑重复）
+- 统一 onClick → onPress，符合 HeroUI v3 可访问性规范
+- 统一 React 导入方式（混用 `import React` 和解构导入）
+
+---
+
 ### 2025-11-24 清理
 
 **执行的操作**：

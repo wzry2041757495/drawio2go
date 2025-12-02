@@ -43,6 +43,9 @@ import {
   exportSessionsAsJson,
   type ExportSessionPayload,
 } from "./chat/utils/fileExport";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ChatSidebar");
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -347,7 +350,7 @@ export default function ChatSidebar({
         }
         setDefaultXmlVersionId(defaultVersionId);
       } catch (error) {
-        console.error("[ChatSidebar] 初始化失败:", error);
+        logger.error("[ChatSidebar] 初始化失败:", error);
         // 降级到默认配置
         setLlmConfig({ ...DEFAULT_LLM_CONFIG });
         setConfigLoading(false);
@@ -382,7 +385,7 @@ export default function ChatSidebar({
               setActiveConversationId(newConv.id);
             })
             .catch((error) => {
-              console.error("[ChatSidebar] 创建默认对话失败:", error);
+              logger.error("[ChatSidebar] 创建默认对话失败:", error);
             })
             .finally(() => {
               creatingDefaultConversationRef.current = false;
@@ -396,7 +399,7 @@ export default function ChatSidebar({
         });
       },
       (error) => {
-        console.error("[ChatSidebar] 会话订阅失败:", error);
+        logger.error("[ChatSidebar] 会话订阅失败:", error);
       },
     );
 
@@ -412,7 +415,7 @@ export default function ChatSidebar({
     const unsubscribe = chatService.subscribeMessages(
       activeConversationId,
       (error) => {
-        console.error("[ChatSidebar] 消息订阅失败:", error);
+        logger.error("[ChatSidebar] 消息订阅失败:", error);
       },
     );
 
@@ -440,7 +443,7 @@ export default function ChatSidebar({
       const targetSessionId = sendingSessionIdRef.current;
 
       if (!targetSessionId) {
-        console.error("[ChatSidebar] onFinish: 没有记录的目标会话ID");
+        logger.error("[ChatSidebar] onFinish: 没有记录的目标会话ID");
         return;
       }
 
@@ -453,7 +456,7 @@ export default function ChatSidebar({
           },
         });
       } catch (error) {
-        console.error("[ChatSidebar] 保存消息失败:", error);
+        logger.error("[ChatSidebar] 保存消息失败:", error);
       } finally {
         sendingSessionIdRef.current = null;
       }
@@ -617,7 +620,7 @@ export default function ChatSidebar({
 
     // 如果没有活动会话，立即启动异步创建（不阻塞消息发送）
     if (!targetSessionId) {
-      console.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
+      logger.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
 
       // 生成临时 ID 用于追踪正在创建的对话
       const tempConversationId = `temp-${Date.now()}`;
@@ -629,7 +632,7 @@ export default function ChatSidebar({
         currentProjectId,
       )
         .then((newConv) => {
-          console.log(
+          logger.debug(
             `[ChatSidebar] 异步创建对话完成: ${newConv.id} (标题: ${conversationTitle})`,
           );
 
@@ -640,7 +643,7 @@ export default function ChatSidebar({
           return newConv;
         })
         .catch((error) => {
-          console.error("[ChatSidebar] 异步创建新对话失败:", error);
+          logger.error("[ChatSidebar] 异步创建新对话失败:", error);
           // 清理 ref
           if (
             creatingConversationPromiseRef.current?.conversationId ===
@@ -661,7 +664,7 @@ export default function ChatSidebar({
     }
 
     sendingSessionIdRef.current = targetSessionId;
-    console.log("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
+    logger.debug("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
 
     setInput("");
 
@@ -673,7 +676,7 @@ export default function ChatSidebar({
         },
       );
     } catch (error) {
-      console.error("[ChatSidebar] 发送消息失败:", error);
+      logger.error("[ChatSidebar] 发送消息失败:", error);
       sendingSessionIdRef.current = null;
       setInput(trimmedInput);
     }
@@ -699,7 +702,7 @@ export default function ChatSidebar({
       setActiveConversationId(newConv.id);
       setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
     } catch (error) {
-      console.error("[ChatSidebar] 创建新对话失败:", error);
+      logger.error("[ChatSidebar] 创建新对话失败:", error);
     }
   }, [createConversation, currentProjectId, t]);
 
@@ -724,7 +727,7 @@ export default function ChatSidebar({
         setActiveConversationId(null);
         removeConversationsFromState([activeConversation.id]);
       } catch (error) {
-        console.error("[ChatSidebar] 删除对话失败:", error);
+        logger.error("[ChatSidebar] 删除对话失败:", error);
         const errorMessage =
           extractErrorMessage(error) ?? t("toasts.unknownError");
         showNotice(
@@ -811,7 +814,7 @@ export default function ChatSidebar({
           setActiveConversationId(null);
         }
       } catch (error) {
-        console.error("[ChatSidebar] 批量删除对话失败:", error);
+        logger.error("[ChatSidebar] 批量删除对话失败:", error);
         const errorMessage =
           extractErrorMessage(error) ?? t("toasts.unknownError");
         showNotice(
@@ -848,7 +851,7 @@ export default function ChatSidebar({
           );
         }
       } catch (error) {
-        console.error("[ChatSidebar] 批量导出对话失败:", error);
+        logger.error("[ChatSidebar] 批量导出对话失败:", error);
         const errorMessage =
           extractErrorMessage(error) ?? t("toasts.unknownError");
         showNotice(

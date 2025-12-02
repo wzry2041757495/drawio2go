@@ -6,6 +6,9 @@ import { FolderOpen } from "lucide-react";
 
 import LanguageSwitcher from "../LanguageSwitcher";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("GeneralSettingsPanel");
 
 export interface GeneralSettingsPanelProps {
   defaultPath: string;
@@ -37,7 +40,7 @@ export default function GeneralSettingsPanel({
         onDefaultPathChange(selectedPath);
       }
     } catch (error) {
-      console.error(t("errors.selectFolderFailed"), error);
+      logger.error(t("errors.selectFolderFailed"), error);
     }
   }, [canSelectFolder, onDefaultPathChange, t]);
 
