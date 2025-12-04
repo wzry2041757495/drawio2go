@@ -8,9 +8,12 @@ export { default as GeneralSettingsPanel } from "./GeneralSettingsPanel";
 export { default as ModelsSettingsPanel } from "./ModelsSettingsPanel";
 export { default as ProviderEditDialog } from "./ProviderEditDialog";
 export { VersionSettingsPanel } from "./VersionSettingsPanel";
-export { default as SystemPromptEditor } from "./SystemPromptEditor";
 export { default as ConnectionTester } from "./ConnectionTester";
-export { default as AgentSettingsPanel } from "./AgentSettingsPanel";
+export {
+  default as AgentSettingsPanel,
+  isSystemPromptValid,
+  getSystemPromptError,
+} from "./AgentSettingsPanel";
 
 // 常量和类型
 export { PROVIDER_OPTIONS, getProviderOptions } from "./constants";

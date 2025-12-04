@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@heroui/react";
 import {
   type ActiveModelReference,
@@ -15,6 +15,7 @@ import ModelsSettingsPanel from "./settings/ModelsSettingsPanel";
 import { VersionSettingsPanel } from "./settings/VersionSettingsPanel";
 import {
   AgentSettingsPanel,
+  isSystemPromptValid,
   GeneralSettingsPanel,
 } from "@/app/components/settings";
 import { useAppTranslation } from "@/app/i18n/hooks";
@@ -194,6 +195,14 @@ export default function SettingsSidebar({
     savedVersionSettings,
   ]);
 
+  const systemPromptError = useMemo(
+    () =>
+      isSystemPromptValid(agentSettings.systemPrompt)
+        ? undefined
+        : t("agent.systemPrompt.errorEmpty", "系统提示词不能为空"),
+    [agentSettings.systemPrompt, t],
+  );
+
   const handleDefaultPathChange = (path: string) => {
     setDefaultPath(path);
   };
@@ -210,12 +219,27 @@ export default function SettingsSidebar({
     setActiveModelState(model);
   };
 
-  const handleAgentSettingsChange = (settings: AgentSettings) => {
-    setAgentSettings(settings);
+  const handleAgentSystemPromptChange = (nextPrompt: string) => {
+    setAgentSettings((prev) => ({
+      ...prev,
+      systemPrompt: nextPrompt,
+      updatedAt: Date.now(),
+    }));
   };
 
   // 保存设置（providers/models 保存由各自面板负责，这里同步 agent/version/defaultPath 状态）
   const handleSave = async () => {
+    if (!isSystemPromptValid(agentSettings.systemPrompt)) {
+      showToast({
+        variant: "danger",
+        description:
+          systemPromptError ??
+          t("agent.systemPrompt.errorEmpty", "系统提示词不能为空"),
+      });
+      setActiveTab("agent");
+      return;
+    }
+
     try {
       await Promise.all([
         saveDefaultPath(defaultPath),
@@ -283,8 +307,9 @@ export default function SettingsSidebar({
 
           {activeTab === "agent" && (
             <AgentSettingsPanel
-              agentSettings={agentSettings}
-              onChange={handleAgentSettingsChange}
+              systemPrompt={agentSettings.systemPrompt}
+              onChange={handleAgentSystemPromptChange}
+              error={systemPromptError}
             />
           )}
 

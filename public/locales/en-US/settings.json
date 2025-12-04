@@ -69,7 +69,11 @@
     "description": "Configure the AI agent's behavior and capabilities. These settings apply globally across all models.",
     "systemPrompt": {
       "label": "System Prompt",
-      "description": "The default instructions given to the AI agent. This can be overridden per conversation."
+      "description": "The default instructions given to the AI agent. This can be overridden per conversation.",
+      "reset": "Reset to Default",
+      "errorEmpty": "System prompt cannot be empty",
+      "resetTitle": "Reset to Default System Prompt",
+      "resetConfirm": "This will discard your current edits. Confirm reset to default system prompt?"
     },
     "futureFeatures": "Future releases will include additional agent configuration options such as thinking mode toggles, tool call strategies, and more."
   },
