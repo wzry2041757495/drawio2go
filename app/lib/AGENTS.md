@@ -205,8 +205,11 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 
 ## DrawIO AI 工具（`drawio-ai-tools.ts`）
 
-- **`drawio_read`**: 可选 `xpath` 参数，默认返回根节点。输出为结构化 JSON 数组
-- **`drawio_edit_batch`**: `operations` 数组，严格遵循“全部成功或全部失败”规则
+- **`drawio_read`**：三种模式
+  - **ls**（默认）：列出所有 mxCell，支持 `filter`=`all/vertices/edges`
+  - **xpath**：XPath 精确查询
+  - **id**：按 mxCell `id`（单个或数组）快捷定位
+- **`drawio_edit_batch`**：`operations` 数组，定位可使用 `id` 或 `xpath`（同时提供时优先 `id`），全部成功或全部回滚
 - 输入参数使用 Zod 校验并在内部调用 `drawio-xml-service.ts`
 
 ## 工具执行路由器（`tool-executor.ts`）

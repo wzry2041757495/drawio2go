@@ -100,20 +100,41 @@ export type DrawioQueryResult =
 **DrawioReadResult** - 查询响应
 
 ```typescript
-export interface DrawioReadResult {
-  success: boolean;
-  results?: DrawioQueryResult[];
-  error?: string;
+export type DrawioReadResult =
+  | { success: true; results: DrawioQueryResult[] }
+  | { success: true; list: DrawioListResult[] }
+  | { success: false; error: string };
+```
+
+**DrawioReadInput** - 查询输入（支持 xpath/id 以及 ls 筛选）
+
+```typescript
+export interface DrawioReadInput {
+  xpath?: string;
+  id?: string | string[];
+  filter?: "all" | "vertices" | "edges";
 }
 ```
+
+**DrawioListResult** - ls 模式精简结果（id + 类型 + 属性 + matched_xpath）
 
 #### drawio_edit_batch 操作定义
 
 所有操作共享 `allow_no_match?: boolean` 标志，未匹配节点时根据该标志决定是否视为成功跳过。
 
+**LocatorBase** - 通用定位器（支持 xpath / id，若同时提供优先 id）
+
+```typescript
+export interface LocatorBase {
+  xpath?: string;
+  id?: string;
+  allow_no_match?: boolean;
+}
+```
+
 - **SetAttributeOperation** (`type: 'set_attribute'`)
 - **RemoveAttributeOperation** (`type: 'remove_attribute'`)
-- **InsertElementOperation** (`type: 'insert_element'`, `target_xpath`, `new_xml`, `position`)
+- **InsertElementOperation** (`type: 'insert_element'`, 继承 `LocatorBase`，`new_xml`, `position`)
 - **RemoveElementOperation** (`type: 'remove_element'`, `xpath`)
 - **ReplaceElementOperation** (`type: 'replace_element'`, `xpath`, `new_xml`)
 - **SetTextContentOperation** (`type: 'set_text_content'`, `xpath`, `value`)

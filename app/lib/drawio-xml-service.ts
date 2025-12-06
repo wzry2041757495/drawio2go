@@ -8,14 +8,11 @@ import type {
   DrawioEditBatchResult,
   DrawioEditOperation,
   DrawioQueryResult,
+  DrawioReadInput,
   DrawioReadResult,
+  DrawioListResult,
   InsertElementOperation,
   InsertPosition,
-  ReplaceElementOperation,
-  SetAttributeOperation,
-  SetTextContentOperation,
-  RemoveAttributeOperation,
-  RemoveElementOperation,
 } from "@/app/types/drawio-tools";
 import type { GetXMLResult, ReplaceXMLResult } from "@/app/types/drawio-tools";
 import { createLogger } from "@/lib/logger";
@@ -38,67 +35,110 @@ function ensureSerializer(): XMLSerializer {
   return serializer;
 }
 
-export async function executeDrawioRead(
-  xpathExpression?: string,
-): Promise<DrawioReadResult> {
-  const xml = await fetchDiagramXml();
-  const document = parseXml(xml);
+/**
+ * 将 id 或 xpath 解析为标准化的 XPath 表达式
+ * - 优先使用 id（如果同时提供）
+ * - id 转换为 //mxCell[@id='xxx']，注意转义单引号
+ */
+function resolveLocator(locator: { xpath?: string; id?: string }): string {
+  if (locator.id && locator.id.trim() !== "") {
+    const id = locator.id.trim();
 
-  if (!xpathExpression || xpathExpression.trim() === "") {
-    const element = document.documentElement;
-    if (!element) {
+    // XPath 1.0 字符串转义规则
+    if (!id.includes("'")) {
+      return `//mxCell[@id='${id}']`;
+    }
+    if (!id.includes(`"`)) {
+      return `//mxCell[@id="${id}"]`;
+    }
+
+    const parts = id.split("'");
+    const concatParts = parts.map((part) => `'${part}'`).join(', "\"\'\", ');
+    return `//mxCell[@id=concat(${concatParts})]`;
+  }
+  if (locator.xpath && locator.xpath.trim() !== "") {
+    return locator.xpath;
+  }
+  throw new Error("resolveLocator: xpath 或 id 必须至少提供一个");
+}
+
+export async function executeDrawioRead(
+  input?: DrawioReadInput,
+): Promise<DrawioReadResult> {
+  const { xpath, id, filter = "all" } = input ?? {};
+
+  const xmlString = await fetchDiagramXml();
+  const document = parseXml(xmlString);
+
+  const hasXpath = Boolean(xpath);
+  const hasId = Boolean(id);
+
+  // 模式 1：ls（未提供 xpath/id）
+  if (!hasXpath && !hasId) {
+    return executeListMode(document, filter);
+  }
+
+  // 模式 2：id 查询（支持数组）
+  if (hasId && id) {
+    const ids = normalizeIds(id);
+    const results: DrawioQueryResult[] = [];
+
+    for (const currentId of ids) {
+      const resolvedXpath = resolveLocator({ id: currentId });
+      const nodes = selectNodes(document, resolvedXpath);
+      for (const node of nodes) {
+        const converted = convertNodeToResult(node);
+        if (converted) {
+          results.push(converted);
+        }
+      }
+    }
+
+    return { success: true, results };
+  }
+
+  // 模式 3：xpath 查询
+  if (hasXpath && xpath) {
+    const trimmedXpath = xpath.trim();
+    let evaluation;
+    try {
+      evaluation = select(trimmedXpath, document);
+    } catch (error) {
+      throw new Error(
+        `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (!Array.isArray(evaluation)) {
+      const scalar = toScalarString(evaluation);
       return {
         success: true,
-        results: [],
+        results:
+          scalar !== undefined
+            ? [
+                {
+                  type: "text",
+                  value: scalar,
+                  matched_xpath: trimmedXpath,
+                },
+              ]
+            : [],
       };
     }
-    const rootResult = convertNodeToResult(element);
-    return {
-      success: true,
-      results: rootResult ? [rootResult] : [],
-    };
-  }
 
-  let evaluation;
-  try {
-    evaluation = select(xpathExpression, document);
-  } catch (error) {
-    throw new Error(
-      `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  if (!Array.isArray(evaluation)) {
-    const scalar = toScalarString(evaluation);
-    return {
-      success: true,
-      results:
-        scalar !== undefined
-          ? [
-              {
-                type: "text",
-                value: scalar,
-                matched_xpath: xpathExpression ?? "",
-              },
-            ]
-          : [],
-    };
-  }
-
-  const results: DrawioQueryResult[] = [];
-  for (const node of evaluation) {
-    if (isDomNode(node)) {
+    const results: DrawioQueryResult[] = [];
+    for (const node of evaluation) {
+      if (!isDomNode(node)) continue;
       const converted = convertNodeToResult(node);
       if (converted) {
         results.push(converted);
       }
     }
+
+    return { success: true, results };
   }
 
-  return {
-    success: true,
-    results,
-  };
+  throw new Error("drawio_read: 未提供有效的查询参数");
 }
 
 export async function executeDrawioEditBatch(
@@ -220,6 +260,59 @@ function parseXml(xml: string): Document {
   return document;
 }
 
+function normalizeIds(id?: string | string[]): string[] {
+  if (!id) {
+    return [];
+  }
+
+  const ids = Array.isArray(id) ? id : [id];
+  return ids
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+}
+
+function collectAttributes(element: Element): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  for (let i = 0; i < element.attributes.length; i++) {
+    const attribute = element.attributes.item(i);
+    if (attribute) {
+      attributes[attribute.name] = attribute.value;
+    }
+  }
+  return attributes;
+}
+
+function executeListMode(
+  document: Document,
+  filter: "all" | "vertices" | "edges",
+): DrawioReadResult {
+  const cells = document.getElementsByTagName("mxCell");
+  const results: DrawioListResult[] = [];
+
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i] as Element;
+    const id = cell.getAttribute("id");
+    if (!id) continue;
+
+    const isVertex = cell.getAttribute("vertex") === "1";
+    const isEdge = cell.getAttribute("edge") === "1";
+    const type = isVertex ? "vertex" : isEdge ? "edge" : "unknown";
+
+    if (filter === "vertices" && !isVertex) continue;
+    if (filter === "edges" && !isEdge) continue;
+
+    const attributes = collectAttributes(cell);
+    const matched_xpath = buildXPathForNode(cell);
+
+    results.push({ id, type, attributes, matched_xpath });
+  }
+
+  return {
+    success: true,
+    list: results,
+  };
+}
+
 function convertNodeToResult(node: Node): DrawioQueryResult | null {
   const serializer = ensureSerializer();
   const matchedXPath = buildXPathForNode(node);
@@ -227,17 +320,10 @@ function convertNodeToResult(node: Node): DrawioQueryResult | null {
   switch (node.nodeType) {
     case node.ELEMENT_NODE: {
       const element = node as Element;
-      const attributes: Record<string, string> = {};
-      for (let i = 0; i < element.attributes.length; i++) {
-        const attribute = element.attributes.item(i);
-        if (attribute) {
-          attributes[attribute.name] = attribute.value;
-        }
-      }
       return {
         type: "element",
         tag_name: element.tagName,
-        attributes,
+        attributes: collectAttributes(element),
         xml_string: serializer.serializeToString(element),
         matched_xpath: matchedXPath,
       };
@@ -267,24 +353,64 @@ function applyOperation(
   document: Document,
   operation: DrawioEditOperation,
 ): void {
+  const locatorLabel = buildLocatorLabel(operation);
+  const resolvedXpath = resolveLocator({
+    xpath: operation.xpath,
+    id: operation.id,
+  });
+
   switch (operation.type) {
     case "set_attribute":
-      setAttribute(document, operation);
+      setAttribute(
+        document,
+        resolvedXpath,
+        locatorLabel,
+        operation.key,
+        operation.value,
+        operation.allow_no_match,
+      );
       break;
     case "remove_attribute":
-      removeAttribute(document, operation);
+      removeAttribute(
+        document,
+        resolvedXpath,
+        locatorLabel,
+        operation.key,
+        operation.allow_no_match,
+      );
       break;
     case "insert_element":
-      insertElement(document, operation);
+      insertElement(
+        document,
+        { ...operation, xpath: resolvedXpath },
+        locatorLabel,
+      );
       break;
     case "remove_element":
-      removeElement(document, operation);
+      removeElement(
+        document,
+        resolvedXpath,
+        locatorLabel,
+        operation.allow_no_match,
+      );
       break;
     case "replace_element":
-      replaceElement(document, operation);
+      replaceElement(
+        document,
+        resolvedXpath,
+        locatorLabel,
+        operation.new_xml,
+        operation.allow_no_match,
+      );
       break;
     case "set_text_content":
-      setTextContent(document, operation);
+      setTextContent(
+        document,
+        resolvedXpath,
+        locatorLabel,
+        operation.value,
+        operation.allow_no_match,
+      );
       break;
     default:
       throw new Error(`未知操作类型: ${(operation as { type: string }).type}`);
@@ -293,59 +419,65 @@ function applyOperation(
 
 function setAttribute(
   document: Document,
-  operation: SetAttributeOperation,
+  xpath: string,
+  locatorLabel: string,
+  key: string,
+  value: string,
+  allowNoMatch?: boolean,
 ): void {
-  const nodes = selectNodes(document, operation.xpath);
+  const nodes = selectNodes(document, xpath);
 
   if (nodes.length === 0) {
-    if (operation.allow_no_match) {
+    if (allowNoMatch) {
       return;
     }
-    throw new Error(`XPath '${operation.xpath}' did not match any elements.`);
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`XPath '${operation.xpath}' 匹配的节点不是元素。`);
+      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
     }
-    (node as Element).setAttribute(operation.key, operation.value);
+    (node as Element).setAttribute(key, value);
   }
 }
 
 function removeAttribute(
   document: Document,
-  operation: RemoveAttributeOperation,
+  xpath: string,
+  locatorLabel: string,
+  key: string,
+  allowNoMatch?: boolean,
 ): void {
-  const nodes = selectNodes(document, operation.xpath);
+  const nodes = selectNodes(document, xpath);
 
   if (nodes.length === 0) {
-    if (operation.allow_no_match) {
+    if (allowNoMatch) {
       return;
     }
-    throw new Error(`XPath '${operation.xpath}' did not match any elements.`);
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`XPath '${operation.xpath}' 匹配的节点不是元素。`);
+      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
     }
-    (node as Element).removeAttribute(operation.key);
+    (node as Element).removeAttribute(key);
   }
 }
 
 function insertElement(
   document: Document,
-  operation: InsertElementOperation,
+  operation: InsertElementOperation & { xpath: string },
+  locatorLabel: string,
 ): void {
-  const targets = selectNodes(document, operation.target_xpath);
+  const targets = selectNodes(document, operation.xpath);
 
   if (targets.length === 0) {
     if (operation.allow_no_match) {
       return;
     }
-    throw new Error(
-      `XPath '${operation.target_xpath}' did not match any elements.`,
-    );
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   const position: InsertPosition = operation.position ?? "append_child";
@@ -356,18 +488,14 @@ function insertElement(
     switch (position) {
       case "append_child": {
         if (target.nodeType !== target.ELEMENT_NODE) {
-          throw new Error(
-            `XPath '${operation.target_xpath}' 仅支持元素节点作为父节点。`,
-          );
+          throw new Error(`${locatorLabel} 仅支持元素节点作为父节点。`);
         }
         (target as Element).appendChild(newNode);
         break;
       }
       case "prepend_child": {
         if (target.nodeType !== target.ELEMENT_NODE) {
-          throw new Error(
-            `XPath '${operation.target_xpath}' 仅支持元素节点作为父节点。`,
-          );
+          throw new Error(`${locatorLabel} 仅支持元素节点作为父节点。`);
         }
         const element = target as Element;
         element.insertBefore(newNode, element.firstChild);
@@ -397,15 +525,17 @@ function insertElement(
 
 function removeElement(
   document: Document,
-  operation: RemoveElementOperation,
+  xpath: string,
+  locatorLabel: string,
+  allowNoMatch?: boolean,
 ): void {
-  const nodes = selectNodes(document, operation.xpath);
+  const nodes = selectNodes(document, xpath);
 
   if (nodes.length === 0) {
-    if (operation.allow_no_match) {
+    if (allowNoMatch) {
       return;
     }
-    throw new Error(`XPath '${operation.xpath}' did not match any elements.`);
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   for (const node of nodes) {
@@ -419,15 +549,18 @@ function removeElement(
 
 function replaceElement(
   document: Document,
-  operation: ReplaceElementOperation,
+  xpath: string,
+  locatorLabel: string,
+  newXml: string,
+  allowNoMatch?: boolean,
 ): void {
-  const nodes = selectNodes(document, operation.xpath);
+  const nodes = selectNodes(document, xpath);
 
   if (nodes.length === 0) {
-    if (operation.allow_no_match) {
+    if (allowNoMatch) {
       return;
     }
-    throw new Error(`XPath '${operation.xpath}' did not match any elements.`);
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   for (const node of nodes) {
@@ -435,34 +568,37 @@ function replaceElement(
     if (!parent) {
       throw new Error("无法替换根节点。");
     }
-    const replacement = createElementFromXml(document, operation.new_xml);
+    const replacement = createElementFromXml(document, newXml);
     parent.replaceChild(replacement, node);
   }
 }
 
 function setTextContent(
   document: Document,
-  operation: SetTextContentOperation,
+  xpath: string,
+  locatorLabel: string,
+  value: string,
+  allowNoMatch?: boolean,
 ): void {
-  const nodes = selectNodes(document, operation.xpath);
+  const nodes = selectNodes(document, xpath);
 
   if (nodes.length === 0) {
-    if (operation.allow_no_match) {
+    if (allowNoMatch) {
       return;
     }
-    throw new Error(`XPath '${operation.xpath}' did not match any elements.`);
+    throw new Error(`${locatorLabel} did not match any elements.`);
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`XPath '${operation.xpath}' 匹配的节点不是元素。`);
+      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
     }
 
     const element = node as Element;
     while (element.firstChild) {
       element.removeChild(element.firstChild);
     }
-    element.appendChild(document.createTextNode(operation.value));
+    element.appendChild(document.createTextNode(value));
   }
 }
 
@@ -483,6 +619,16 @@ function createElementFromXml(document: Document, xml: string): Element {
   }
 
   return element.cloneNode(true) as Element;
+}
+
+function buildLocatorLabel(locator: { xpath?: string; id?: string }): string {
+  if (locator.id?.trim()) {
+    return `id '${locator.id.trim()}'`;
+  }
+  if (locator.xpath?.trim()) {
+    return `XPath '${locator.xpath.trim()}'`;
+  }
+  return "未提供定位器";
 }
 
 function selectNodes(document: Document, expression: string): Node[] {

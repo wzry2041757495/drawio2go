@@ -23,7 +23,7 @@ export const DEFAULT_SYSTEM_PROMPT = `你是一个专业的 DrawIO XML 绘制助
 
 ### 工具使用说明
 - \`drawio_read\`：可选传入 XPath，返回命中的元素/属性/文本及其 matched_xpath，便于直接用于后续操作。
-- \`drawio_edit_batch\`：传入 operations 数组，按顺序执行。每个操作需要提供 XPath/target_xpath 与必要的字段，必要时设置 \`allow_no_match: true\` 避免错误中断。
+- \`drawio_edit_batch\`：传入 operations 数组，按顺序执行。每个操作需要提供 xpath 或 id 定位与必要的字段，必要时设置 \`allow_no_match: true\` 避免错误中断。
 - 支持的操作：set_attribute、remove_attribute、insert_element、remove_element、replace_element、set_text_content。
 
 ### DrawIO XML 规范提醒

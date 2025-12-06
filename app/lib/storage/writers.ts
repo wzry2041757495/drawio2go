@@ -3,12 +3,15 @@ import { v4 as uuidv4 } from "uuid";
 import { ErrorCodes } from "@/app/errors/error-codes";
 import i18n from "@/app/i18n/client";
 import { getStorage } from "./storage-factory";
-import { WIP_VERSION } from "./constants";
+import { WIP_VERSION, ZERO_SOURCE_VERSION_ID } from "./constants";
 import { buildPageMetadataFromXml } from "./page-metadata";
 import { computeVersionPayload } from "./xml-version-engine";
 import type { XMLVersion } from "./types";
 import { normalizeDiagramXml } from "../drawio-xml-utils";
 import { getParentVersion, isSubVersion } from "../version-utils";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("StorageWriter");
 
 export interface XmlContext {
   normalizedXml: string;
@@ -185,12 +188,28 @@ export async function persistHistoricalVersion(
     semanticVersion,
   );
 
-  const payload = await computeVersionPayload({
-    newXml: context.normalizedXml,
-    semanticVersion,
-    baseVersion,
-    resolveVersionById: (id) => storage.getXMLVersion(id, projectUuid),
-  });
+  let payload: Awaited<ReturnType<typeof computeVersionPayload>>;
+  try {
+    payload = await computeVersionPayload({
+      newXml: context.normalizedXml,
+      semanticVersion,
+      baseVersion,
+      resolveVersionById: (id) => storage.getXMLVersion(id, projectUuid),
+    });
+  } catch (error) {
+    logger.warn("版本 payload 计算失败，降级为关键帧", {
+      error,
+      projectUuid,
+      semanticVersion,
+      baseVersionId: baseVersion?.id ?? null,
+    });
+    payload = {
+      xml_content: context.normalizedXml,
+      is_keyframe: true,
+      diff_chain_depth: 0,
+      source_version_id: ZERO_SOURCE_VERSION_ID,
+    };
+  }
 
   if (!payload) {
     throw new Error(
