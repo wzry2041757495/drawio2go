@@ -88,7 +88,7 @@ export function ConfirmDialog({
       onOpenChange={handleOpenChange}
       isDismissable
       isKeyboardDismissDisabled={false}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
     >
       <AriaModal className="w-full max-w-md px-4">
         <Surface className="w-full rounded-2xl bg-content1 p-5 shadow-2xl outline-none">

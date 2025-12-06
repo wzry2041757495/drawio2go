@@ -291,7 +291,7 @@
 
 /* 设置面板 */
 .settings-panel {
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm);
 }
 
 .settings-action-bar {

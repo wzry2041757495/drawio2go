@@ -261,5 +261,10 @@
     "rename": "重命名会话",
     "deleteConfirm": "确定要删除会话 \"{{title}}\" 吗？",
     "deleteAllConfirm": "删除后将自动创建一个空会话，确定继续吗？"
+  },
+  "models": {
+    "capabilities": {
+      "disabled": "未开启"
+    }
   }
 }

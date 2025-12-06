@@ -267,7 +267,7 @@ export function ProviderEditDialog({
       onOpenChange={(open: boolean) => {
         if (!open) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
     >
       <AriaModal className="w-full max-w-lg px-4">
         <Surface className="w-full rounded-2xl bg-content1 p-4 shadow-2xl outline-none">

@@ -323,7 +323,7 @@ export function ModelEditDialog({
       onOpenChange={(open: boolean) => {
         if (!open) handleClose();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
     >
       <AriaModal className="w-full max-w-2xl px-4">
         <Surface className="w-full rounded-2xl bg-content1 p-4 shadow-2xl outline-none">
@@ -474,6 +474,7 @@ export function ModelEditDialog({
                 <Fieldset.Group className="mt-3 grid gap-3 sm:grid-cols-2">
                   <Checkbox
                     isSelected={form.capabilities.supportsThinking}
+                    className="rounded-lg border border-default-200 p-3 transition-colors data-[selected=true]:border-primary data-[selected=true]:bg-primary-50 dark:data-[selected=true]:bg-primary-900/30"
                     onChange={(selected) => {
                       const nextCapabilities = {
                         ...form.capabilities,
@@ -511,6 +512,7 @@ export function ModelEditDialog({
 
                   <Checkbox
                     isSelected={form.capabilities.supportsVision}
+                    className="rounded-lg border border-default-200 p-3 transition-colors data-[selected=true]:border-primary data-[selected=true]:bg-primary-50 dark:data-[selected=true]:bg-primary-900/30"
                     onChange={(selected) => {
                       const nextCapabilities = {
                         ...form.capabilities,
@@ -542,37 +544,37 @@ export function ModelEditDialog({
                   </Checkbox>
                 </Fieldset.Group>
 
-                {form.capabilities.supportsThinking ? (
-                  <div className="mt-3 rounded-lg border border-default-200 bg-content2 px-3 py-2">
-                    <Checkbox
-                      isSelected={form.enableToolsInThinking}
-                      onChange={(selected) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          enableToolsInThinking: Boolean(selected),
-                        }))
-                      }
-                    >
-                      <div className="flex items-start gap-3">
-                        <Wrench className="mt-0.5 h-4 w-4 text-primary" />
-                        <div className="text-left">
-                          <p className="text-sm font-medium text-foreground">
-                            {t(
-                              "models.form.enableToolsInThinking.label",
-                              "思考中允许调用工具",
-                            )}
-                          </p>
-                          <p className="text-xs text-default-500">
-                            {t(
-                              "models.form.enableToolsInThinking.description",
-                              "某些推理模型可在思考阶段直接触发工具调用",
-                            )}
-                          </p>
-                        </div>
+                <div className="mt-3 rounded-lg border border-default-200 bg-content2 px-3 py-2">
+                  <Checkbox
+                    isSelected={form.enableToolsInThinking}
+                    isDisabled={!form.capabilities.supportsThinking}
+                    className="rounded-lg border border-default-200 p-3 transition-colors data-[selected=true]:border-primary data-[selected=true]:bg-primary-50 dark:data-[selected=true]:bg-primary-900/30"
+                    onChange={(selected) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        enableToolsInThinking: Boolean(selected),
+                      }))
+                    }
+                  >
+                    <div className="flex items-start gap-3">
+                      <Wrench className="mt-0.5 h-4 w-4 text-primary" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-foreground">
+                          {t(
+                            "models.form.enableToolsInThinking.label",
+                            "思考中允许调用工具",
+                          )}
+                        </p>
+                        <p className="text-xs text-default-500">
+                          {t(
+                            "models.form.enableToolsInThinking.description",
+                            "某些推理模型可在思考阶段直接触发工具调用",
+                          )}
+                        </p>
                       </div>
-                    </Checkbox>
-                  </div>
-                ) : null}
+                    </div>
+                  </Checkbox>
+                </div>
               </Fieldset>
 
               {errors.general ? (

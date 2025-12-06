@@ -100,7 +100,8 @@
     "capabilities": {
       "thinking": "Thinking",
       "vision": "Vision",
-      "tools": "Tools"
+      "tools": "Tools",
+      "disabled": "Disabled"
     },
     "default": "Default",
     "active": "Active",

@@ -100,7 +100,8 @@
     "capabilities": {
       "thinking": "思考",
       "vision": "视觉",
-      "tools": "工具"
+      "tools": "工具",
+      "disabled": "未开启"
     },
     "default": "默认",
     "active": "正在使用",

@@ -261,5 +261,10 @@
     "rename": "Rename conversation",
     "deleteConfirm": "Delete conversation \"{{title}}\"?",
     "deleteAllConfirm": "An empty conversation will be created after deletion. Continue?"
+  },
+  "models": {
+    "capabilities": {
+      "disabled": "Disabled"
+    }
   }
 }

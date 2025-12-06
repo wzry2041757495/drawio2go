@@ -340,7 +340,7 @@ export default function ModelsSettingsPanel({
       {providers.length > 0 && (
         <Accordion
           variant="surface"
-          className="mt-4 flex flex-col gap-3 rounded-2xl border border-default-200 bg-content1 p-2"
+          className="mt-4 flex w-full max-w-[760px] flex-col gap-2 rounded-2xl border border-default-200 bg-content1 p-2"
         >
           {providers.map((provider) => {
             const providerModels = modelsMap.get(provider.id) ?? [];
@@ -352,9 +352,9 @@ export default function ModelsSettingsPanel({
                 className="rounded-xl border border-default-200 bg-content1"
               >
                 <Accordion.Heading className="px-2">
-                  <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2">
-                    <Accordion.Trigger className="flex flex-1 items-center justify-between gap-3 text-left">
-                      <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-2">
+                    <Accordion.Trigger className="flex flex-1 items-center justify-between gap-2 text-left">
+                      <div className="flex items-center gap-2">
                         <span className="text-base font-medium text-foreground">
                           {provider.displayName}
                         </span>
@@ -432,29 +432,29 @@ export default function ModelsSettingsPanel({
 
                 <Accordion.Panel className="px-2 pb-3">
                   <Accordion.Body>
-                    <div className="rounded-lg border border-default-200 bg-content1 px-4 py-3">
-                      <div className="flex flex-col gap-2 text-sm text-foreground">
-                        <div className="flex items-center gap-2">
-                          <span className="w-24 text-default-500">
+                    <div className="rounded-lg border border-default-200 bg-content1 px-3 py-2">
+                      <div className="flex flex-col gap-1.5 text-sm text-foreground">
+                        <div className="grid grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center sm:gap-2">
+                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
                             {t("models.provider.type")}
                           </span>
-                          <span className="font-medium">
+                          <span className="font-medium min-w-0 break-words">
                             {provider.providerType}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-24 text-default-500">
+                        <div className="grid grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center sm:gap-2">
+                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
                             {t("models.provider.apiUrl")}
                           </span>
-                          <span className="break-all font-medium">
+                          <span className="font-medium min-w-0 break-all">
                             {provider.apiUrl || "—"}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-24 text-default-500">
+                        <div className="grid grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center sm:gap-2">
+                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
                             {t("models.provider.apiKey")}
                           </span>
-                          <span className="font-medium">
+                          <span className="font-medium min-w-0 break-words">
                             {provider.apiKey
                               ? "••••••"
                               : t("models.provider.noApiKey")}
@@ -463,9 +463,9 @@ export default function ModelsSettingsPanel({
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
+                    <div className="mt-3 flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
                           <h4 className="text-sm font-semibold text-foreground">
                             {t("models.modelsList.title")} (
                             {providerModels.length})
@@ -510,52 +510,82 @@ export default function ModelsSettingsPanel({
                                 key={model.id}
                                 className="border border-default-200 bg-content1"
                               >
-                                <Card.Content className="flex flex-col gap-3 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex flex-wrap items-center gap-2">
+                                <Card.Content className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
                                       <span className="text-sm font-semibold text-foreground">
                                         {model.displayName || model.modelName}
                                       </span>
-                                      <div className="flex flex-wrap items-center gap-1">
-                                        {model.capabilities.supportsThinking ? (
-                                          <Chip
-                                            size="sm"
-                                            variant="secondary"
-                                            className="flex items-center gap-1"
-                                          >
-                                            <Brain className="h-3 w-3" />
-                                            {t(
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {[
+                                          {
+                                            key: "thinking",
+                                            enabled:
+                                              model.capabilities
+                                                .supportsThinking,
+                                            icon: Brain,
+                                            label: t(
                                               "models.capabilities.thinking",
                                               "思考",
-                                            )}
-                                          </Chip>
-                                        ) : null}
-                                        {model.capabilities.supportsVision ? (
-                                          <Chip
-                                            size="sm"
-                                            variant="secondary"
-                                            className="flex items-center gap-1"
-                                          >
-                                            <Eye className="h-3 w-3" />
-                                            {t(
+                                            ),
+                                          },
+                                          {
+                                            key: "vision",
+                                            enabled:
+                                              model.capabilities.supportsVision,
+                                            icon: Eye,
+                                            label: t(
                                               "models.capabilities.vision",
                                               "视觉",
-                                            )}
-                                          </Chip>
-                                        ) : null}
-                                        {model.enableToolsInThinking ? (
-                                          <Chip
-                                            size="sm"
-                                            variant="tertiary"
-                                            className="flex items-center gap-1"
-                                          >
-                                            <Wrench className="h-3 w-3" />
-                                            {t(
+                                            ),
+                                          },
+                                          {
+                                            key: "tools",
+                                            enabled:
+                                              model.enableToolsInThinking,
+                                            icon: Wrench,
+                                            label: t(
                                               "models.capabilities.tools",
                                               "工具",
-                                            )}
-                                          </Chip>
-                                        ) : null}
+                                            ),
+                                          },
+                                        ].map(
+                                          ({
+                                            key,
+                                            enabled,
+                                            icon: Icon,
+                                            label,
+                                          }) => (
+                                            <Chip
+                                              key={`${model.id}-${key}`}
+                                              size="sm"
+                                              variant={
+                                                enabled
+                                                  ? "secondary"
+                                                  : "tertiary"
+                                              }
+                                              className={`flex items-center gap-1.5 ${
+                                                enabled
+                                                  ? ""
+                                                  : "border border-default-200 opacity-70"
+                                              }`}
+                                            >
+                                              <Icon
+                                                className={`h-3 w-3 ${
+                                                  enabled
+                                                    ? "text-primary"
+                                                    : "text-default-400"
+                                                }`}
+                                              />
+                                              {enabled
+                                                ? label
+                                                : `${t(
+                                                    "models.capabilities.disabled",
+                                                    "未开启",
+                                                  )} ${label}`}
+                                            </Chip>
+                                          ),
+                                        )}
                                       </div>
                                     </div>
                                     <span className="text-xs text-default-500">
@@ -563,24 +593,32 @@ export default function ModelsSettingsPanel({
                                     </span>
                                   </div>
 
-                                  <div className="flex flex-col gap-1 text-xs text-default-500 sm:min-w-[180px]">
-                                    <span>
-                                      {t(
-                                        "llm.temperature.label",
-                                        "Temperature",
-                                      )}
-                                      ：{model.temperature}
-                                    </span>
-                                    <span>
-                                      {t(
-                                        "llm.maxToolRounds.label",
-                                        "最大工具调用轮次",
-                                      )}
-                                      ：{unlimitedRounds}
-                                    </span>
+                                  <div className="flex flex-col gap-1.5 text-xs text-default-500 sm:min-w-[200px]">
+                                    <div className="grid grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center sm:gap-2">
+                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                        {t(
+                                          "llm.temperature.label",
+                                          "Temperature",
+                                        )}
+                                      </span>
+                                      <span className="text-default-600">
+                                        {model.temperature}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)] items-start gap-2 sm:flex sm:items-center sm:gap-2">
+                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                        {t(
+                                          "llm.maxToolRounds.label",
+                                          "最大工具调用轮次",
+                                        )}
+                                      </span>
+                                      <span className="text-default-600">
+                                        {unlimitedRounds}
+                                      </span>
+                                    </div>
                                   </div>
 
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     {model.isDefault && (
                                       <Chip
                                         size="sm"
