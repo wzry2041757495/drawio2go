@@ -90,10 +90,12 @@ export function useChatLock(projectUuid?: string | null) {
     return `chat-lock-${projectUuid}`;
   }, [projectUuid]);
 
-  if (!clientIdRef.current) {
-    const uuid = typeof crypto !== "undefined" ? crypto.randomUUID() : "uuid";
-    clientIdRef.current = `${Date.now()}-${uuid}`;
-  }
+  useEffect(() => {
+    if (!clientIdRef.current) {
+      const uuid = typeof crypto !== "undefined" ? crypto.randomUUID() : "uuid";
+      clientIdRef.current = `${Date.now()}-${uuid}`;
+    }
+  }, []);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -150,6 +152,13 @@ export function useChatLock(projectUuid?: string | null) {
   );
 
   useEffect(() => {
+    if (!clientIdRef.current || !lockKey) return;
+    refreshLockState(true);
+  }, [lockKey, refreshLockState]);
+
+  useEffect(() => {
+    if (!clientIdRef.current) return;
+
     const prevLockKey = prevLockKeyRef.current;
     const prevProjectId = prevProjectUuidRef.current;
 
@@ -255,6 +264,8 @@ export function useChatLock(projectUuid?: string | null) {
   }, [broadcast, lockKey, projectUuid, stopHeartbeat]);
 
   useEffect(() => {
+    if (!clientIdRef.current) return undefined;
+
     if (!lockKey) {
       setCanChat(true);
       setLockHolder(null);
@@ -327,12 +338,14 @@ export function useChatLock(projectUuid?: string | null) {
       };
 
       channel.addEventListener("message", handleMessage);
-      channel.postMessage({
-        type: "request-sync",
-        projectUuid: projectUuid ?? "",
-        clientId: clientIdRef.current,
-        timestamp: Date.now(),
-      });
+      if (clientIdRef.current) {
+        channel.postMessage({
+          type: "request-sync",
+          projectUuid: projectUuid ?? "",
+          clientId: clientIdRef.current,
+          timestamp: Date.now(),
+        });
+      }
 
       return () => {
         channel.removeEventListener("message", handleMessage);

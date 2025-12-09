@@ -247,9 +247,7 @@ async function demo() {
   ];
 
   const result: DrawioEditBatchResult = await executeDrawioEditBatch(
-    {
-      operations: editOperations,
-    },
+    editOperations,
     context,
   );
 }
@@ -272,6 +270,20 @@ async function demo() {
 - **常量**: camelCase (如 `storageKey`)
 
 ## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 精简 `DrawioEditBatchRequest` 接口，移除冗余字段使批量编辑入参与实际执行保持一致。
+- 同步相关注释与文档描述，明确可选字段与默认行为，减少调用歧义。
+- 标注新版接口需搭配 `buildToolError`/`buildXmlError` 的错误结构使用。
+
+**影响文件**：1 个（drawio-tools.ts）
+
+**下次关注**：
+
+- 观察前后端工具调用是否还依赖旧字段，必要时补充迁移提示。
 
 ### 2025-11-23 清理（类型未变更）
 

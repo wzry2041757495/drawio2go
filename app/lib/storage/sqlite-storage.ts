@@ -19,27 +19,9 @@ import {
   resolvePageMetadataFromXml,
 } from "./page-metadata-validators";
 import { createLogger } from "@/lib/logger";
+import { dispatchConversationEvent } from "./event-utils";
 
 const logger = createLogger("SQLiteStorage");
-
-type ConversationEventType =
-  | "conversation-created"
-  | "conversation-updated"
-  | "conversation-deleted"
-  | "messages-updated";
-
-function dispatchConversationEvent(
-  event: ConversationEventType,
-  detail: {
-    projectUuid?: string;
-    conversationId?: string;
-    conversationIds?: string[];
-    messageIds?: string[];
-  },
-) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(event, { detail }));
-}
 
 function parseMetadata(value: unknown): Record<string, unknown> | null {
   if (value == null) return null;

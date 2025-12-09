@@ -129,6 +129,13 @@
   flex-direction: column;
 }
 
+.tool-call-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
 .tool-call-section-title {
   font-size: 0.8125rem;
   font-weight: 600;

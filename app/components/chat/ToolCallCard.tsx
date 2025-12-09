@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
+import { usePress } from "@react-aria/interactions";
 import { type ToolMessagePart } from "./constants/toolConstants";
 import {
   getToolTitle,
@@ -66,13 +67,34 @@ export default function ToolCallCard({
   const handleCopyError = () =>
     handleCopy(part.errorText ?? t("toolCalls.error"), setCopiedError, "error");
 
+  const { pressProps: togglePressProps } = usePress({ onPress: onToggle });
+  const { pressProps: copyErrorPressProps } = usePress({
+    onPress: handleCopyError,
+  });
+  const { pressProps: copyInputPressProps } = usePress({
+    onPress: handleCopyInput,
+  });
+  const { pressProps: copyOutputPressProps } = usePress({
+    onPress: handleCopyOutput,
+  });
+
   return (
     <div
       className={`tool-call-card tool-call-card--${meta.tone} ${
         expanded ? "tool-call-card--expanded" : ""
       } ${isInProgress ? "tool-call-card--scanning" : ""}`.trim()}
     >
-      <button type="button" className="tool-call-header" onClick={onToggle}>
+      <button
+        type="button"
+        className="tool-call-header"
+        aria-expanded={expanded}
+        aria-label={
+          expanded
+            ? t("toolCalls.actions.collapse")
+            : t("toolCalls.actions.expand")
+        }
+        {...togglePressProps}
+      >
         <div className="tool-call-title">{title}</div>
         <div className="tool-call-status">
           <span
@@ -106,26 +128,24 @@ export default function ToolCallCard({
           {/* 错误信息区块 */}
           {part.state === "output-error" && (
             <div className="tool-call-section">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "0.35rem",
-                }}
-              >
+              <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
                   {t("toolCalls.error")}
                 </div>
                 <button
                   type="button"
-                  onClick={handleCopyError}
                   className="tool-call-copy-icon-button"
                   title={
                     copiedError
                       ? t("messages.actions.copied")
                       : t("toolCalls.actions.copyOutput")
                   }
+                  aria-label={
+                    copiedError
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyOutput")
+                  }
+                  {...copyErrorPressProps}
                 >
                   {copiedError ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -139,26 +159,24 @@ export default function ToolCallCard({
           {/* 输入参数区块 */}
           {showInput && (
             <div className="tool-call-section">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "0.35rem",
-                }}
-              >
+              <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
                   {t("toolCalls.parameters")}
                 </div>
                 <button
                   type="button"
-                  onClick={handleCopyInput}
                   className="tool-call-copy-icon-button"
                   title={
                     copiedInput
                       ? t("messages.actions.copied")
                       : t("toolCalls.actions.copyInput")
                   }
+                  aria-label={
+                    copiedInput
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyInput")
+                  }
+                  {...copyInputPressProps}
                 >
                   {copiedInput ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -172,26 +190,24 @@ export default function ToolCallCard({
           {/* 输出结果区块 */}
           {showOutput && (
             <div className="tool-call-section">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "0.35rem",
-                }}
-              >
+              <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
                   {t("toolCalls.result")}
                 </div>
                 <button
                   type="button"
-                  onClick={handleCopyOutput}
                   className="tool-call-copy-icon-button"
                   title={
                     copiedOutput
                       ? t("messages.actions.copied")
                       : t("toolCalls.actions.copyOutput")
                   }
+                  aria-label={
+                    copiedOutput
+                      ? t("messages.actions.copied")
+                      : t("toolCalls.actions.copyOutput")
+                  }
+                  {...copyOutputPressProps}
                 >
                   {copiedOutput ? <Check size={14} /> : <Copy size={14} />}
                 </button>

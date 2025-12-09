@@ -91,16 +91,7 @@ export function withTimeout<T>(
 }
 
 export function generateProjectUUID(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return `project-${crypto.randomUUID()}`;
-  }
-
-  const random = Math.random().toString(36).slice(2, 10);
-  const timestamp = Date.now();
-  return `project-${timestamp}-${random}`;
+  return generateUUID("project");
 }
 
 /**

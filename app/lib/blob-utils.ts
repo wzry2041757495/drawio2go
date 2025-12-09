@@ -1,15 +1,7 @@
-"use client";
-
-import { createLogger } from "@/lib/logger";
-
-const logger = createLogger("VersionComponentsUtils");
 /**
- * 版本组件共享工具方法
- * - BinarySource: 统一的二进制来源类型
- * - createBlobFromSource: 浏览器/Electron 通用的 Blob 构造器
- * - parsePageNames: page_names JSON 字段解析
+ * 通用二进制工具：在 Browser/Electron/Node 环境下安全地将多种输入类型转换为 Blob。
+ * 解决 pages_svg / preview_svg 等字段在不同运行时的类型差异（Blob、ArrayBuffer、Buffer、typed array、纯对象或字符串）。
  */
-
 export type BinarySource =
   | Blob
   | ArrayBuffer
@@ -17,6 +9,7 @@ export type BinarySource =
   | { data?: number[]; buffer?: ArrayBufferLike | ArrayBufferView }
   | { buffer?: ArrayBufferLike }
   | { data?: number[] }
+  | string
   | null
   | undefined;
 
@@ -31,12 +24,24 @@ function cloneArrayBufferLike(
   return clone.buffer;
 }
 
+/**
+ * 将任意常见的二进制来源转换为 Blob，保持数据拷贝以避免共享内存带来的副作用。
+ *
+ * @param source - 多种可能的二进制来源
+ * @param mimeType - 目标 MIME 类型
+ * @returns Blob 实例；无法转换时返回 null
+ */
 export function createBlobFromSource(
   source: BinarySource,
   mimeType: string,
 ): Blob | null {
   if (!source) return null;
-  if (source instanceof Blob) return source;
+  if (source instanceof Blob)
+    return source.type ? source : new Blob([source], { type: mimeType });
+
+  if (typeof source === "string") {
+    return new Blob([source], { type: mimeType });
+  }
 
   if (source instanceof ArrayBuffer) {
     return new Blob([source.slice(0)], { type: mimeType });
@@ -44,13 +49,6 @@ export function createBlobFromSource(
 
   if (ArrayBuffer.isView(source)) {
     const view = source as ArrayBufferView;
-    if (view.buffer instanceof ArrayBuffer) {
-      const cloned = view.buffer.slice(
-        view.byteOffset,
-        view.byteOffset + view.byteLength,
-      );
-      return new Blob([cloned], { type: mimeType });
-    }
     const cloned = cloneArrayBufferLike(
       view.buffer as ArrayBufferLike,
       view.byteOffset,
@@ -93,21 +91,4 @@ export function createBlobFromSource(
   }
 
   return null;
-}
-
-export function parsePageNames(raw?: string | null) {
-  if (!raw) return [] as string[];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((name, index) => {
-      if (typeof name === "string" && name.trim().length > 0) {
-        return name;
-      }
-      return `Page ${index + 1}`;
-    });
-  } catch (error) {
-    logger.warn("page_names 解析失败", error);
-    return [];
-  }
 }

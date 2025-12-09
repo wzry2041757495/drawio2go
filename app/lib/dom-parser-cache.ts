@@ -40,8 +40,3 @@ export function getXmlSerializer(): XMLSerializer | null {
     return null;
   }
 }
-
-export function resetDomParserCache(): void {
-  cachedDomParser = null;
-  cachedXmlSerializer = null;
-}

@@ -156,11 +156,10 @@ export async function executeDrawioRead(
 }
 
 export async function executeDrawioEditBatch(
-  request: DrawioEditBatchRequest,
+  operations: DrawioEditBatchRequest,
   context: ToolExecutionContext,
 ): Promise<DrawioEditBatchResult> {
   const resolvedContext = ensureContext(context);
-  const { operations } = request;
 
   if (!operations.length) {
     return {

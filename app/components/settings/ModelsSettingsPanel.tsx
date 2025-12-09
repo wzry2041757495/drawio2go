@@ -741,8 +741,6 @@ export default function ModelsSettingsPanel({
                         </div>
                       )}
                     </div>
-
-                    {/* TODO: 连接测试（按供应商），在 Milestone 4 接入 ConnectionTester */}
                   </Accordion.Body>
                 </Accordion.Panel>
               </Accordion.Item>

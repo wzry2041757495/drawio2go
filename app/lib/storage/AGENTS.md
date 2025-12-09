@@ -388,3 +388,20 @@ A: `materializeVersionXml()` 会抛出错误。需要从备份恢复或联系管
 ### Q: 如何限制 SVG 预览大小？
 
 A: SVG 在持久化前通过 `compression-utils` 进行 deflate-raw 压缩，上限为 8MB（`MAX_SVG_BLOB_BYTES`）。超过上限则不存储。
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 新增 `event-utils.ts`，将会话/版本事件分派逻辑从适配器与 writers 中抽离复用。
+- 超时常量集中到 `timeout-utils.ts`，统一 Web/Electron 的存储操作超时配置。
+- 适配器与写入管线改用上述工具，删除重复的事件广播与超时定义。
+
+**影响文件**：4 个（event-utils.ts、timeout-utils.ts、writers.ts、indexeddb/sqlite 适配器）
+
+**下次关注**：
+
+- 根据不同环境的性能数据调整默认超时并补充 i18n 文案。
+- 评估是否需要为事件分派增加调试开关或节流。

@@ -29,20 +29,17 @@ import {
 } from "lucide-react";
 import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
 import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
-import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
 import type { XMLVersion } from "@/app/lib/storage/types";
 import { useToast } from "../toast";
 import { PageSVGViewer } from "./PageSVGViewer";
-import {
-  createBlobFromSource,
-  parsePageNames,
-  type BinarySource,
-} from "./version-utils";
+import { createBlobFromSource, type BinarySource } from "@/app/lib/blob-utils";
 import { decompressBlob } from "@/app/lib/compression-utils";
 import { countSubVersions, isSubVersion } from "@/app/lib/version-utils";
 import { formatVersionTimestamp } from "@/app/lib/format-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { createLogger } from "@/lib/logger";
+import { useVersionPages } from "@/app/hooks/useVersionPages";
+import { parsePageNamesJson } from "@/app/lib/storage/page-metadata-validators";
 
 const logger = createLogger("VersionCard");
 
@@ -65,6 +62,23 @@ interface PageThumbnail {
   index: number;
   name: string;
   url: string;
+}
+
+function safeParsePageNames(raw?: string | null) {
+  if (!raw) return [] as string[];
+  try {
+    const parsed = parsePageNamesJson(raw);
+    if (!parsed) return [];
+    return parsed.map((name, index) => {
+      if (typeof name === "string" && name.trim().length > 0) {
+        return name;
+      }
+      return `Page ${index + 1}`;
+    });
+  } catch (error) {
+    logger.warn("page_names 解析失败，使用兜底名称", error);
+    return [];
+  }
 }
 
 /**
@@ -92,7 +106,6 @@ export function VersionCard({
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [showAllPages, setShowAllPages] = React.useState(false);
   const [pageThumbs, setPageThumbs] = React.useState<PageThumbnail[]>([]);
-  const [isLoadingPages, setIsLoadingPages] = React.useState(false);
   const [pagesError, setPagesError] = React.useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerInitialPage, setViewerInitialPage] = React.useState(0);
@@ -113,6 +126,22 @@ export function VersionCard({
     !isWIP && !isSubVersionEntry && subVersionCount > 0;
   const shouldShowSubVersionButton =
     shouldShowSubVersionBadge && Boolean(onNavigateToSubVersions);
+  const versionPages = useVersionPages(resolvedVersion, {
+    enabled: showAllPages,
+  });
+  const fallbackPageNames = React.useMemo(
+    () => safeParsePageNames(resolvedVersion.page_names),
+    [resolvedVersion.page_names],
+  );
+  const pageNames = React.useMemo(
+    () =>
+      versionPages.pageNames.length
+        ? versionPages.pageNames
+        : fallbackPageNames,
+    [fallbackPageNames, versionPages.pageNames],
+  );
+  const isLoadingPages = showAllPages && versionPages.isLoading;
+  const effectivePagesError = versionPages.error?.message ?? pagesError;
 
   React.useEffect(() => {
     let cancelled = false;
@@ -157,11 +186,6 @@ export function VersionCard({
     <Key className="w-3.5 h-3.5" />
   ) : (
     <GitBranch className="w-3.5 h-3.5" />
-  );
-
-  const pageNames = React.useMemo(
-    () => parsePageNames(resolvedVersion.page_names),
-    [resolvedVersion.page_names],
   );
 
   const hasMultiplePages = (resolvedVersion.page_count ?? 0) > 1;
@@ -297,84 +321,61 @@ export function VersionCard({
 
   // 懒加载 pages_svg
   React.useEffect(() => {
+    cleanupPageUrls();
     if (!showAllPages) {
-      cleanupPageUrls();
       setPageThumbs([]);
       setPagesError(null);
-      setIsLoadingPages(false);
       return;
     }
 
-    if (!resolvedVersion.pages_svg) {
-      setPagesError(tVersion("card.preview.pagesError"));
+    if (versionPages.isLoading) {
       setPageThumbs([]);
+      setPagesError(null);
       return;
     }
 
-    let cancelled = false;
-    cleanupPageUrls();
-    setIsLoadingPages(true);
+    if (versionPages.error) {
+      setPageThumbs([]);
+      setPagesError(versionPages.error.message);
+      return;
+    }
+
+    if (!versionPages.pages.length) {
+      setPageThumbs([]);
+      setPagesError(tVersion("card.preview.pagesError"));
+      return;
+    }
+
+    const thumbs = versionPages.pages
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((page) => {
+        const svgBlob = new Blob([page.svg], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(svgBlob);
+        pageObjectUrlsRef.current.push(url);
+        return {
+          index: page.index,
+          name:
+            typeof page.name === "string" && page.name.trim().length > 0
+              ? page.name
+              : `Page ${page.index + 1}`,
+          url,
+        };
+      });
+
+    setPageThumbs(thumbs);
     setPagesError(null);
 
-    (async () => {
-      try {
-        const blob = createBlobFromSource(
-          resolvedVersion.pages_svg as BinarySource,
-          "application/json",
-        );
-        if (!blob) {
-          throw new Error(tVersion("card.preview.pagesError"));
-        }
-
-        const pages = await deserializeSVGsFromBlob(blob);
-        if (cancelled) return;
-
-        if (!pages.length) {
-          throw new Error(tVersion("card.preview.pagesEmpty"));
-        }
-
-        const thumbs = pages
-          .sort((a, b) => a.index - b.index)
-          .map((page) => {
-            const svgBlob = new Blob([page.svg], { type: "image/svg+xml" });
-            const url = URL.createObjectURL(svgBlob);
-            pageObjectUrlsRef.current.push(url);
-            return {
-              index: page.index,
-              name:
-                typeof page.name === "string" && page.name.trim().length > 0
-                  ? page.name
-                  : `Page ${page.index + 1}`,
-              url,
-            };
-          });
-
-        setPageThumbs(thumbs);
-      } catch (error) {
-        logger.error("解析多页 SVG 失败", error);
-        if (!cancelled) {
-          setPagesError(
-            (error as Error).message || tVersion("card.preview.pagesError"),
-          );
-          setPageThumbs([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingPages(false);
-        }
-      }
-    })();
-
     return () => {
-      cancelled = true;
       cleanupPageUrls();
     };
   }, [
     cleanupPageUrls,
     showAllPages,
-    resolvedVersion.id,
-    resolvedVersion.pages_svg,
     tVersion,
+    versionPages.error,
+    versionPages.isLoading,
+    versionPages.pages,
   ]);
 
   // 处理回滚按钮点击
@@ -735,15 +736,15 @@ export function VersionCard({
                     </div>
                   )}
 
-                  {!isLoadingPages && pagesError && (
+                  {!isLoadingPages && effectivePagesError && (
                     <div className="version-pages-grid__status version-pages-grid__status--error">
                       <ImageOff className="version-pages-grid__status-icon" />
-                      <span>{pagesError}</span>
+                      <span>{effectivePagesError}</span>
                     </div>
                   )}
 
                   {!isLoadingPages &&
-                    !pagesError &&
+                    !effectivePagesError &&
                     pageThumbs.length === 0 && (
                       <div className="version-pages-grid__status version-pages-grid__status--empty">
                         <ImageOff className="version-pages-grid__status-icon" />
@@ -751,40 +752,42 @@ export function VersionCard({
                       </div>
                     )}
 
-                  {!isLoadingPages && !pagesError && pageThumbs.length > 0 && (
-                    <div className="version-pages-grid__inner">
-                      {pageThumbs.map((thumb) => (
-                        <button
-                          key={`${version.id}-page-${thumb.index}`}
-                          type="button"
-                          className="version-pages-grid__item"
-                          onClick={() => handleThumbnailActivate(thumb.index)}
-                          title={tVersion("card.preview.thumbTitle", {
-                            index: thumb.index + 1,
-                            name: thumb.name,
-                          })}
-                        >
-                          <div className="version-pages-grid__thumb">
-                            <img
-                              src={thumb.url}
-                              alt={tVersion("card.preview.thumbAlt", {
-                                index: thumb.index + 1,
-                              })}
-                              loading="lazy"
-                            />
-                          </div>
-                          <div className="version-pages-grid__label">
-                            <span className="version-pages-grid__label-index">
-                              {thumb.index + 1}
-                            </span>
-                            <span className="version-pages-grid__label-name">
-                              {thumb.name}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {!isLoadingPages &&
+                    !effectivePagesError &&
+                    pageThumbs.length > 0 && (
+                      <div className="version-pages-grid__inner">
+                        {pageThumbs.map((thumb) => (
+                          <button
+                            key={`${version.id}-page-${thumb.index}`}
+                            type="button"
+                            className="version-pages-grid__item"
+                            onClick={() => handleThumbnailActivate(thumb.index)}
+                            title={tVersion("card.preview.thumbTitle", {
+                              index: thumb.index + 1,
+                              name: thumb.name,
+                            })}
+                          >
+                            <div className="version-pages-grid__thumb">
+                              <img
+                                src={thumb.url}
+                                alt={tVersion("card.preview.thumbAlt", {
+                                  index: thumb.index + 1,
+                                })}
+                                loading="lazy"
+                              />
+                            </div>
+                            <div className="version-pages-grid__label">
+                              <span className="version-pages-grid__label-index">
+                                {thumb.index + 1}
+                              </span>
+                              <span className="version-pages-grid__label-name">
+                                {thumb.name}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                 </div>
               )}
 

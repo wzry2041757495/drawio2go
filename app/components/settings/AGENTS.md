@@ -199,6 +199,22 @@ settings.version.autoVersionOnAIEdit.label
 settings.version.autoVersionOnAIEdit.description
 ```
 
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 删除 `ModelsSettingsPanel` 中的过时 TODO 注释，避免误导性待办。
+- 确认此次清理不改动模型/供应商 CRUD 逻辑，仅做注释层面瘦身。
+- 文档记录本次范围，后续若重构模型表单需另行评估。
+
+**影响文件**：1 个（ModelsSettingsPanel.tsx）
+
+**下次关注**：
+
+- 观察模型管理面板是否需要 onPress 统一或表单校验复用。
+
 **连接测试：**
 
 ```

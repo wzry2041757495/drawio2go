@@ -22,6 +22,15 @@ class SQLiteManager {
     this.ensureSequenceFloorStmt = null;
   }
 
+  /**
+   * 生成形如 "?, ?, ?" 的占位符字符串
+   * @param {number} count 占位符数量
+   */
+  _generatePlaceholders(count) {
+    if (!Number.isInteger(count) || count <= 0) return "";
+    return Array.from({ length: count }, () => "?").join(",");
+  }
+
   _getIncrementSequenceStmt() {
     if (!this.incrementSequenceStmt) {
       this.incrementSequenceStmt = this.db.prepare(`
@@ -588,7 +597,7 @@ class SQLiteManager {
 
   batchDeleteConversations(ids = []) {
     if (!Array.isArray(ids) || ids.length === 0) return;
-    const placeholders = ids.map(() => "?").join(",");
+    const placeholders = this._generatePlaceholders(ids.length);
     const tx = this.db.transaction((conversationIds) => {
       this.db
         .prepare(
@@ -620,22 +629,16 @@ class SQLiteManager {
       });
     }
 
-    const placeholders = ids.map(() => "?").join(",");
+    const placeholders = this._generatePlaceholders(ids.length);
     const conversations = this.db
       .prepare(
         `SELECT * FROM conversations WHERE id IN (${placeholders}) ORDER BY updated_at DESC`,
       )
       .all(...ids);
 
-    const messageStmt = this.db.prepare(
-      `SELECT * FROM messages
-       WHERE conversation_id = ?
-       ORDER BY COALESCE(sequence_number, created_at) ASC, created_at ASC`,
-    );
-
     const exportItems = conversations.map((conv) => ({
       ...conv,
-      messages: messageStmt.all(conv.id),
+      messages: this.getMessagesByConversation(conv.id),
     }));
 
     return JSON.stringify(

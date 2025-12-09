@@ -34,6 +34,9 @@
 | **MessagePreviewPanel** | 消息预览面板     | 侧边栏预览对话内容，显示消息角色和内容                  |
 | **EmptyState**          | 空状态占位符     | 加载中、未配置、无消息三种状态提示                      |
 | **TypingIndicator**     | 打字指示器       | 流式输出时的动画指示                                    |
+| **ChatShell**           | 布局壳层         | 统一包裹聊天/历史视图，承载顶部提示与导航               |
+| **MessagePane**         | 消息区容器       | 包装 MessageList，保持滚动与间距样式                    |
+| **Composer**            | 输入区容器       | 聚合 ChatInputArea 的所有交互 props，简化父级组合       |
 
 ---
 
@@ -95,6 +98,23 @@ ChatInputArea（输入组件）
 ```
 
 ---
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- `ToolCallCard` 的展开/复制交互改用 `usePress`（@react-aria/interactions），移除遗留 `onClick`。
+- `ToolCallCard` 样式迁移到 `app/styles/utilities/tool-calls.css`，删除内联样式与重复类。
+- 复制按钮与展开按钮共享通用 pressProps，减少重复事件处理逻辑。
+
+**影响文件**：2 个（ToolCallCard.tsx、styles/utilities/tool-calls.css）
+
+**下次关注**：
+
+- 观察移动端/触屏场景下的 `usePress` 触发体验，必要时补充按压反馈。
+- 工具错误文案是否需要与全局 error-handler 再次对齐。
 
 ## 输入区 UX 规则
 
@@ -290,6 +310,9 @@ app/components/chat/
 ├── EmptyState.tsx                # 空状态提示
 ├── TypingIndicator.tsx           # 打字指示器
 ├── typing-indicator.css          # 打字动画样式
+├── ChatShell.tsx                 # 聊天/历史视图外层容器
+├── MessagePane.tsx               # 消息区容器（包装 MessageList）
+├── Composer.tsx                  # 输入区容器（包装 ChatInputArea）
 ├── utils/
 │   ├── toolUtils.ts              # 工具调用工具函数
 │   ├── fileOperations.ts         # 文件操作相关
@@ -301,4 +324,4 @@ app/components/chat/
 
 ---
 
-**最后更新:** 2025年12月05日
+**最后更新:** 2025年12月08日

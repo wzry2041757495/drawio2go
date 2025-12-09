@@ -34,27 +34,9 @@ import { v4 as uuidv4 } from "uuid";
 import { createDefaultDiagramXml } from "./default-diagram-xml";
 import { createLogger } from "@/lib/logger";
 import { runIndexedDbMigrations } from "./migrations/indexeddb";
+import { dispatchConversationEvent } from "./event-utils";
 
 const logger = createLogger("IndexedDBStorage");
-
-type ConversationEventType =
-  | "conversation-created"
-  | "conversation-updated"
-  | "conversation-deleted"
-  | "messages-updated";
-
-function dispatchConversationEvent(
-  event: ConversationEventType,
-  detail: {
-    projectUuid?: string;
-    conversationId?: string;
-    conversationIds?: string[];
-    messageIds?: string[];
-  },
-) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(event, { detail }));
-}
 
 /**
  * IndexedDB 存储实现（Web 环境）

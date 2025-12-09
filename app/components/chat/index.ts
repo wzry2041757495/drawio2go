@@ -20,6 +20,9 @@ export { default as ChatHistoryView } from "./ChatHistoryView";
 export { default as HistoryToolbar } from "./HistoryToolbar";
 export { default as ConversationList } from "./ConversationList";
 export { default as MessagePreviewPanel } from "./MessagePreviewPanel";
+export { default as ChatShell } from "./ChatShell";
+export { default as MessagePane } from "./MessagePane";
+export { default as Composer } from "./Composer";
 
 // 常量
 export * from "./constants/toolConstants";

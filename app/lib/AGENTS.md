@@ -202,7 +202,7 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 - **原子性**: 批量操作全部成功后才写回，失败时无副作用
 - **无推断**: 仅处理 XPath 与原始字符串，不做领域特化解析
 - **支持操作**: `set_attribute`, `remove_attribute`, `insert_element`, `remove_element`, `replace_element`, `set_text_content`
-- **主要函数**: `executeDrawioRead(input, context)` 查询，`executeDrawioEditBatch(request, context)` 批量编辑（需提供 `projectUuid`/`conversationId`）
+- **主要函数**: `executeDrawioRead(input, context)` 查询，`executeDrawioEditBatch(operations, context)` 批量编辑（需提供 `projectUuid`/`conversationId`）
 
 ## DrawIO AI 工具（`drawio-ai-tools.ts`）
 
@@ -552,3 +552,21 @@ const tools = [
 5. **迁移脚本幂等性**: 数据库迁移脚本必须可重复执行，不能因重复运行而损坏数据
 6. **Socket.IO 原子性**: `drawio_edit_batch` 操作必须全部成功或全部失败，不允许部分修改
 7. **日志级别控制**: 生产环境应关闭 debug 级别日志，避免性能影响
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 移除 `resetDomParserCache` 死代码，缓存管理保持内部自维护。
+- UUID 生成、版本格式化、错误消息提取分别集中到 `utils.ts` / `version-utils.ts` / `error-handler.ts`，消除重复实现。
+- 新增 `blob-utils.ts` 统一二进制/Blob 转换，便于版本 SVG 与存储层共享。
+- 增补 `buildXmlError` / `buildToolError`，统一工具调用与存储错误结构。
+
+**影响文件**：5 个（dom-parser-cache.ts、utils.ts、version-utils.ts、error-handler.ts、blob-utils.ts）
+
+**下次关注**：
+
+- 检查所有调用方是否已迁移到新错误构建器与 UUID/版本工具。
+- 观察 blob-utils 在浏览器/Electron 的兼容性与性能表现。

@@ -256,6 +256,23 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 
 ## 代码腐化清理记录
 
+### 2025-12-08 清理（阶段6）
+
+**执行的操作**：
+
+- 死代码清理：移除 `resetDomParserCache`，精简 `DrawioEditBatchRequest`，清除 ModelsSettingsPanel 过时 TODO。
+- 重复合并：UUID 生成、版本格式化、错误消息提取集中到通用工具；存储事件分派/超时常量下沉；Electron Buffer 与 SQL 占位符工具化；ToolCallCard 样式抽出到 utilities。
+- 一致性：组件事件统一 `onPress`（ToolCallCard/ProjectSelector/PageSVGViewer）；新增 `buildXmlError/buildToolError`；存储超时提示补齐国际化；`useChatLock` 的 clientIdRef 改为 `useEffect` 初始化；`exportConversations` 复用 SQL 语句。
+- 重大重构：提炼 `usePanZoomStage` / `useVersionPages`；PageSVGViewer 与 VersionCompare 迁移到新 hooks；删除 `components/version/version-utils.ts` 下沉到 lib；新增 `blob-utils.ts` 统一二进制转换。
+- 依赖：新增 `@react-aria/interactions` 支持 `usePress`。
+
+**影响文件**：约 25 个（跨 components/hooks/lib/electron/storage）
+
+**下次关注**：
+
+- 观察新 hooks 对版本/对比场景的性能与可访问性回归。
+- 跟踪 usePress 引入后是否还有遗留 onClick 或事件冒泡问题。
+
 ### 2025-12-05 清理（Milestone 8）
 
 **执行的操作**：

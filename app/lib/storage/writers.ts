@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 
-import { ErrorCodes } from "@/app/errors/error-codes";
+import { ErrorCodes, type ErrorCode } from "@/app/errors/error-codes";
 import i18n from "@/app/i18n/client";
 import { getStorage } from "./storage-factory";
 import { WIP_VERSION, ZERO_SOURCE_VERSION_ID } from "./constants";
@@ -12,6 +12,8 @@ import { getParentVersion, isSubVersion } from "../version-utils";
 import { createLogger } from "@/app/lib/logger";
 
 const logger = createLogger("StorageWriter");
+const buildToolError = (code: ErrorCode, message: string) =>
+  new Error(`[${code}] ${message}`);
 
 export interface XmlContext {
   normalizedXml: string;
@@ -62,13 +64,11 @@ export async function persistWipVersion(
   const project = await storage.getProject(projectUuid);
 
   if (!project) {
-    throw new Error(
-      `[${ErrorCodes.STORAGE_PROJECT_NOT_FOUND}] ${i18n.t(
-        "errors:storage.projectNotFound",
-        {
-          projectId: projectUuid,
-        },
-      )}`,
+    throw buildToolError(
+      ErrorCodes.STORAGE_PROJECT_NOT_FOUND,
+      i18n.t("errors:storage.projectNotFound", {
+        projectId: projectUuid,
+      }),
     );
   }
 
@@ -84,8 +84,9 @@ export async function persistWipVersion(
   });
 
   if (!payload) {
-    throw new Error(
-      `[${ErrorCodes.VERSION_CALCULATION_FAILED}] ${i18n.t("errors:version.calculationFailed")}`,
+    throw buildToolError(
+      ErrorCodes.VERSION_CALCULATION_FAILED,
+      i18n.t("errors:version.calculationFailed"),
     );
   }
 
@@ -151,13 +152,11 @@ async function resolveBaseVersion(
       (v) => v.semantic_version === parentVersion,
     );
     if (!parent) {
-      throw new Error(
-        `[${ErrorCodes.VERSION_PARENT_NOT_FOUND}] ${i18n.t(
-          "errors:version.parentNotFound",
-          {
-            parent: parentVersion,
-          },
-        )}`,
+      throw buildToolError(
+        ErrorCodes.VERSION_PARENT_NOT_FOUND,
+        i18n.t("errors:version.parentNotFound", {
+          parent: parentVersion,
+        }),
       );
     }
     return parent;
@@ -212,8 +211,9 @@ export async function persistHistoricalVersion(
   }
 
   if (!payload) {
-    throw new Error(
-      `[${ErrorCodes.VERSION_CALCULATION_FAILED}] ${i18n.t("errors:version.calculationFailed")}`,
+    throw buildToolError(
+      ErrorCodes.VERSION_CALCULATION_FAILED,
+      i18n.t("errors:version.calculationFailed"),
     );
   }
 
@@ -223,8 +223,9 @@ export async function persistHistoricalVersion(
     finalPageNames?.length ?? context.pageMetadata.pageCount;
 
   if (!finalPageCount || finalPageCount < 1) {
-    throw new Error(
-      `[${ErrorCodes.VERSION_PARSE_FAILED}] ${i18n.t("errors:version.parseFailed")}`,
+    throw buildToolError(
+      ErrorCodes.VERSION_PARSE_FAILED,
+      i18n.t("errors:version.parseFailed"),
     );
   }
 

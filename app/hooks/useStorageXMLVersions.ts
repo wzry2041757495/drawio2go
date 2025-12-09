@@ -24,7 +24,7 @@ import {
   getParentVersion,
   isSubVersion,
 } from "@/app/lib/version-utils";
-import { runStorageTask, withTimeout } from "@/app/lib/utils";
+import { runStorageTask } from "@/app/lib/utils";
 import {
   persistHistoricalVersion,
   persistWipVersion,
@@ -32,20 +32,9 @@ import {
 } from "@/app/lib/storage/writers";
 import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
 import { createLogger } from "@/lib/logger";
+import { withStorageTimeout } from "@/app/lib/storage/timeout-utils";
 
 const logger = createLogger("useStorageXMLVersions");
-
-const DEFAULT_STORAGE_TIMEOUT = 8000;
-const getStorageTimeoutMessage = (
-  seconds: number = DEFAULT_STORAGE_TIMEOUT / 1000,
-) =>
-  `[${ErrorCodes.STORAGE_TIMEOUT}] ${i18n.t("errors:storage.timeout", { seconds })}`;
-const DEFAULT_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
-
-const withStorageTimeout = <T>(
-  promise: Promise<T>,
-  message: string = DEFAULT_TIMEOUT_MESSAGE,
-) => withTimeout(promise, DEFAULT_STORAGE_TIMEOUT, message);
 
 /**
  * XML 版本管理 Hook

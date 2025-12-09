@@ -280,6 +280,21 @@ import { Button } from '@heroui/react';
 
 ## 代码腐化清理记录
 
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- `ProjectSelector` 与 `ToolCallCard` 改用 `onPress`（@react-aria/interactions），统一事件语义。
+- `ToolCallCard` 样式抽离到 `app/styles/utilities/tool-calls.css`，组件逻辑更精简。
+- `PageSVGViewer` / `VersionCompare` 迁移到新 hooks（`usePanZoomStage`、`useVersionPages`），移除旧版 `version-utils` 依赖。
+
+**影响文件**：约 6 个（ProjectSelector、ToolCallCard、PageSVGViewer、VersionCompare 等）
+
+**下次关注**：
+
+- 排查残留 `onClick` 场景，保持可访问性一致。
+- 观察新 hooks 下的缩放/分页性能，必要时增加防抖。
+
 ### 2025-12-02 清理（Components 快速清理）
 
 **执行的操作**：

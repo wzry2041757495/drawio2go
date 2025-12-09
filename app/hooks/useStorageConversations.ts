@@ -8,25 +8,16 @@ import type {
   Message,
   CreateMessageInput,
 } from "@/app/lib/storage";
-import { runStorageTask, withTimeout } from "@/app/lib/utils";
-import { ErrorCodes } from "@/app/errors/error-codes";
+import { runStorageTask } from "@/app/lib/utils";
+import {
+  getStorageTimeoutMessage,
+  withStorageTimeout,
+} from "@/app/lib/storage/timeout-utils";
 import i18n from "@/app/i18n/client";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("useStorageConversations");
 const ABNORMAL_STREAMING_TIMEOUT_MS = 2 * 60 * 1000;
-
-const DEFAULT_STORAGE_TIMEOUT = 8000;
-const getStorageTimeoutMessage = (
-  seconds: number = DEFAULT_STORAGE_TIMEOUT / 1000,
-) =>
-  `[${ErrorCodes.STORAGE_TIMEOUT}] ${i18n.t("errors:storage.timeout", { seconds })}`;
-const DEFAULT_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
-
-const withStorageTimeout = <T>(
-  promise: Promise<T>,
-  message: string = DEFAULT_TIMEOUT_MESSAGE,
-) => withTimeout(promise, DEFAULT_STORAGE_TIMEOUT, message);
 
 /**
  * 对话管理 Hook

@@ -22,19 +22,17 @@ import {
 } from "@/app/lib/config-utils";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
 import { createLogger } from "@/app/lib/logger";
-import { generateUUID, runStorageTask, withTimeout } from "@/app/lib/utils";
+import { generateUUID, runStorageTask } from "@/app/lib/utils";
+import {
+  getStorageTimeoutMessage,
+  withStorageTimeout,
+} from "@/app/lib/storage/timeout-utils";
 
 const logger = createLogger("useStorageSettings");
-const STORAGE_TIMEOUT_MS = 8000;
-const STORAGE_TIMEOUT_MESSAGE = "[LLM] 存储操作超时（8秒）";
+const STORAGE_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
 
 type SettingsUpdatedType = "provider" | "model" | "agent" | "activeModel";
 type SettingsUpdatedDetail = { type: SettingsUpdatedType };
-
-const withStorageTimeout = <T>(
-  promise: Promise<T>,
-  message: string = STORAGE_TIMEOUT_MESSAGE,
-) => withTimeout(promise, STORAGE_TIMEOUT_MS, message);
 
 type StorageInstance = Awaited<ReturnType<typeof getStorage>>;
 
@@ -141,7 +139,7 @@ export function useStorageSettings() {
   const [error, setError] = useState<Error | null>(null);
 
   const resolveStorage = useCallback(
-    () => withStorageTimeout(getStorage()),
+    () => withStorageTimeout(getStorage(), STORAGE_TIMEOUT_MESSAGE),
     [],
   );
 

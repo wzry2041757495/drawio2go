@@ -324,3 +324,19 @@ const data = JSON.parse(jsonString); // { version, exportedAt, conversations }
 - **electron**：IPC、userData 路径
 - **app/lib/storage/constants-shared.js**：共享常量（DEFAULT_PROJECT_UUID 等）
 - **app/lib/storage/default-diagram-xml.js**：默认 XML 内容
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 提取 SQL 占位符生成工具，消除多处字符串拼接与 off-by-one 风险。
+- `exportConversations` 查询复用统一语句构造，减少冗余并保持字段顺序一致。
+- 文档记录本次抽象，提醒新查询优先复用占位符与通用构造函数。
+
+**影响文件**：1 个（sqlite-manager.js）
+
+**下次关注**：
+
+- 评估占位符工具在批量插入/删除场景的性能，必要时增加缓存。

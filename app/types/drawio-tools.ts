@@ -166,9 +166,7 @@ export type DrawioEditOperation =
   | ReplaceElementOperation
   | SetTextContentOperation;
 
-export interface DrawioEditBatchRequest {
-  operations: DrawioEditOperation[];
-}
+export type DrawioEditBatchRequest = DrawioEditOperation[];
 
 export interface DrawioEditBatchResult {
   success: true;

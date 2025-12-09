@@ -198,6 +198,22 @@ npm run electron:build  # 构建桌面应用
 
 - ⚠️ 启用 `webSecurity: true`, `sandbox: true`
 - ✅ CSP 仅允许 `frame-src https://embed.diagrams.net`
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 将 Buffer ↔ Uint8Array 转换逻辑抽取为独立辅助函数，复用到文件读写与 IPC 返回路径。
+- 主进程 `main.js` 清理重复转换代码，保持 API 签名不变。
+- 文档补充本次清理，提示后续新增 IPC 时复用该工具函数。
+
+**影响文件**：1 个（electron/main.js）
+
+**下次关注**：
+
+- 若新增二进制相关 IPC，优先复用转换工具并补充单测。
 - 💡 可选: 自托管 DrawIO 静态文件
 
 ### 调试技巧

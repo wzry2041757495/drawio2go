@@ -204,9 +204,7 @@ function createDrawioEditBatchTool(getContext: () => ToolExecutionContext) {
     execute: async ({ operations }) => {
       const context = getContext();
       return await executeDrawioEditBatch(
-        {
-          operations: operations as DrawioEditOperation[],
-        },
+        operations as DrawioEditOperation[],
         context,
       );
     },
