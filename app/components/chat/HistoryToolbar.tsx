@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { Button, InputGroup } from "@heroui/react";
 import {
   ArrowLeft,
   CalendarRange,
@@ -48,34 +48,37 @@ export default function HistoryToolbar({
 
   return (
     <div className="history-toolbar">
-      <Button
-        variant="tertiary"
-        size="sm"
-        onPress={onBack}
-        aria-label={t("sidebar.back")}
-      >
-        <ArrowLeft size={16} />
-        {t("sidebar.back")}
-      </Button>
-
-      <div className="history-toolbar__search">
-        <Search size={16} aria-hidden />
-        <input
-          className="history-toolbar__search-input"
-          type="search"
-          value={searchQuery}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder={t("history.search.placeholder")}
-          aria-label={t("aria.search")}
-        />
-      </div>
-
       <div className="history-toolbar__filters">
+        <Button
+          variant="tertiary"
+          size="sm"
+          onPress={onBack}
+          aria-label={t("sidebar.back")}
+        >
+          <ArrowLeft size={16} />
+          {t("sidebar.back")}
+        </Button>
+
+        <div className="history-toolbar__search">
+          <InputGroup>
+            <InputGroup.Prefix aria-hidden>
+              <Search size={16} />
+            </InputGroup.Prefix>
+            <InputGroup.Input
+              type="search"
+              placeholder={t("history.search.placeholder")}
+              value={searchQuery}
+              onChange={(event) => onSearchChange(event.target.value)}
+              aria-label={t("aria.search")}
+            />
+          </InputGroup>
+        </div>
+
         <div className="history-toolbar__date">
           <CalendarRange size={16} aria-hidden />
           <input
             aria-label={t("history.range.from")}
-            className="history-toolbar__date-input"
+            className="history-date-input"
             type="date"
             value={dateRange.start}
             onChange={(event) =>
@@ -85,7 +88,7 @@ export default function HistoryToolbar({
           <span className="history-toolbar__date-sep">—</span>
           <input
             aria-label={t("history.range.to")}
-            className="history-toolbar__date-input"
+            className="history-date-input"
             type="date"
             value={dateRange.end}
             onChange={(event) =>

@@ -1,6 +1,7 @@
 import { ErrorCodes } from "@/app/errors/error-codes";
 import i18n from "@/app/i18n/client";
 import { XMLVersion } from "@/lib/storage/types";
+import { formatVersionTimestamp } from "@/app/lib/format-utils";
 
 /**
  * 允许的语义化版本格式：major.minor.patch 或 major.minor.patch.sub
@@ -185,4 +186,33 @@ function getParentVersionKey(version: string): string | null {
   }
 
   return formatParentVersion(parsed);
+}
+
+/**
+ * 生成版本元信息字符串（语义化版本 + 完整时间）
+ * @param version XML 版本记录
+ * @param locale 目标语言环境
+ */
+export function formatVersionMeta(version: XMLVersion, locale: string): string {
+  return `${version.semantic_version} · ${formatVersionTimestamp(
+    version.created_at,
+    "full",
+    locale,
+  )}`;
+}
+
+/**
+ * 生成版本标签字符串（语义化版本 + 精简时间）
+ * @param version XML 版本记录
+ * @param locale 目标语言环境
+ */
+export function formatVersionLabel(
+  version: XMLVersion,
+  locale: string,
+): string {
+  return `${version.semantic_version} (${formatVersionTimestamp(
+    version.created_at,
+    "compact",
+    locale,
+  )})`;
 }

@@ -13,7 +13,7 @@
 #### 核心方法
 
 - `getSetting(key)` / `setSetting(key, value)` / `getAllSettings()`
-- `getLLMConfig()` / `saveLLMConfig(config)`: 获取/保存 LLM 配置（自动规范化）
+- `getLLMConfig()` / `saveLLMConfig(config)`: **已废弃**，内部自动映射到 provider/model/agent 级配置，并清理旧的 `llmConfig` 键；请优先使用 `getRuntimeConfig` 与对应的 provider/model/agent 更新接口
 - `getDefaultPath()` / `saveDefaultPath(path)`: 获取/保存默认路径
 
 **特性**: TypeScript 类型安全，自动规范化配置（补全默认值、验证 provider、规范化 URL）
@@ -56,6 +56,7 @@
 
 **核心方法**: `sessions` / `currentSession` / `createSession` / `updateSession` / `deleteSession` / `clearAllSessions`
 **会话结构**: `id`, `title`, `messages` (AI SDK 格式), `createdAt`, `updatedAt`
+**新增流式辅助**: `markConversationAsStreaming(id)` / `markConversationAsCompleted(id)` / `loadConversationWithStatus(id)`（自动检测 `is_streaming` 超时并返回 `hasAbnormalExit` 标记）
 
 ### 5. useStorageXMLVersions
 
@@ -109,7 +110,7 @@
 
 - 监听后端工具执行请求，自动调用 `drawio-tools.ts`
 - 通过 Socket.IO 回传执行结果/错误
-- **AI 自动版本**: AI 触发 `drawio_overwrite` 时，在设置 `autoVersionOnAIEdit=true` 情况下，阻塞式创建子版本快照后再写入 XML
+- **AI 自动版本**: AI 触发 `drawio_overwrite` 时，在设置 `autoVersionOnAIEdit=true` 情况下，串行创建子版本快照后再写入 XML；内部使用 `isCreatingSnapshotRef` 防抖 + `latestMainVersionRef/latestSubVersionRef` 增量计算下一个子版本，避免每次全量拉取版本列表
 
 #### 工作流程
 
@@ -119,19 +120,90 @@
 
 **配置**: `autoVersionOnAIEdit` (默认 true) 控制 AI 编辑时是否自动快照
 
+### 9. useChatLock
+
+**项目级聊天锁 Hook** - 基于 BroadcastChannel + localStorage 的跨标签页互斥
+
+**API**: `useChatLock(projectUuid)` → `{ canChat, lockHolder, acquireLock, releaseLock }`
+
+**特性**:
+
+- BroadcastChannel(`drawio2go-chat-lock`) 广播获取/释放/心跳事件
+- localStorage(`chat-lock-${projectUuid}`) 持久化持有者，崩溃后 30s 超时自动释放
+- 心跳：持锁端每 10s 更新时间戳；5s 轮询清理过期锁
+- 兼容性兜底：BroadcastChannel 不可用时回退 storage 监听
+- beforeunload 清理：组件卸载或页面关闭时自动释放锁
+
+### 10. useNetworkStatus
+
+**网络状态监听 Hook** - 结合浏览器 online 事件 + `/api/health` 心跳检测的真实连通性判断。
+
+- **返回值**: `{ isOnline, offlineReason, lastCheckedAt, isChecking, checkNow }`
+  - `offlineReason`: `browser-offline` | `ping-fail` | `socket-disconnect`
+  - `checkNow()`: 手动触发一次 3s 超时的健康检查（Promise.race）
+- **机制**: 60s 心跳节流，失败指数退避（最多 5 分钟）；恢复或 `online` 事件时立即重试
+- **默认值**: SSR 环境或缺少 navigator 时视为在线
+- **用途**: 聊天流式中断保护、UI 禁用发送按钮、提示更准确的离线原因
+
+### 11. useVersionPages
+
+**版本页面加载 Hook** - 解压并解析 `pages_svg`，合并 `page_names`，提供标准化页面数据。
+
+- **输入**: `version`（含 pages_svg/page_names），`enabled` 控制懒加载
+- **输出**: `pages`（{id,name,index,svg}[]）、`pageNames`、`resolvedVersion`、`hasPagesData`、`isLoading`、`error`
+- **特性**: 自动处理 Blob/Buffer，兜底页面名 ("Page 1...")，缺失/损坏数据返回友好错误
+
+### 12. usePanZoomStage
+
+**缩放/拖拽复用 Hook** - 统一舞台缩放、平移、滚轮/指针事件。
+
+- **状态**: `scale`、`offset`、`isPanning`、`canPan`
+- **方法**: `zoomIn/zoomOut/resetView`、`handleWheel`、`handlePointerDown/Move/Up`
+- **配置**: `wheelZoomStrategy` (`ctrl-only` / `always`)、`minScale`/`maxScale`、`zoomStep`、`scaleOffsetStrategy`
+- **场景**: PageSVGViewer（Ctrl+滚轮缩放）、VersionCompare（自由滚轮缩放、智能对比同步）
+
+### 13. useChatSessionsController _(新增，2025-12-08)_
+
+**聊天会话控制 Hook** - 把 ChatSidebar 内的会话订阅、消息缓存、默认 XML 初始化和异常退出处理集中管理。
+
+- **返回**: `conversations`、`activeConversationId`、`conversationMessages`、`chatService`
+- **操作**: `createConversation`、`startTempConversation`、`ensureMessagesForConversation`、`resolveConversationId`
+- **状态与清理**: `handleAbnormalExitIfNeeded`、`removeConversationsFromState`、`markConversationAsStreaming/Completed`
+- **行为**: 内部自动创建默认对话、默认 XML 版本，订阅会话/消息并维护缓存
+
+### 14. useLLMConfig _(新增，2025-12-08)_
+
+**LLM 配置聚合 Hook** - 统一加载/切换模型与 Provider，封装重复的配置加载逻辑。
+
+- **返回**: `llmConfig`、`providers`、`models`、`selectedModelId/Label`、`configLoading`、`selectorLoading`
+- **操作**: `loadModelSelector()`、`handleModelChange(modelId)`
+- **特性**: 自动订阅设置变更（provider/model/activeModel），缺省回退到默认配置
+
+### 15. useOperationToast _(新增，2025-12-08)_
+
+**操作提示 Hook** - 统一成功/警告/失败提示与错误消息提取。
+
+- `pushErrorToast(message, title?)`
+- `showNotice(message, status)` — status: success/warning/danger
+- `extractErrorMessage(error)` — 从 Error/字符串/对象中抽取 message
+
 ## 统一导出
 
 所有 Hooks 通过 `app/hooks/index.ts` 统一导出：
 
 ```typescript
 export { useDrawioSocket } from "./useDrawioSocket";
+export { useChatLock } from "./useChatLock";
 export { useStorageSettings } from "./useStorageSettings";
 export { useStorageProjects } from "./useStorageProjects";
 export { useCurrentProject } from "./useCurrentProject";
 export { useStorageConversations } from "./useStorageConversations";
 export { useStorageXMLVersions } from "./useStorageXMLVersions";
 export { useVersionCompare } from "./useVersionCompare";
+export { useNetworkStatus } from "./useNetworkStatus";
 export { useDrawioEditor } from "./useDrawioEditor";
+export { useVersionPages } from "./useVersionPages";
+export { usePanZoomStage } from "./usePanZoomStage";
 ```
 
 ## 设计原则
@@ -155,6 +227,20 @@ export { useDrawioEditor } from "./useDrawioEditor";
 - **Socket.IO 协议**: 详见 `app/types/socket-protocol.ts`
 
 ## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+- 新增 `usePanZoomStage`、`useVersionPages`，抽离缩放/分页与多页解压逻辑供版本组件复用。
+- `useChatLock` 将 `clientIdRef` 初始化移入 `useEffect`，避免 SSR 与多标签页场景的引用泄漏。
+- `useStorageSettings` 超时提示补齐国际化，复用存储层的 `timeout-utils` 常量。
+- 统一 `withTimeout` 调用到新超时常量，去除重复的魔法数字。
+
+**影响文件**：4 个（usePanZoomStage.ts、useVersionPages.ts、useChatLock.ts、useStorageSettings.ts）
+
+**下次关注**：
+
+- 大图多页场景下的新 hooks 是否需要节流/防抖配置。
+- 聊天锁在异常关闭时的释放逻辑是否还需 telemetry 支撑。
 
 ### 2025-11-24 清理（超时与提示统一）
 

@@ -1,6 +1,9 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { SVGExportOptions } from "../components/DrawioEditorNative";
 import { compressBlob, decompressBlob } from "./compression-utils";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("svg-export-utils");
 
 export interface DiagramPageInfo {
   id: string;
@@ -158,7 +161,7 @@ export async function exportAllPagesSVG(
       });
     }
   } catch (error) {
-    console.error("导出 SVG 时发生错误:", error);
+    logger.error("导出 SVG 时发生错误", { error });
     throw error;
   } finally {
     await editor.loadDiagram(fullXml);

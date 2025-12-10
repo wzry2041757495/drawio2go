@@ -18,6 +18,14 @@
     "saving": "Auto-saving",
     "saved": "Saved",
     "retrying": "Retrying...",
+    "retryTitle": "Ready to Retry",
+    "retryDescription": "Last message restored to input box",
+    "userCancelled": "User cancelled this conversation",
+    "connectionLost": "Connection lost",
+    "pageClosed": "Page closed",
+    "chatLockedTitle": "Chat Locked by Another Tab",
+    "chatLockedHint": "This project is currently being used for chat in another tab",
+    "projectRequired": "Please select or create a project before sending messages",
     "emptyConversation": "No messages yet. Say hi!",
     "loadMore": "Load more",
     "collapseAll": "Collapse all",
@@ -88,6 +96,8 @@
     "stop": "Stop",
     "newChat": "New chat",
     "openHistory": "History",
+    "retry": "Retry Last Message",
+    "waitingForAI": "Waiting for AI response...",
     "reset": "Clear input",
     "attachFile": "Attach file",
     "shortcuts": {
@@ -198,9 +208,33 @@
       "to": "End date"
     }
   },
+  "dialogs": {
+    "deleteConversationTitle": "Delete conversation",
+    "deleteConversationDescription": "This will delete \"{{title}}\" ({{messageCount}}). This action cannot be undone.",
+    "deleteConversationsTitle": "Delete conversations ({{count}})",
+    "deleteConversationsDescription": "This will delete {{count}} conversations ({{messageCount}} total). This action cannot be undone."
+  },
   "status": {
-    "socketDisconnected": "Socket.IO disconnected",
-    "socketWarning": "AI tool features temporarily unavailable"
+    "socketDisconnected": "Socket Disconnected",
+    "socketReconnected": "Socket Reconnected",
+    "socketDisconnectedWithStop": "Socket disconnected, ongoing chat has been stopped",
+    "socketRequiredForChat": "Socket connection is required for AI tool features, please wait for reconnection",
+    "socketWarning": "AI tool features temporarily unavailable",
+    "networkOffline": "Network Offline",
+    "networkOfflineDesc": "Ongoing chat requests were stopped automatically. Check your connection before retrying.",
+    "networkOfflineShort": "You are offline",
+    "networkOnline": "Network Online",
+    "networkOnlineDesc": "Back online — you can continue sending messages",
+    "networkOnlineShort": "Back online",
+    "networkDisconnectedHint": "Network connection lost"
+  },
+  "modelSelector": {
+    "label": "Current model",
+    "placeholder": "Select or search model",
+    "empty": "No models available. Add providers and models in Settings first.",
+    "noResult": "No available models",
+    "selectFailedTitle": "Model switch failed",
+    "selectFailedDescription": "Please choose another model or try again later."
   },
   "errors": {
     "loadFailed": "Failed to load messages",
@@ -241,5 +275,10 @@
     "rename": "Rename conversation",
     "deleteConfirm": "Delete conversation \"{{title}}\"?",
     "deleteAllConfirm": "An empty conversation will be created after deletion. Continue?"
+  },
+  "models": {
+    "capabilities": {
+      "disabled": "Disabled"
+    }
   }
 }

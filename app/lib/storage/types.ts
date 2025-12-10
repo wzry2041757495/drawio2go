@@ -102,6 +102,8 @@ export interface Conversation {
   id: string;
   project_uuid: string;
   title: string;
+  is_streaming: boolean; // 是否正在流式响应
+  streaming_since: number | null; // 开始流式的时间戳（ms）
   created_at: number;
   updated_at: number;
 }

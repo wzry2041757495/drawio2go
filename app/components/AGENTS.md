@@ -78,7 +78,7 @@
 **Ref API**:
 
 - `loadDiagram(xml)`: 发送 `load` 并等待响应
-- `mergeDiagram(xml)`: 发送 `merge`，10s 超时回退为 `load`
+- `mergeDiagram(xml, requestId?)`: 发送 `merge`（透传 requestId），10.5s 超时回退为 `load`
 - `exportDiagram()`: 导出 XML
 - `exportSVG()`: 导出 SVG（Promise 队列避免串扰）
 
@@ -97,11 +97,12 @@
 
 **Props**: `onSettingsChange`
 
-**三个面板**:
+**四个面板**:
 
-- **LLMSettingsPanel**: LLM 提供商、API 配置、系统提示词
-- **VersionSettingsPanel**: AI 自动版本快照开关（`autoVersionOnAIEdit`）
 - **GeneralSettingsPanel**: 语言切换 + 默认文件路径选择（Electron 环境支持 `selectFolder`）
+- **ModelsSettingsPanel**: 供应商/模型管理（Accordion 列表、级联删除、Provider 编辑占位）
+- **AgentSettingsPanel**: 全局系统提示词（System Prompt）编辑
+- **VersionSettingsPanel**: AI 自动版本快照开关（`autoVersionOnAIEdit`）
 
 **特性**: 底部操作条（有修改时显示取消/保存）、供应商切换（OpenAI Responses/Chat Completions/DeepSeek）
 
@@ -112,16 +113,17 @@
 **核心功能**:
 
 - 模块化架构（12个独立子组件）
-- 一体化布局：消息区 + 输入区
+- 一体化布局：消息区 + 输入区（含模型选择按钮）
 - 按钮组：新建聊天/历史对话（左）、版本管理/文件上传/发送（右）
 - @ai-sdk/react: `useChat` hook + 流式响应
 - Markdown 渲染（react-markdown）
 - 工具状态卡片（进行中/成功/失败）
 - 模型信息条（图标 + 模型名 + 时间戳）
+- 模型选择 Popover（HeroUI ComboBox 分组），按供应商列出模型，流式期间禁用选择
 
 #### 4.1 聊天子组件（app/components/chat/）
 
-**核心组件**: ChatSessionHeader、ChatSessionMenu、MessageList、MessageItem、MessageContent、ChatInputArea、ChatInputActions
+**核心组件**: ModelComboBox、ChatSessionMenu、MessageList、MessageItem、MessageContent、ChatInputArea、ChatInputActions
 
 **辅助组件**: EmptyState、ToolCallCard、ThinkingBlock
 
@@ -171,6 +173,22 @@
 - HeroUI Select 复合组件，使用 `ListBox.Item` + `Select.Trigger`
 - 读取 `i18n.language` 显示当前语言，调用 `i18n.changeLanguage` 即时切换
 - 语言选项来自 `localeDisplayNames`，支持 en-US / zh-CN，文案源自 settings 命名空间
+
+### 9. AlertDialogProvider & GlobalAlertDialog
+
+**文件**: `app/components/alert/AlertDialogProvider.tsx`, `app/components/alert/GlobalAlertDialog.tsx`
+
+**用途**:
+
+- 全局单实例告警/确认弹窗，覆盖 window.confirm 与静态警告
+- 支持 `danger` / `warning` 状态，异步 `onAction` 自动加载、禁用按钮
+- 样式位于 `app/styles/components/alert-dialog.css`，z-index 1450
+
+**API**:
+
+- 使用 `useAlertDialog()` → `{ open, close }`
+- `open(payload)` 结构参见 `app/types/alert-dialog.ts`（title/description/actionLabel/cancelLabel/isDismissable/onAction/onCancel）
+- 受控模式，按钮事件使用 `onPress`
 
 ---
 
@@ -261,6 +279,21 @@ import { Button } from '@heroui/react';
 - 用户友好的错误提示
 
 ## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- `ProjectSelector` 与 `ToolCallCard` 改用 `onPress`（@react-aria/interactions），统一事件语义。
+- `ToolCallCard` 样式抽离到 `app/styles/utilities/tool-calls.css`，组件逻辑更精简。
+- `PageSVGViewer` / `VersionCompare` 迁移到新 hooks（`usePanZoomStage`、`useVersionPages`），移除旧版 `version-utils` 依赖。
+
+**影响文件**：约 6 个（ProjectSelector、ToolCallCard、PageSVGViewer、VersionCompare 等）
+
+**下次关注**：
+
+- 排查残留 `onClick` 场景，保持可访问性一致。
+- 观察新 hooks 下的缩放/分页性能，必要时增加防抖。
 
 ### 2025-12-02 清理（Components 快速清理）
 

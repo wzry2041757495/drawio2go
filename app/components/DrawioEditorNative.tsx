@@ -9,8 +9,10 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { Spinner } from "@heroui/react";
 import { DrawioSelectionInfo } from "../types/drawio-tools";
 import { debounce } from "@/app/lib/utils";
+import { useAppTranslation } from "@/app/i18n/hooks";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("DrawioEditorNative");
@@ -35,7 +37,7 @@ const EXPORT_TIMEOUT_MS = 20000;
 // 暴露给父组件的 ref 接口
 export interface DrawioEditorRef {
   loadDiagram: (xml: string) => Promise<void>;
-  mergeDiagram: (xml: string) => void;
+  mergeDiagram: (xml: string, requestId?: string) => void;
   exportDiagram: () => Promise<string>;
   exportSVG: (options?: SVGExportOptions) => Promise<string>;
 }
@@ -94,6 +96,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
     { initialXml, onSave, onSelectionChange, forceReload },
     ref,
   ) {
+    const { t: tp } = useAppTranslation("page");
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [isReady, setIsReady] = useState(false);
     const previousXmlRef = useRef<string | undefined>(initialXml);
@@ -120,7 +123,6 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
 
     // 新增：export 和 merge 相关的 ref
     const exportedXmlRef = useRef<string | undefined>(undefined); // 存储 export 获取的 XML
-    const mergeTimeoutRef = useRef<NodeJS.Timeout | null>(null); // merge 超时定时器
     const autosaveReceivedRef = useRef(false); // 是否收到 autosave 事件
     const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null); // autosave 监测定时器
     const initializationCompleteRef = useRef(false); // 标记初始化是否完成
@@ -315,37 +317,29 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       [requestExport],
     );
 
-    // 更新图表（使用 merge 动作，保留编辑状态，带超时回退）
+    // 更新图表（使用 merge 动作，保留编辑状态，超时交由上层控制）
     const mergeWithFallback = useCallback(
-      (xml: string | undefined) => {
+      (xml: string | undefined, requestId?: string) => {
         if (iframeRef.current && iframeRef.current.contentWindow && isReady) {
+          if (requestId) {
+            activeRequestIdRef.current = requestId;
+          }
+
           const updateData = {
             action: "merge",
             xml: xml || "",
+            requestId,
           };
           logger.debug("发送 merge 命令（增量更新，保留编辑状态）");
-
-          // 清除之前的超时定时器（如果存在）
-          if (mergeTimeoutRef.current) {
-            clearTimeout(mergeTimeoutRef.current);
-            mergeTimeoutRef.current = null;
-          }
 
           // 发送 merge 命令
           iframeRef.current.contentWindow.postMessage(
             JSON.stringify(updateData),
             "*",
           );
-
-          // 设置 10 秒超时回退机制
-          mergeTimeoutRef.current = setTimeout(() => {
-            logger.warn("merge 操作超时（10秒未收到回调），回退到 load 操作");
-            loadDiagram(xml);
-            mergeTimeoutRef.current = null;
-          }, 10000); // 10 秒超时
         }
       },
-      [isReady, loadDiagram],
+      [isReady],
     );
 
     // 暴露方法给父组件
@@ -353,7 +347,8 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       ref,
       () => ({
         loadDiagram: async (xml: string) => loadDiagram(xml),
-        mergeDiagram: (xml: string) => mergeWithFallback(xml),
+        mergeDiagram: (xml: string, requestId?: string) =>
+          mergeWithFallback(xml, requestId),
         exportDiagram,
         exportSVG,
       }),
@@ -368,31 +363,6 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       loadDiagramRef.current = loadDiagram;
       mergeWithFallbackRef.current = mergeWithFallback;
     }, [loadDiagram, mergeWithFallback]);
-
-    useEffect(() => {
-      const handleAIXmlReplaced = (event: Event) => {
-        const detail = (
-          event as CustomEvent<{ requestId?: string; isRollback?: boolean }>
-        ).detail;
-        const isRollback = detail?.isRollback === true;
-
-        if (detail?.requestId) {
-          activeRequestIdRef.current = detail.requestId;
-        } else {
-          activeRequestIdRef.current = undefined;
-        }
-
-        if (isRollback) {
-          logger.debug("[DrawIO] 接收到回滚 XML，跳过并发验证链路");
-        }
-      };
-
-      window.addEventListener("ai-xml-replaced", handleAIXmlReplaced);
-
-      return () => {
-        window.removeEventListener("ai-xml-replaced", handleAIXmlReplaced);
-      };
-    }, []);
 
     // 防抖的更新函数 - 使用 useMemo 确保只创建一次
     const debouncedUpdate = useMemo(
@@ -511,12 +481,6 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
               }
             }
           } else if (data.event === "merge") {
-            // 清除 merge 超时定时器
-            if (mergeTimeoutRef.current) {
-              clearTimeout(mergeTimeoutRef.current);
-              mergeTimeoutRef.current = null;
-            }
-
             const requestIdFromPayload =
               typeof data.requestId === "string" ? data.requestId : undefined;
             const requestId =
@@ -536,6 +500,12 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
                     message: data.message,
                     requestId,
                   },
+                }),
+              );
+            } else {
+              window.dispatchEvent(
+                new CustomEvent("drawio-merge-success", {
+                  detail: { requestId },
                 }),
               );
             }
@@ -582,10 +552,6 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
         window.removeEventListener("message", handleMessage);
 
         // 清理所有定时器
-        if (mergeTimeoutRef.current) {
-          clearTimeout(mergeTimeoutRef.current);
-          mergeTimeoutRef.current = null;
-        }
         if (autosaveTimerRef.current) {
           clearTimeout(autosaveTimerRef.current);
           autosaveTimerRef.current = null;
@@ -678,19 +644,21 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
           }}
         />
         {!isReady && (
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "white",
-              padding: "20px",
-              borderRadius: "8px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-            }}
-          >
-            <p>正在加载 DrawIO 编辑器...</p>
+          <div className="loading-overlay" role="status" aria-live="polite">
+            <div className="loading-overlay__card">
+              <Spinner
+                size="xl"
+                color="success"
+                aria-label={tp("main.loadingEditor")}
+                className="loading-overlay__spinner"
+              />
+              <h2 className="loading-overlay__title">
+                {tp("main.loadingEditor")}
+              </h2>
+              <p className="loading-overlay__description">
+                {tp("main.loadingProjectDetail")}
+              </p>
+            </div>
           </div>
         )}
       </div>

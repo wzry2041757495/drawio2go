@@ -8,21 +8,16 @@ import type {
   Message,
   CreateMessageInput,
 } from "@/app/lib/storage";
-import { runStorageTask, withTimeout } from "@/app/lib/utils";
-import { ErrorCodes } from "@/app/errors/error-codes";
+import { runStorageTask } from "@/app/lib/utils";
+import {
+  getStorageTimeoutMessage,
+  withStorageTimeout,
+} from "@/app/lib/storage/timeout-utils";
 import i18n from "@/app/i18n/client";
+import { createLogger } from "@/lib/logger";
 
-const DEFAULT_STORAGE_TIMEOUT = 8000;
-const getStorageTimeoutMessage = (
-  seconds: number = DEFAULT_STORAGE_TIMEOUT / 1000,
-) =>
-  `[${ErrorCodes.STORAGE_TIMEOUT}] ${i18n.t("errors:storage.timeout", { seconds })}`;
-const DEFAULT_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
-
-const withStorageTimeout = <T>(
-  promise: Promise<T>,
-  message: string = DEFAULT_TIMEOUT_MESSAGE,
-) => withTimeout(promise, DEFAULT_STORAGE_TIMEOUT, message);
+const logger = createLogger("useStorageConversations");
+const ABNORMAL_STREAMING_TIMEOUT_MS = 2 * 60 * 1000;
 
 /**
  * 对话管理 Hook
@@ -54,10 +49,10 @@ export function useStorageConversations() {
         try {
           callback(conversations);
         } catch (callbackError) {
-          console.warn(
-            "[useStorageConversations] conversation subscriber failed",
-            callbackError,
-          );
+          logger.warn("conversation subscriber failed", {
+            projectUuid,
+            error: callbackError,
+          });
         }
       });
     },
@@ -72,10 +67,10 @@ export function useStorageConversations() {
         try {
           callback(messages);
         } catch (callbackError) {
-          console.warn(
-            "[useStorageConversations] message subscriber failed",
-            callbackError,
-          );
+          logger.warn("message subscriber failed", {
+            conversationId,
+            error: callbackError,
+          });
         }
       });
     },
@@ -132,6 +127,43 @@ export function useStorageConversations() {
     [],
   );
 
+  const evaluateStreamingStatus = useCallback(
+    async (
+      conversationId: string,
+      storage?: Awaited<ReturnType<typeof getStorage>>,
+    ): Promise<{
+      conversation: Conversation | null;
+      hasAbnormalExit: boolean;
+      storage: Awaited<ReturnType<typeof getStorage>>;
+    }> => {
+      const resolvedStorage = storage ?? (await resolveStorage());
+      const conversation = await withStorageTimeout(
+        resolvedStorage.getConversation(conversationId),
+        getStorageTimeoutMessage(),
+      );
+
+      let hasAbnormalExit = false;
+
+      if (conversation?.is_streaming) {
+        const since = conversation.streaming_since ?? 0;
+        const elapsed = since > 0 ? Date.now() - since : Infinity;
+        if (!since || elapsed > ABNORMAL_STREAMING_TIMEOUT_MS) {
+          hasAbnormalExit = true;
+          await withStorageTimeout(
+            resolvedStorage.setConversationStreaming(conversationId, false),
+            getStorageTimeoutMessage(),
+          );
+          conversation.is_streaming = false;
+          conversation.streaming_since = null;
+          conversation.updated_at = Date.now();
+        }
+      }
+
+      return { conversation, hasAbnormalExit, storage: resolvedStorage };
+    },
+    [resolveStorage],
+  );
+
   const subscribeToConversations = useCallback(
     (
       projectUuid: string = DEFAULT_PROJECT_UUID,
@@ -153,10 +185,10 @@ export function useStorageConversations() {
             if (active) callback(conversations);
           })
           .catch((subscribeError) => {
-            console.error(
-              "[useStorageConversations] initialize conversation subscription failed",
-              subscribeError,
-            );
+            logger.error("initialize conversation subscription failed", {
+              projectUuid,
+              error: subscribeError,
+            });
             const localizedError = new Error(
               i18n.t("errors:conversation.loadFailed"),
             );
@@ -201,10 +233,10 @@ export function useStorageConversations() {
             if (active) callback(messages);
           })
           .catch((subscribeError) => {
-            console.error(
-              "[useStorageConversations] initialize message subscription failed",
-              subscribeError,
-            );
+            logger.error("initialize message subscription failed", {
+              conversationId,
+              error: subscribeError,
+            });
             const localizedError = new Error(
               i18n.t("errors:conversation.loadFailed"),
             );
@@ -247,10 +279,10 @@ export function useStorageConversations() {
 
       if (!targetProject) return;
       loadConversationsForProject(targetProject).catch((eventError) => {
-        console.error(
-          "[useStorageConversations] refresh conversation cache failed",
-          eventError,
-        );
+        logger.error("refresh conversation cache failed", {
+          projectUuid: targetProject,
+          error: eventError,
+        });
         const localizedError = new Error(
           i18n.t("errors:conversation.loadFailed"),
         );
@@ -275,10 +307,10 @@ export function useStorageConversations() {
 
       targetConversationIds.forEach((conversationId) => {
         loadMessagesForConversation(conversationId).catch((eventError) => {
-          console.error(
-            "[useStorageConversations] refresh message cache failed",
-            eventError,
-          );
+          logger.error("refresh message cache failed", {
+            conversationId,
+            error: eventError,
+          });
           const localizedError = new Error(
             i18n.t("errors:conversation.loadFailed"),
           );
@@ -334,15 +366,17 @@ export function useStorageConversations() {
                 id: uuidv4(),
                 project_uuid: projectUuid,
                 title,
+                is_streaming: false,
+                streaming_since: null,
               }),
               getStorageTimeoutMessage(),
             );
             return conversation;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] create conversation failed",
+            logger.error("create conversation failed", {
+              projectUuid,
               error,
-            );
+            });
             throw new Error(i18n.t("errors:conversation.createFailed"));
           }
         },
@@ -360,24 +394,43 @@ export function useStorageConversations() {
       return runStorageTask(
         async () => {
           try {
-            const storage = await resolveStorage();
-            const conversation = await withStorageTimeout(
-              storage.getConversation(id),
-              getStorageTimeoutMessage(),
-            );
+            const { conversation } = await evaluateStreamingStatus(id);
             return conversation;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] get conversation failed",
-              error,
-            );
+            logger.error("get conversation failed", { id, error });
             throw new Error(i18n.t("errors:conversation.loadFailed"));
           }
         },
         { setLoading, setError },
       );
     },
-    [resolveStorage],
+    [evaluateStreamingStatus],
+  );
+
+  const loadConversationWithStatus = useCallback(
+    async (
+      id: string,
+    ): Promise<{
+      conversation: Conversation | null;
+      hasAbnormalExit: boolean;
+    }> =>
+      runStorageTask(
+        async () => {
+          try {
+            const { conversation, hasAbnormalExit } =
+              await evaluateStreamingStatus(id);
+            return { conversation, hasAbnormalExit };
+          } catch (error) {
+            logger.error("load conversation with status failed", {
+              id,
+              error,
+            });
+            throw new Error(i18n.t("errors:conversation.loadFailed"));
+          }
+        },
+        { setLoading, setError },
+      ),
+    [evaluateStreamingStatus],
   );
 
   /**
@@ -397,15 +450,42 @@ export function useStorageConversations() {
               getStorageTimeoutMessage(),
             );
           } catch (error) {
-            console.error(
-              "[useStorageConversations] update conversation failed",
-              error,
-            );
+            logger.error("update conversation failed", { id, error });
             throw new Error(i18n.t("errors:conversation.updateFailed"));
           }
         },
         { setLoading, setError },
       );
+    },
+    [resolveStorage],
+  );
+
+  const markConversationAsStreaming = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        const storage = await resolveStorage();
+        await withStorageTimeout(
+          storage.setConversationStreaming(id, true),
+          getStorageTimeoutMessage(),
+        );
+      } catch (error) {
+        logger.error("mark conversation streaming failed", { id, error });
+      }
+    },
+    [resolveStorage],
+  );
+
+  const markConversationAsCompleted = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        const storage = await resolveStorage();
+        await withStorageTimeout(
+          storage.setConversationStreaming(id, false),
+          getStorageTimeoutMessage(),
+        );
+      } catch (error) {
+        logger.error("mark conversation completed failed", { id, error });
+      }
     },
     [resolveStorage],
   );
@@ -424,10 +504,7 @@ export function useStorageConversations() {
               getStorageTimeoutMessage(),
             );
           } catch (error) {
-            console.error(
-              "[useStorageConversations] delete conversation failed",
-              error,
-            );
+            logger.error("delete conversation failed", { id, error });
             throw new Error(i18n.t("errors:conversation.deleteFailed"));
           }
         },
@@ -452,10 +529,10 @@ export function useStorageConversations() {
               getStorageTimeoutMessage(),
             );
           } catch (error) {
-            console.error(
-              "[useStorageConversations] batch delete conversations failed",
+            logger.error("batch delete conversations failed", {
+              ids,
               error,
-            );
+            });
             throw new Error(i18n.t("errors:conversation.deleteFailed"));
           }
         },
@@ -484,10 +561,10 @@ export function useStorageConversations() {
             );
             return conversations;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] load conversations failed",
+            logger.error("load conversations failed", {
+              projectUuid,
               error,
-            );
+            });
             throw new Error(i18n.t("errors:conversation.loadFailed"));
           }
         },
@@ -512,10 +589,7 @@ export function useStorageConversations() {
             );
             return messages;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] load messages failed",
-              error,
-            );
+            logger.error("load messages failed", { conversationId, error });
             throw new Error(i18n.t("errors:conversation.loadFailed"));
           }
         },
@@ -556,10 +630,10 @@ export function useStorageConversations() {
 
             return message;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] add message failed",
+            logger.error("add message failed", {
+              conversationId,
               error,
-            );
+            });
             throw new Error(i18n.t("errors:conversation.messageSaveFailed"));
           }
         },
@@ -584,10 +658,10 @@ export function useStorageConversations() {
             );
             return created;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] add messages failed",
+            logger.error("add messages failed", {
+              ids: messages.map((m) => m.conversation_id),
               error,
-            );
+            });
             throw new Error(i18n.t("errors:conversation.messageSaveFailed"));
           }
         },
@@ -612,10 +686,7 @@ export function useStorageConversations() {
             );
             return blob;
           } catch (error) {
-            console.error(
-              "[useStorageConversations] export conversations failed",
-              error,
-            );
+            logger.error("export conversations failed", { ids, error });
             throw new Error(i18n.t("errors:conversation.exportFailed"));
           }
         },
@@ -630,6 +701,9 @@ export function useStorageConversations() {
     error,
     createConversation,
     getConversation,
+    loadConversationWithStatus,
+    markConversationAsStreaming,
+    markConversationAsCompleted,
     updateConversation,
     deleteConversation,
     batchDeleteConversations,

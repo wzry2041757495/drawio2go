@@ -1,5 +1,6 @@
 {
   "main": {
+    "loadingEditor": "Loading DrawIO editor...",
     "loadingProject": "Loading project...",
     "loadingProjectDetail": "Please wait while we load project data from storage.",
     "loadingFailed": "Failed to load project",

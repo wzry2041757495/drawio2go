@@ -19,6 +19,7 @@ import type {
   Message,
   CreateMessageInput,
 } from "@/lib/storage/types";
+import type { ToolCallRequest } from "@/app/types/socket";
 
 declare global {
   /**
@@ -40,6 +41,10 @@ declare global {
         }
       >
     | undefined;
+  /**
+   * 统一的工具广播函数（server.js 注入），用于在广播时追加上下文日志
+   */
+  var emitToolExecute: ((request: ToolCallRequest) => void) | undefined;
 
   /**
    * Electron API
@@ -127,6 +132,10 @@ declare global {
       updateConversation: (
         id: string,
         updates: UpdateConversationInput,
+      ) => Promise<void>;
+      setConversationStreaming: (
+        id: string,
+        isStreaming: boolean,
       ) => Promise<void>;
       deleteConversation: (id: string) => Promise<void>;
       batchDeleteConversations: (ids: string[]) => Promise<void>;

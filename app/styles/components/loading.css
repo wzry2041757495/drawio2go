@@ -1,0 +1,90 @@
+/* 加载 / 错误覆盖层样式 */
+
+.loading-overlay,
+.error-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  background: color-mix(
+    in oklch,
+    var(--background) 88%,
+    var(--surface-overlay)
+  );
+  z-index: 10000;
+  animation: fadeIn var(--duration-medium) var(--ease-out-cubic);
+}
+
+.loading-overlay__card,
+.error-overlay__card {
+  width: min(520px, 92vw);
+  background: var(--surface);
+  color: var(--surface-foreground);
+  border-radius: var(--radius-lg);
+  padding: calc(var(--spacing-xl) + var(--spacing-sm));
+  box-shadow: var(--shadow-4);
+  border: 1px solid var(--border-light);
+  text-align: center;
+  animation: fadeIn var(--duration-medium) var(--ease-out-cubic);
+}
+
+.loading-overlay__spinner {
+  display: inline-flex;
+  margin: 0 auto var(--spacing-md);
+  color: var(--success);
+  animation: spin var(--duration-medium) linear infinite;
+}
+
+.loading-overlay__title,
+.error-overlay__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: 1.25rem;
+  color: var(--foreground);
+}
+
+.loading-overlay__description,
+.error-overlay__description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--foreground-secondary);
+  line-height: 1.6;
+}
+
+.error-overlay__emoji {
+  font-size: 2.75rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.error-overlay__actions {
+  margin-top: var(--spacing-lg);
+  display: inline-flex;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.error-overlay__alert-content {
+  display: grid;
+  gap: var(--spacing-xs);
+  text-align: center;
+  justify-items: center;
+}
+
+.connection-alert {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.connection-alert__item {
+  pointer-events: auto;
+  animation: fadeIn var(--duration-medium) var(--ease-out-cubic);
+}

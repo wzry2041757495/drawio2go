@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import type { ComponentProps, PointerEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Card,
   Button,
@@ -12,9 +13,46 @@ import {
   FieldError,
 } from "@heroui/react";
 import { FolderOpen, Plus, Check } from "lucide-react";
+import { usePress } from "@react-aria/interactions";
 import type { Project } from "../lib/storage/types";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { formatVersionTimestamp } from "@/app/lib/format-utils";
+
+type CardRootProps = ComponentProps<typeof Card.Root>;
+
+interface PressableProjectCardProps extends Omit<
+  CardRootProps,
+  "onPress" | "role" | "tabIndex"
+> {
+  isActive: boolean;
+  ariaLabel: string;
+  onPress: () => void;
+  children: ReactNode;
+}
+
+function PressableProjectCard({
+  isActive,
+  ariaLabel,
+  onPress,
+  children,
+  ...rest
+}: PressableProjectCardProps) {
+  const { pressProps } = usePress({ onPress });
+
+  return (
+    <Card.Root
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      aria-label={ariaLabel}
+      data-active={isActive}
+      {...pressProps}
+      {...rest}
+    >
+      {children}
+    </Card.Root>
+  );
+}
 
 interface ProjectSelectorProps {
   isOpen: boolean;
@@ -107,19 +145,34 @@ export default function ProjectSelector({
     onClose();
   };
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    // 只有点击遮罩本身（不是内容区域）时才关闭
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
+  const overlayPressTargetRef = useRef(false);
+
+  const handleOverlayPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    overlayPressTargetRef.current = event.target === event.currentTarget;
   };
+
+  const { pressProps: overlayPressProps } = usePress({
+    onPress: () => {
+      if (overlayPressTargetRef.current) {
+        onClose();
+      }
+      overlayPressTargetRef.current = false;
+    },
+  });
 
   if (!isOpen) return null;
 
   const skeletonItems = Array.from({ length: 3 });
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
+    <div
+      className="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("selector.title")}
+      onPointerDown={handleOverlayPointerDown}
+      {...overlayPressProps}
+    >
       <div
         className="modal-content"
         style={{ maxWidth: "800px", minWidth: "600px" }}
@@ -157,14 +210,16 @@ export default function ProjectSelector({
             projects.map((project) => {
               const isActive = project.uuid === currentProjectId;
               return (
-                <Card.Root
+                <PressableProjectCard
                   key={project.uuid}
-                  className={`cursor-pointer transition-all ${
+                  className={`project-selector-card cursor-pointer ${
                     isActive
-                      ? "border-2 border-accent bg-accent/5"
-                      : "border border-gray-200 hover:border-accent/50 hover:shadow-md"
+                      ? "project-selector-card--active"
+                      : "project-selector-card--inactive"
                   }`}
-                  onClick={() => handleProjectSelect(project.uuid)}
+                  isActive={isActive}
+                  ariaLabel={project.name}
+                  onPress={() => handleProjectSelect(project.uuid)}
                 >
                   <Card.Content className="p-4">
                     <div className="flex items-start justify-between">
@@ -178,11 +233,11 @@ export default function ProjectSelector({
                           )}
                         </div>
                         {project.description && (
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <p className="project-selector__description text-sm">
                             {project.description}
                           </p>
                         )}
-                        <p className="text-xs text-gray-400 mt-2">
+                        <p className="project-selector__meta text-xs mt-2">
                           {t("selector.createdAt", {
                             date: formatVersionTimestamp(
                               project.created_at,
@@ -194,7 +249,7 @@ export default function ProjectSelector({
                       </div>
                     </div>
                   </Card.Content>
-                </Card.Root>
+                </PressableProjectCard>
               );
             })}
         </div>

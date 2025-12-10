@@ -1,17 +1,45 @@
-import type { IDBPDatabase, IDBPTransaction } from "idb";
-import { applyIndexedDbV1Migration } from "./v1";
+import type { IDBPDatabase } from "idb";
+import { createLogger } from "@/lib/logger";
+import { STORAGE_VERSION } from "../../constants";
+import {
+  applyIndexedDbV1Migration,
+  type IndexedDbUpgradeTransaction,
+} from "./v1";
 
-export async function runIndexedDbMigrations(
+const logger = createLogger("IndexedDBMigration");
+
+/**
+ * 执行 IndexedDB 迁移（从 oldVersion → newVersion）
+ */
+export function runIndexedDbMigrations(
   db: IDBPDatabase<unknown>,
   oldVersion: number,
   newVersion: number | null,
-  tx: IDBPTransaction<unknown, string[], "versionchange">,
-) {
-  if (oldVersion < 1) {
-    applyIndexedDbV1Migration(db, tx);
-  }
+  tx: IndexedDbUpgradeTransaction,
+): void {
+  const targetVersion =
+    typeof newVersion === "number" ? newVersion : STORAGE_VERSION;
 
-  console.log(
-    `[IndexedDB] Applied migrations up to v${newVersion ?? "unknown"}`,
-  );
+  logger.info("Run IndexedDB migrations", {
+    oldVersion,
+    targetVersion,
+    storageVersion: STORAGE_VERSION,
+  });
+
+  for (let next = oldVersion + 1; next <= targetVersion; next += 1) {
+    switch (next) {
+      case 1:
+        logger.info("Applying IndexedDB V1 migration");
+        applyIndexedDbV1Migration(db, tx);
+        logger.info("IndexedDB V1 migration done");
+        break;
+      default:
+        logger.warn("No IndexedDB migration handler for version", {
+          version: next,
+        });
+        break;
+    }
+  }
 }
+
+export { applyIndexedDbV1Migration } from "./v1";

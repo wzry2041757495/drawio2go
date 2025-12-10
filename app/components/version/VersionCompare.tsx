@@ -29,19 +29,15 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type { XMLVersion } from "@/app/lib/storage/types";
-import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
-import { createBlobFromSource, type BinarySource } from "./version-utils";
 import {
   generateSmartDiffSvg,
   type SmartDiffResult,
 } from "@/app/lib/svg-smart-diff";
-import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
-import { formatVersionTimestamp } from "@/app/lib/format-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
-import { createLogger } from "@/lib/logger";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
-
-const logger = createLogger("VersionCompare");
+import { formatVersionLabel, formatVersionMeta } from "@/app/lib/version-utils";
+import { useVersionPages } from "@/app/hooks/useVersionPages";
+import { usePanZoomStage } from "@/app/hooks/usePanZoomStage";
 
 interface VersionCompareProps {
   versionA: XMLVersion;
@@ -70,23 +66,6 @@ type CompareLayout = "split" | "stack" | "overlay" | "smart";
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
-const SCALE_STEP = 0.2;
-
-function formatVersionMeta(version: XMLVersion, locale: string) {
-  return `${version.semantic_version} · ${formatVersionTimestamp(
-    version.created_at,
-    "full",
-    locale,
-  )}`;
-}
-
-function formatVersionLabel(version: XMLVersion, locale: string) {
-  return `${version.semantic_version} (${formatVersionTimestamp(
-    version.created_at,
-    "compact",
-    locale,
-  )})`;
-}
 
 function createSvgUrl(svg?: string) {
   if (!svg) return null;
@@ -107,22 +86,35 @@ export function VersionCompare({
   const [currentVersionB, setCurrentVersionB] =
     React.useState<XMLVersion>(initialVersionB);
   const [pagePairs, setPagePairs] = React.useState<PagePair[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [scale, setScale] = React.useState(1);
   const [layout, setLayout] = React.useState<CompareLayout>("split");
   const [overlayOpacity, setOverlayOpacity] = React.useState(0.55);
-  const [isPanning, setIsPanning] = React.useState(false);
-  const [offset, setOffset] = React.useState({ x: 0, y: 0 });
-  const pointerStart = React.useRef<{
-    x: number;
-    y: number;
-    offsetX: number;
-    offsetY: number;
-  } | null>(null);
-  const { loadVersionSVGFields } = useStorageXMLVersions();
+  const [error, setError] = React.useState<string | null>(null);
+  const {
+    scale,
+    offset,
+    isPanning,
+    zoomIn,
+    zoomOut,
+    resetView,
+    setOffset,
+    setScale,
+    handleWheel,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+  } = usePanZoomStage({
+    wheelZoomStrategy: "always",
+    minScale: MIN_SCALE,
+    maxScale: MAX_SCALE,
+    zoomStep: 1.2,
+    isPanAllowed: () => true,
+    scaleOffsetStrategy: "none",
+  });
+  const leftPages = useVersionPages(currentVersionA, { enabled: isOpen });
+  const rightPages = useVersionPages(currentVersionB, { enabled: isOpen });
+  const loading = leftPages.isLoading || rightPages.isLoading;
 
   React.useEffect(() => {
     setIsPortalReady(true);
@@ -153,156 +145,123 @@ export function VersionCompare({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // 打开时加载 pages_svg 数据
+  // 打开时加载 pages_svg 数据（统一由 useVersionPages 提供）
   React.useEffect(() => {
     if (!isOpen) {
       setPagePairs([]);
-      setError(null);
       setWarning(null);
-      setScale(1);
-      setOffset({ x: 0, y: 0 });
+      setError(null);
       setCurrentIndex(0);
+      resetView();
       return;
     }
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+    if (loading) {
+      setError(null);
+      return;
+    }
 
-    (async () => {
-      try {
-        const loadPages = async (
-          version: XMLVersion,
-        ): Promise<{ pages: PageRenderState[]; hasPagesSvg: boolean }> => {
-          let working = version;
-          let hasPagesSvg = Boolean(working.pages_svg);
-          if (!hasPagesSvg) {
-            working = await loadVersionSVGFields(version);
-            hasPagesSvg = Boolean(working.pages_svg);
-          }
+    if (leftPages.error && rightPages.error) {
+      setPagePairs([]);
+      setWarning(null);
+      setError(
+        leftPages.error?.message ||
+          rightPages.error?.message ||
+          tVersion("compare.status.error"),
+      );
+      return;
+    }
 
-          if (!working.pages_svg) {
-            return { pages: [], hasPagesSvg: false };
-          }
+    const pagesA = leftPages.pages;
+    const pagesB = rightPages.pages;
 
-          const blob = createBlobFromSource(
-            working.pages_svg as BinarySource,
-            "application/json",
-          );
-          if (!blob) {
-            return { pages: [], hasPagesSvg };
-          }
-          const parsed = await deserializeSVGsFromBlob(blob);
-          const pages = parsed
-            .map((item, idx) => ({
-              id: item.id ?? `page-${idx + 1}`,
-              name:
-                typeof item.name === "string" && item.name.trim().length > 0
-                  ? item.name
-                  : tVersion("compare.pages.indicator", {
-                      version: "",
-                      count: idx + 1,
-                    }),
-              index: typeof item.index === "number" ? item.index : idx,
-              svg: item.svg,
-            }))
-            .sort((a, b) => a.index - b.index);
-          return { pages, hasPagesSvg };
-        };
+    const indexSet = new Set<number>();
+    pagesA.forEach((page) => indexSet.add(page.index));
+    pagesB.forEach((page) => indexSet.add(page.index));
 
-        const [resultA, resultB] = await Promise.all([
-          loadPages(currentVersionA),
-          loadPages(currentVersionB),
-        ]);
-        const pagesA = resultA.pages;
-        const pagesB = resultB.pages;
+    if (indexSet.size === 0) {
+      setPagePairs([]);
+      setWarning(null);
+      setError(tVersion("compare.errors.missingPagesBoth"));
+      return;
+    }
 
-        if (cancelled) return;
+    const indexes = Array.from(indexSet).sort((a, b) => a - b);
 
-        if (!pagesA.length && !pagesB.length) {
-          throw new Error(tVersion("compare.errors.missingPagesBoth"));
-        }
-
-        const indexSet = new Set<number>();
-        pagesA.forEach((page) => indexSet.add(page.index));
-        pagesB.forEach((page) => indexSet.add(page.index));
-        const indexes = Array.from(indexSet).sort((a, b) => a - b);
-
-        const pairs: PagePair[] = indexes.map((pageIndex) => {
-          const leftPage = pagesA.find((page) => page.index === pageIndex);
-          const rightPage = pagesB.find((page) => page.index === pageIndex);
-          const name =
-            leftPage?.name ??
-            rightPage?.name ??
-            tVersion("compare.pages.indicator", {
-              version: "",
-              count: pageIndex + 1,
-            });
-          return {
-            index: pageIndex,
-            name,
-            left: leftPage,
-            right: rightPage,
-          };
+    const pairs: PagePair[] = indexes.map((pageIndex) => {
+      const leftPage = pagesA.find((page) => page.index === pageIndex);
+      const rightPage = pagesB.find((page) => page.index === pageIndex);
+      const leftNameFromList =
+        leftPages.pageNames[
+          leftPages.pages.findIndex((page) => page.index === pageIndex)
+        ];
+      const rightNameFromList =
+        rightPages.pageNames[
+          rightPages.pages.findIndex((page) => page.index === pageIndex)
+        ];
+      const name =
+        leftPage?.name ||
+        rightPage?.name ||
+        leftNameFromList ||
+        rightNameFromList ||
+        tVersion("compare.pages.indicator", {
+          version: "",
+          count: pageIndex + 1,
         });
+      return {
+        index: pageIndex,
+        name,
+        left: leftPage,
+        right: rightPage,
+      };
+    });
 
-        const warnings: string[] = [];
-        if (!resultA.hasPagesSvg) {
-          warnings.push(tVersion("compare.errors.missingPagesA"));
-        }
-        if (!resultB.hasPagesSvg) {
-          warnings.push(tVersion("compare.errors.missingPagesB"));
-        }
-        if (pagesA.length !== pagesB.length) {
-          warnings.push(
-            tVersion("compare.errors.pageCountMismatch", {
-              countA: pagesA.length,
-              countB: pagesB.length,
-            }),
-          );
-        } else {
-          const mismatch = pagesA.findIndex(
-            (page, idx) => page.name !== pagesB[idx]?.name,
-          );
-          if (mismatch >= 0) {
-            warnings.push(tVersion("compare.errors.pageNameMismatch"));
-          }
-        }
-
-        setWarning(warnings.length ? warnings.join(" · ") : null);
-
-        if (pairs.length === 0) {
-          throw new Error(tVersion("compare.errors.noParsedPages"));
-        }
-
-        const pairsWithDiff = pairs.map((pair) => ({
-          ...pair,
-          smartDiff: generateSmartDiffSvg(pair.left?.svg, pair.right?.svg),
-        }));
-        setPagePairs(pairsWithDiff);
-        setCurrentIndex(0);
-        setOffset({ x: 0, y: 0 });
-      } catch (err) {
-        logger.error("加载版本对比失败", err);
-        setError(
-          err instanceof Error ? err.message : tVersion("compare.status.error"),
-        );
-        setPagePairs([]);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+    const warnings: string[] = [];
+    if (!leftPages.hasPagesData) {
+      warnings.push(tVersion("compare.errors.missingPagesA"));
+    }
+    if (!rightPages.hasPagesData) {
+      warnings.push(tVersion("compare.errors.missingPagesB"));
+    }
+    if (pagesA.length !== pagesB.length) {
+      warnings.push(
+        tVersion("compare.errors.pageCountMismatch", {
+          countA: pagesA.length,
+          countB: pagesB.length,
+        }),
+      );
+    } else if (pagesA.length && pagesB.length) {
+      const mismatch = pagesA.findIndex(
+        (page, idx) => page.name !== pagesB[idx]?.name,
+      );
+      if (mismatch >= 0) {
+        warnings.push(tVersion("compare.errors.pageNameMismatch"));
       }
-    })();
+    }
 
-    return () => {
-      cancelled = true;
-    };
+    setWarning(warnings.length ? warnings.join(" · ") : null);
+
+    const pairsWithDiff = pairs.map((pair) => ({
+      ...pair,
+      smartDiff: generateSmartDiffSvg(pair.left?.svg, pair.right?.svg),
+    }));
+    setPagePairs(pairsWithDiff);
+    setError(null);
+    setCurrentIndex(0);
+    setOffset({ x: 0, y: 0 });
   }, [
     isOpen,
-    currentVersionA,
-    currentVersionB,
-    loadVersionSVGFields,
+    loading,
+    leftPages.error,
+    rightPages.error,
+    leftPages.hasPagesData,
+    rightPages.hasPagesData,
+    leftPages.pageNames,
+    rightPages.pageNames,
+    leftPages.pages,
+    rightPages.pages,
+    resetView,
+    setOffset,
     tVersion,
   ]);
 
@@ -311,65 +270,8 @@ export function VersionCompare({
     return currentPair.name;
   }, [currentPair]);
 
-  const zoomIn = React.useCallback(() => {
-    setScale((prev) =>
-      Math.min(MAX_SCALE, parseFloat((prev + SCALE_STEP).toFixed(2))),
-    );
-  }, []);
-
-  const zoomOut = React.useCallback(() => {
-    setScale((prev) =>
-      Math.max(MIN_SCALE, parseFloat((prev - SCALE_STEP).toFixed(2))),
-    );
-  }, []);
-
-  const resetView = React.useCallback(() => {
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
-  }, []);
-
-  const handleWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      if (event.deltaY < 0) {
-        zoomIn();
-      } else {
-        zoomOut();
-      }
-    },
-    [zoomIn, zoomOut],
-  );
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    setIsPanning(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerStart.current = {
-      x: event.clientX,
-      y: event.clientY,
-      offsetX: offset.x,
-      offsetY: offset.y,
-    };
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPanning || !pointerStart.current) return;
-    const dx = event.clientX - pointerStart.current.x;
-    const dy = event.clientY - pointerStart.current.y;
-    setOffset({
-      x: pointerStart.current.offsetX + dx,
-      y: pointerStart.current.offsetY + dy,
-    });
-  };
-
-  const stopPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setIsPanning(false);
-    pointerStart.current = null;
-  };
-
   const handleSelectPage = (keys: Selection) => {
+    if (!pagePairs.length) return;
     const key = extractSingleKey(keys);
     if (key === null) return;
     const nextIndex = Number(key);
@@ -499,7 +401,7 @@ export function VersionCompare({
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
-            <Select.Content>
+            <Select.Popover>
               <ListBox>
                 {versions.map((v) => (
                   <ListBox.Item
@@ -511,7 +413,7 @@ export function VersionCompare({
                   </ListBox.Item>
                 ))}
               </ListBox>
-            </Select.Content>
+            </Select.Popover>
           </Select>
 
           {/* 交换按钮 */}
@@ -540,7 +442,7 @@ export function VersionCompare({
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
-            <Select.Content>
+            <Select.Popover>
               <ListBox>
                 {versions.map((v) => (
                   <ListBox.Item
@@ -552,7 +454,7 @@ export function VersionCompare({
                   </ListBox.Item>
                 ))}
               </ListBox>
-            </Select.Content>
+            </Select.Popover>
           </Select>
         </Card.Header>
 
@@ -677,9 +579,9 @@ export function VersionCompare({
                   : {
                       onPointerDown: handlePointerDown,
                       onPointerMove: handlePointerMove,
-                      onPointerUp: stopPan,
-                      onPointerLeave: stopPan,
-                      onPointerCancel: stopPan,
+                      onPointerUp: handlePointerUp,
+                      onPointerLeave: handlePointerUp,
+                      onPointerCancel: handlePointerUp,
                       onWheel: handleWheel,
                     })}
               >
@@ -797,9 +699,9 @@ export function VersionCompare({
                         }}
                         onPointerDown={handlePointerDown}
                         onPointerMove={handlePointerMove}
-                        onPointerUp={stopPan}
-                        onPointerLeave={stopPan}
-                        onPointerCancel={stopPan}
+                        onPointerUp={handlePointerUp}
+                        onPointerLeave={handlePointerUp}
+                        onPointerCancel={handlePointerUp}
                         onWheel={handleWheel}
                       >
                         {smartDiffImageSrc ? (
@@ -953,7 +855,7 @@ export function VersionCompare({
                 <Select.Value className="version-compare__select-value" />
                 <Select.Indicator />
               </Select.Trigger>
-              <Select.Content className="version-compare__select-content">
+              <Select.Popover className="version-compare__select-content">
                 <ListBox className="version-compare__select-list">
                   {pagePairs.map((pair, index) => (
                     <ListBox.Item
@@ -966,7 +868,7 @@ export function VersionCompare({
                     </ListBox.Item>
                   ))}
                 </ListBox>
-              </Select.Content>
+              </Select.Popover>
             </Select>
           </div>
 

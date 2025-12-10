@@ -11,6 +11,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@/lib/logger": path.resolve(__dirname, "./app/lib/logger"),
+      "@/lib/storage": path.resolve(__dirname, "./app/lib/storage"),
+      "@/lib": path.resolve(__dirname, "./app/lib"),
       "@": path.resolve(__dirname, "."),
     },
   },

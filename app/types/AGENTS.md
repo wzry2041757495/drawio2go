@@ -100,20 +100,41 @@ export type DrawioQueryResult =
 **DrawioReadResult** - 查询响应
 
 ```typescript
-export interface DrawioReadResult {
-  success: boolean;
-  results?: DrawioQueryResult[];
-  error?: string;
+export type DrawioReadResult =
+  | { success: true; results: DrawioQueryResult[] }
+  | { success: true; list: DrawioListResult[] }
+  | { success: false; error: string };
+```
+
+**DrawioReadInput** - 查询输入（支持 xpath/id 以及 ls 筛选）
+
+```typescript
+export interface DrawioReadInput {
+  xpath?: string;
+  id?: string | string[];
+  filter?: "all" | "vertices" | "edges";
 }
 ```
+
+**DrawioListResult** - ls 模式精简结果（id + 类型 + 属性 + matched_xpath）
 
 #### drawio_edit_batch 操作定义
 
 所有操作共享 `allow_no_match?: boolean` 标志，未匹配节点时根据该标志决定是否视为成功跳过。
 
+**LocatorBase** - 通用定位器（支持 xpath / id，若同时提供优先 id）
+
+```typescript
+export interface LocatorBase {
+  xpath?: string;
+  id?: string;
+  allow_no_match?: boolean;
+}
+```
+
 - **SetAttributeOperation** (`type: 'set_attribute'`)
 - **RemoveAttributeOperation** (`type: 'remove_attribute'`)
-- **InsertElementOperation** (`type: 'insert_element'`, `target_xpath`, `new_xml`, `position`)
+- **InsertElementOperation** (`type: 'insert_element'`, 继承 `LocatorBase`，`new_xml`, `position`)
 - **RemoveElementOperation** (`type: 'remove_element'`, `xpath`)
 - **ReplaceElementOperation** (`type: 'replace_element'`, `xpath`, `new_xml`)
 - **SetTextContentOperation** (`type: 'set_text_content'`, `xpath`, `value`)
@@ -206,8 +227,14 @@ import {
 } from "../lib/drawio-xml-service";
 
 async function demo() {
+  const context = {
+    projectUuid: "demo-project",
+    conversationId: "demo-conversation",
+  };
+
   const read: DrawioReadResult = await executeDrawioRead(
-    "//mxCell[@id='cat-head']",
+    { xpath: "//mxCell[@id='cat-head']" },
+    context,
   );
 
   const editOperations: DrawioEditOperation[] = [
@@ -219,9 +246,10 @@ async function demo() {
     },
   ];
 
-  const result: DrawioEditBatchResult = await executeDrawioEditBatch({
-    operations: editOperations,
-  });
+  const result: DrawioEditBatchResult = await executeDrawioEditBatch(
+    editOperations,
+    context,
+  );
 }
 ```
 
@@ -242,6 +270,20 @@ async function demo() {
 - **常量**: camelCase (如 `storageKey`)
 
 ## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 精简 `DrawioEditBatchRequest` 接口，移除冗余字段使批量编辑入参与实际执行保持一致。
+- 同步相关注释与文档描述，明确可选字段与默认行为，减少调用歧义。
+- 标注新版接口需搭配 `buildToolError`/`buildXmlError` 的错误结构使用。
+
+**影响文件**：1 个（drawio-tools.ts）
+
+**下次关注**：
+
+- 观察前后端工具调用是否还依赖旧字段，必要时补充迁移提示。
 
 ### 2025-11-23 清理（类型未变更）
 

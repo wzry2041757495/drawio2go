@@ -18,6 +18,11 @@
     "saving": "正在自动保存",
     "saved": "已保存",
     "retrying": "重试中...",
+    "retryTitle": "已准备重试",
+    "retryDescription": "上一条消息已恢复到输入框",
+    "userCancelled": "用户主动取消了此次对话",
+    "connectionLost": "连接已断开",
+    "pageClosed": "页面已关闭",
     "emptyConversation": "暂无消息，开始对话吧",
     "loadMore": "加载更多",
     "collapseAll": "折叠全部",
@@ -88,6 +93,8 @@
     "stop": "停止",
     "newChat": "新建聊天",
     "openHistory": "历史",
+    "retry": "重试上一条消息",
+    "waitingForAI": "等待 AI 回复...",
     "reset": "清空输入",
     "attachFile": "附加文件",
     "shortcuts": {
@@ -198,9 +205,33 @@
       "to": "结束日期"
     }
   },
+  "dialogs": {
+    "deleteConversationTitle": "删除会话",
+    "deleteConversationDescription": "将删除「{{title}}」，共 {{messageCount}}。删除后无法恢复。",
+    "deleteConversationsTitle": "删除会话（{{count}} 个）",
+    "deleteConversationsDescription": "将删除 {{count}} 个会话，合计 {{messageCount}}。删除后无法恢复。"
+  },
   "status": {
-    "socketDisconnected": "Socket.IO 未连接",
-    "socketWarning": "AI 工具功能暂时不可用"
+    "socketDisconnected": "Socket 连接已断开",
+    "socketReconnected": "Socket 已重新连接",
+    "socketDisconnectedWithStop": "Socket 连接已断开，正在进行的聊天已停止",
+    "socketRequiredForChat": "Socket 连接是使用 AI 工具功能的必要条件，请等待重新连接",
+    "socketWarning": "AI 工具功能暂时不可用",
+    "networkOffline": "网络已断开",
+    "networkOfflineDesc": "正在进行的聊天请求已自动停止，请检查网络连接后重试",
+    "networkOfflineShort": "网络已断开",
+    "networkOnline": "网络已恢复",
+    "networkOnlineDesc": "网络已恢复，您可以继续发送消息",
+    "networkOnlineShort": "网络已恢复",
+    "networkDisconnectedHint": "网络连接已断开"
+  },
+  "modelSelector": {
+    "label": "当前模型",
+    "placeholder": "选择或搜索模型",
+    "empty": "暂无可用模型，请先在设置中添加供应商和模型",
+    "noResult": "无可用模型",
+    "selectFailedTitle": "模型切换失败",
+    "selectFailedDescription": "请选择其他模型或稍后重试"
   },
   "errors": {
     "loadFailed": "加载消息失败",
@@ -241,5 +272,10 @@
     "rename": "重命名会话",
     "deleteConfirm": "确定要删除会话 \"{{title}}\" 吗？",
     "deleteAllConfirm": "删除后将自动创建一个空会话，确定继续吗？"
+  },
+  "models": {
+    "capabilities": {
+      "disabled": "未开启"
+    }
   }
 }

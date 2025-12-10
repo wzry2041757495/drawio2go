@@ -105,10 +105,16 @@ export const MAX_DIFF_CHAIN_LENGTH = 10;
 export const DB_NAME = "drawio2go";
 
 /**
+ * 存储 Schema 版本号（IndexedDB / SQLite 共用）
+ * 变更数据库结构时需提升此版本，并同步迁移脚本
+ */
+export const STORAGE_VERSION = 1;
+
+/**
  * IndexedDB 数据库版本号
  * 变更数据库结构时需要递增此版本号
  */
-export const DB_VERSION = 1;
+export const DB_VERSION = STORAGE_VERSION; // 初始版本即包含流式字段
 
 /**
  * Electron SQLite 数据库文件名

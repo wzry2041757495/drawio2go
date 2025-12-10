@@ -17,23 +17,26 @@
 
 ## 核心组件列表
 
-| 组件                    | 职责             | 关键功能                                              |
-| ----------------------- | ---------------- | ----------------------------------------------------- |
-| **MessageList**         | 消息列表容器     | 渲染所有消息，自动滚动，加载状态，流式占位符          |
-| **MessageItem**         | 单条消息包装     | 消息元数据（模型名、时间戳），角色区分（用户/AI）     |
-| **MessageContent**      | 消息内容渲染引擎 | 分发文本、推理、工具调用等部分的渲染                  |
-| **ToolCallCard**        | 工具调用卡片     | 展示工具调用的输入/输出/错误，支持展开/折叠，复制功能 |
-| **ThinkingBlock**       | 思考过程块       | 展示 AI 思考过程（推理），流式状态动画，展开/折叠     |
-| **ChatInputArea**       | 输入区域         | 多行文本框，表单处理，按 Enter 发送                   |
-| **ChatInputActions**    | 输入操作按钮组   | 新建聊天、历史记录、发送/取消按钮                     |
-| **ChatSessionHeader**   | 会话头部         | 会话标题、消息数、保存状态、历史/导出/删除按钮        |
-| **ChatSessionMenu**     | 会话菜单         | 切换会话列表（可能在侧边栏中使用）                    |
-| **ChatHistoryView**     | 历史记录视图     | 搜索/筛选对话、日期范围、批量操作、预览               |
-| **HistoryToolbar**      | 历史工具栏       | 搜索框、日期选择、批量操作切换、全选/清除             |
-| **ConversationList**    | 对话列表         | 显示过滤后的对话卡片，选择模式，预览和打开操作        |
-| **MessagePreviewPanel** | 消息预览面板     | 侧边栏预览对话内容，显示消息角色和内容                |
-| **EmptyState**          | 空状态占位符     | 加载中、未配置、无消息三种状态提示                    |
-| **TypingIndicator**     | 打字指示器       | 流式输出时的动画指示                                  |
+| 组件                    | 职责             | 关键功能                                                |
+| ----------------------- | ---------------- | ------------------------------------------------------- |
+| **MessageList**         | 消息列表容器     | 渲染所有消息，自动滚动，加载状态，流式占位符            |
+| **MessageItem**         | 单条消息包装     | 消息元数据（模型名、时间戳），角色区分（用户/AI）       |
+| **MessageContent**      | 消息内容渲染引擎 | 分发文本、推理、工具调用等部分的渲染                    |
+| **ToolCallCard**        | 工具调用卡片     | 展示工具调用的输入/输出/错误，支持展开/折叠，复制功能   |
+| **ThinkingBlock**       | 思考过程块       | 展示 AI 思考过程（推理），流式状态动画，展开/折叠       |
+| **ModelComboBox**       | 模型选择器       | 按供应商分组的模型下拉/搜索，支持禁用、加载态和默认标记 |
+| **ChatInputArea**       | 输入区域         | 多行文本框，表单处理，按 Enter 发送                     |
+| **ChatInputActions**    | 输入操作按钮组   | 新建/历史/模型选择 Popover/发送/取消按钮                |
+| **ChatSessionMenu**     | 会话菜单         | 切换会话列表（可能在侧边栏中使用）                      |
+| **ChatHistoryView**     | 历史记录视图     | 搜索/筛选对话、日期范围、批量操作、预览                 |
+| **HistoryToolbar**      | 历史工具栏       | 搜索框、日期选择、批量操作切换、全选/清除               |
+| **ConversationList**    | 对话列表         | 显示过滤后的对话卡片，选择模式，预览和打开操作          |
+| **MessagePreviewPanel** | 消息预览面板     | 侧边栏预览对话内容，显示消息角色和内容                  |
+| **EmptyState**          | 空状态占位符     | 加载中、未配置、无消息三种状态提示                      |
+| **TypingIndicator**     | 打字指示器       | 流式输出时的动画指示                                    |
+| **ChatShell**           | 布局壳层         | 统一包裹聊天/历史视图，承载顶部提示与导航               |
+| **MessagePane**         | 消息区容器       | 包装 MessageList，保持滚动与间距样式                    |
+| **Composer**            | 输入区容器       | 聚合 ChatInputArea 的所有交互 props，简化父级组合       |
 
 ---
 
@@ -91,8 +94,33 @@ MessageList（消息列表容器）
 └── Placeholder Message（流式占位符，带 TypingIndicator）
 
 ChatInputArea（输入组件）
-└── ChatInputActions（按钮组）
+└── ChatInputActions（按钮组，内置模型 Popover 与 ModelComboBox）
 ```
+
+---
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- `ToolCallCard` 的展开/复制交互改用 `usePress`（@react-aria/interactions），移除遗留 `onClick`。
+- `ToolCallCard` 样式迁移到 `app/styles/utilities/tool-calls.css`，删除内联样式与重复类。
+- 复制按钮与展开按钮共享通用 pressProps，减少重复事件处理逻辑。
+
+**影响文件**：2 个（ToolCallCard.tsx、styles/utilities/tool-calls.css）
+
+**下次关注**：
+
+- 观察移动端/触屏场景下的 `usePress` 触发体验，必要时补充按压反馈。
+- 工具错误文案是否需要与全局 error-handler 再次对齐。
+
+## 输入区 UX 规则
+
+- 禁止连续用户消息：最后一条消息为用户且未在流式时会禁用发送并提示等待
+- 直接重试：点击“重试上一条消息”按钮会移除该消息并回填输入框，不弹确认
+- 成功重试后通过 Toast 轻量提示（国际化文案：retryTitle / retryDescription）
 
 ---
 
@@ -108,6 +136,9 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [expandedToolCalls, setExpandedToolCalls] = useState({});
   const [expandedThinkingBlocks, setExpandedThinkingBlocks] = useState({});
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [models, setModels] = useState<ModelConfig[]>([]);
 
   return (
     <>
@@ -131,16 +162,31 @@ export function ChatPanel() {
           }));
         }}
       />
+
       <ChatInputArea
         input={input}
         setInput={setInput}
         isChatStreaming={false}
         configLoading={false}
         llmConfig={config}
-        error={null}
         onSubmit={handleSubmit}
         onNewChat={handleNewChat}
         onHistory={handleShowHistory}
+        onRetry={handleRetry}
+        onCancel={handleCancel}
+        canSendNewMessage
+        lastMessageIsUser={false}
+        modelSelectorProps={{
+          providers,
+          models,
+          selectedModelId,
+          onSelectModel: setSelectedModelId,
+          isDisabled: false,
+          isLoading: false,
+          modelLabel:
+            models.find((m) => m.id === selectedModelId)?.displayName ??
+            "默认模型",
+        }}
       />
     </>
   );
@@ -254,8 +300,8 @@ app/components/chat/
 ├── ToolCallCard.tsx              # 工具调用卡片
 ├── ThinkingBlock.tsx             # 思考过程块
 ├── ChatInputArea.tsx             # 输入区域
-├── ChatInputActions.tsx          # 输入操作按钮
-├── ChatSessionHeader.tsx         # 会话头部
+├── ChatInputActions.tsx          # 输入操作按钮（含模型 Popover）
+├── ModelComboBox.tsx             # 模型选择器
 ├── ChatSessionMenu.tsx           # 会话菜单
 ├── ChatHistoryView.tsx           # 历史记录视图
 ├── HistoryToolbar.tsx            # 历史工具栏
@@ -264,6 +310,9 @@ app/components/chat/
 ├── EmptyState.tsx                # 空状态提示
 ├── TypingIndicator.tsx           # 打字指示器
 ├── typing-indicator.css          # 打字动画样式
+├── ChatShell.tsx                 # 聊天/历史视图外层容器
+├── MessagePane.tsx               # 消息区容器（包装 MessageList）
+├── Composer.tsx                  # 输入区容器（包装 ChatInputArea）
 ├── utils/
 │   ├── toolUtils.ts              # 工具调用工具函数
 │   ├── fileOperations.ts         # 文件操作相关
@@ -275,4 +324,4 @@ app/components/chat/
 
 ---
 
-**最后更新:** 2025年11月30日
+**最后更新:** 2025年12月08日

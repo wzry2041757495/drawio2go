@@ -1,144 +1,178 @@
-# Milestone 5: Agent设置UI
+# Milestone 5: Agent 设置 UI ✅
 
-## 目标
+## 完成状态
 
-创建独立的Agent设置面板，将系统提示词从LLM配置中分离出来，提供全局的AI助手行为配置界面。
+**已完成** - 2025-12-04 (与 Milestone 4 同批次提交)
 
-## 优先级
+## 实现概述
 
-🟡 **高优先级** - 核心UI功能
+创建独立的 Agent 设置面板，采用内联编辑模式替代弹窗模式，提供全局系统提示词配置，并导出校验辅助函数供父组件使用。
 
-## 任务列表
+## 核心功能
 
-### 1. 创建Agent设置面板
+### 1. AgentSettingsPanel 组件重构
 
-**文件**: `app/components/settings/AgentSettingsPanel.tsx`（新建）
+**文件**: `app/components/settings/AgentSettingsPanel.tsx`
 
-- [ ] 使用 `"use client"` 指令
-- [ ] 实现面板基本结构
-  - 标题：Agent 设置
-  - 描述：配置 AI 助手的全局行为
-- [ ] 实现系统提示词编辑区域
-  - 使用 `TextField` + `TextArea` 组件
-  - Label: "系统提示词"
-  - Description: "定义 AI 助手的行为规则和工作模式，对所有模型生效"
-  - rows={15} - 提供足够的编辑空间
-- [ ] 从存储层加载Agent设置
-  - 使用 `useStorageSettings.getAgentSettings()`
-  - 初始化时加载现有的系统提示词
-  - 不存在时使用 `DEFAULT_SYSTEM_PROMPT`
-- [ ] 实现"恢复默认提示词"按钮
-  - 使用 `Button` 组件，variant="secondary", size="sm"
-  - 点击时将系统提示词重置为 `DEFAULT_SYSTEM_PROMPT`
-  - 显示确认对话框（避免误操作）
-- [ ] 实现保存逻辑
-  - 与其他设置面板集成（在SettingsSidebar的统一保存按钮中）
-  - 调用 `useStorageSettings.saveAgentSettings()`
-  - 显示保存成功反馈
-- [ ] 实现变更检测
-  - 跟踪系统提示词是否被修改
-  - 与SettingsSidebar的 `hasChanges` 状态集成
-  - 未保存时切换tab提示用户
+内联编辑模式，接口和功能如下：
 
-### 2. 集成到设置侧边栏
+- **Props 接口**：
+  - `systemPrompt: string` - 当前系统提示词
+  - `onChange: (systemPrompt: string) => void` - 变更回调（无副作用，由父组件管理时间戳）
+  - `error?: string` - 可选错误信息（由父组件传入）
+
+- **UI 布局**：
+  - 使用 TextField + TextArea 直接编辑（rows=15, min-h-15rem, max-h-60vh）
+  - Label + Description 说明提示词作用
+  - "恢复默认"按钮（RotateCcw 图标，位于右上角）
+
+- **ConfirmDialog 集成**：
+  - 点击"恢复默认"触发 danger variant 确认对话框
+  - 确认后调用 `onChange(DEFAULT_SYSTEM_PROMPT)`
+  - 使用 react-i18next 的 `useTranslation("settings")` 并提供中文 fallback
+
+- **校验辅助**：
+  - 导出 `isSystemPromptValid(value: string): boolean` - 检查非空白
+  - 导出 `getSystemPromptError(value: string): string | null` - 获取错误信息
+  - 组件内部 useMemo 计算 derivedError，优先使用 props.error
+
+- **FieldError 显示**：
+  - 空白时显示 FieldError 组件（红色错误提示）
+
+### 2. SettingsSidebar 集成
 
 **文件**: `app/components/SettingsSidebar.tsx`
 
-- [ ] 在tab切换逻辑中添加 `agent` case
-- [ ] 渲染 `AgentSettingsPanel` 组件
-- [ ] 集成Agent设置的变更检测
-  - 加载Agent设置到本地状态
-  - 跟踪变更并更新 `hasChanges`
-- [ ] 在保存按钮处理中添加Agent设置保存
-  - 调用 `saveAgentSettings()`
-  - 更新已保存状态
-- [ ] 在取消按钮处理中添加Agent设置重置
-  - 恢复到上次保存的状态
+集成要点：
 
-### 3. 删除旧组件
+- **状态管理**：
+  - 使用 `useMemo` 计算 `systemPromptError`
+  - 传入 `systemPrompt` 和 `onChange` 而非整个 `agentSettings` 对象
+  - onChange 回调中更新 `agentSettings.systemPrompt` 和 `updatedAt`
 
-- [ ] **删除** `app/components/settings/SystemPromptEditor.tsx`
-  - 功能已完全合并到AgentSettingsPanel
+- **保存前校验**：
+  - 在 `handleSave` 开头调用 `isSystemPromptValid`
+  - 校验失败时显示 Toast（danger variant）并切换到 agent tab
+  - 校验通过后继续保存流程
+
+- **变更检测**：
+  - 继续使用现有的 `hasChanges` 逻辑（比较 agentSettings）
+
+### 3. 旧组件移除
+
+- ✅ **删除** `app/components/settings/SystemPromptEditor.tsx`
+  - 原弹窗编辑模式已被内联编辑完全替代
+
+### 4. 文档和国际化
+
+- **AGENTS.md 更新**：
+  - 移除 SystemPromptEditor 描述
+  - 更新 AgentSettingsPanel 接口文档
+  - 添加校验辅助函数说明
+  - 更新使用示例代码
+
+- **国际化文件**（`public/locales/{en-US,zh-CN}/settings.json`）：
+  - `agent.systemPrompt.reset` - "恢复默认"
+  - `agent.systemPrompt.errorEmpty` - "系统提示词不能为空"
+  - `agent.systemPrompt.resetTitle` - "恢复默认系统提示词"
+  - `agent.systemPrompt.resetConfirm` - 确认提示文案
 
 ## 涉及文件
 
-- ✨ 新建：`app/components/settings/AgentSettingsPanel.tsx`
-- 📝 修改：`app/components/SettingsSidebar.tsx`
-- 🗑️ 删除：`app/components/settings/SystemPromptEditor.tsx`
-- 📖 依赖：`app/hooks/useStorageSettings.ts`（使用存储方法）
-- 📖 依赖：`app/lib/config-utils.ts`（使用DEFAULT_SYSTEM_PROMPT）
+- ✅ 新建：`app/components/settings/AgentSettingsPanel.tsx`
+- ✅ 修改：`app/components/SettingsSidebar.tsx`
+- ✅ 修改：`app/components/settings/index.ts`（导出校验辅助函数）
+- ✅ 删除：`app/components/settings/SystemPromptEditor.tsx`
+- ✅ 修改：`app/components/settings/AGENTS.md`
+- ✅ 修改：`public/locales/en-US/settings.json`
+- ✅ 修改：`public/locales/zh-CN/settings.json`
+- 📖 依赖：`app/components/common/ConfirmDialog.tsx`（来自 Milestone 4）
+- 📖 依赖：`app/lib/config-utils.ts`（使用 DEFAULT_SYSTEM_PROMPT）
 
 ## HeroUI v3 组件使用
 
-### 必须遵循的规范
+### 遵循的规范
 
-- ✅ 使用复合组件模式
-- ✅ 使用语义化variant
-- ✅ 使用 `onPress` 而不是 `onClick`
+- ✅ 使用复合组件模式（TextField + Label + TextArea + Description + FieldError）
+- ✅ 使用语义化 variant（Button 使用 secondary，ConfirmDialog 使用 danger）
+- ✅ 使用 `onPress` 替代 `onClick`
+- ✅ 使用 `onChange={(event) => ...}` 处理输入变更
 
 ### 使用的组件
 
-- `TextField` + `Label` + `TextArea` + `Description`
-- `Button`（variant: secondary）
-- 可选：`AlertDialog`（用于恢复默认提示词的确认对话框）
+- `TextField` + `Label` + `TextArea` + `Description` + `FieldError`
+- `Button`（variant: secondary, size: sm）
+- `ConfirmDialog`（variant: danger，复用 Milestone 4 组件）
+- lucide-react 图标（RotateCcw）
 
-## 验收标准
+## 关键实现细节
 
-### UI显示
+1. **无副作用设计**：组件不直接操作存储，只接收 `systemPrompt` 和 `onChange`，由父组件负责持久化和时间戳管理
 
-- [ ] Agent设置面板正确渲染
-- [ ] 系统提示词TextArea显示正确
-- [ ] TextArea有足够的高度（15行）便于编辑
-- [ ] "恢复默认提示词"按钮位置合理
+2. **校验辅助导出**：导出 `isSystemPromptValid` 和 `getSystemPromptError`，供父组件在保存前校验使用
 
-### 数据操作
+3. **错误优先级**：优先使用 props.error（父组件传入），其次使用内部校验结果
 
-- [ ] 初始化时正确加载现有的系统提示词
-- [ ] 不存在时使用默认系统提示词
-- [ ] 编辑系统提示词后能正确保存
-- [ ] 恢复默认提示词功能正常
-- [ ] 恢复默认时显示确认对话框
+4. **ConfirmDialog 复用**：直接复用 Milestone 4 创建的通用确认对话框组件，variant="danger" 强调破坏性操作
 
-### 变更检测
+5. **国际化 fallback**：使用 `useTranslation("settings")` 并为所有文案提供中文 fallback 值
 
-- [ ] 编辑系统提示词后 `hasChanges` 正确更新
-- [ ] 保存后 `hasChanges` 重置
-- [ ] 取消后恢复到上次保存状态
-- [ ] 未保存时切换tab显示提示
+6. **响应式高度**：TextArea 设置 `rows={15}, min-h-[15rem], max-h-[60vh]`，适配不同屏幕尺寸
 
-### HeroUI规范
-
-- [ ] TextField使用复合组件模式
-- [ ] Button使用语义化variant
-- [ ] 深色/浅色主题适配正常
-
-### 集成测试
-
-- [ ] 与SettingsSidebar的保存/取消逻辑正确集成
-- [ ] 与其他设置tab的变更检测协同工作
-- [ ] 保存成功后显示反馈
+7. **SettingsSidebar 保存拦截**：在 handleSave 开头校验，失败时阻止保存并自动切换到 agent tab
 
 ## 依赖关系
 
-**前置依赖**:
+**前置依赖**：
 
-- ✅ Milestone 1（类型定义）
-- ✅ Milestone 2（存储层方法，特别是getAgentSettings和saveAgentSettings）
-- ✅ Milestone 3（设置导航和tab结构）
+- ✅ Milestone 1：类型定义（AgentSettings）
+- ✅ Milestone 2：存储层方法（getAgentSettings / saveAgentSettings）
+- ✅ Milestone 3：设置导航和 tab 结构（SettingsSidebar）
+- ✅ Milestone 4：ConfirmDialog 通用组件
 
-**后续依赖**:
+**后续影响**：
 
-- Milestone 7（API集成）将使用Agent设置中的系统提示词
+- Milestone 7（API 集成）将使用 Agent 设置中的系统提示词
 
-## 注意事项
+## 验收标准（已完成）
 
-1. **TextArea高度**: 设置足够的rows（15行），让用户可以看到更多内容，减少滚动
-2. **确认对话框**: 恢复默认提示词是破坏性操作，必须有确认对话框
-3. **全局生效**: 在UI上明确说明系统提示词对所有模型生效，不是单个模型的配置
-4. **保存反馈**: 保存成功后给予明确的反馈（Toast或Alert）
-5. **空白处理**: 不允许保存空白的系统提示词，至少要有一些内容
-6. **变更检测**: 使用准确的字符串比较检测变更，避免误判
+### UI 显示 ✅
 
-## 预计时间
+- ✅ Agent 设置面板正确渲染，内联编辑模式
+- ✅ TextArea 高度 15 行，便于查看和编辑
+- ✅ "恢复默认"按钮位于右上角，带 RotateCcw 图标
+- ✅ Label + Description 清晰说明作用域（全局生效）
 
-⏱️ **2-3 小时**
+### 数据操作 ✅
+
+- ✅ 初始化时正确加载现有的系统提示词
+- ✅ 编辑系统提示词实时更新状态
+- ✅ 恢复默认功能触发 ConfirmDialog（danger variant）
+- ✅ 确认后立即恢复 DEFAULT_SYSTEM_PROMPT
+
+### 校验 ✅
+
+- ✅ 空白提示词显示 FieldError（红色错误提示）
+- ✅ 保存前在 SettingsSidebar 校验，失败时阻止保存并切换到 agent tab
+- ✅ 显示 Toast 反馈校验失败原因
+
+### HeroUI 规范 ✅
+
+- ✅ TextField 复合组件模式（Label + TextArea + Description + FieldError）
+- ✅ Button 使用语义化 variant="secondary"
+- ✅ ConfirmDialog 使用 variant="danger"
+- ✅ 深色/浅色主题适配正常
+
+### 集成测试 ✅
+
+- ✅ 与 SettingsSidebar 的保存/取消逻辑正确集成
+- ✅ 与其他设置 tab 的变更检测协同工作
+- ✅ 保存成功后显示 Toast 反馈
+
+## 设计要点
+
+1. **内联编辑优于弹窗**：避免增加交互层级，提升编辑效率
+2. **校验辅助函数导出**：避免重复逻辑，由父组件统一在保存前校验
+3. **错误信息可控**：支持父组件传入 error prop，也支持内部推导
+4. **破坏性操作确认**：恢复默认使用 danger variant ConfirmDialog
+5. **国际化完整性**：所有文案提供 fallback，确保中英文环境均可用

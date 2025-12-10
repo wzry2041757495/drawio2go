@@ -6,7 +6,7 @@
 
 核心职责：
 
-1. **数据库生命周期管理**：初始化、迁移、关闭连接
+1. **数据库生命周期管理**：初始化、关闭连接（通过 migrations 目录幂等迁移到 v1 Schema）
 2. **CRUD 操作**：Settings、Projects、XMLVersions、Conversations、Messages 的完整增删改查
 3. **事务处理**：批量操作的原子性保证（如批量删除对话、批量创建消息）
 4. **跨项目隔离**：防止跨项目的非法访问（安全检查）
@@ -21,10 +21,10 @@
 
 ```
 electron/storage/
-├── sqlite-manager.js          # 核心 SQLite 管理类（主文件）
-├── migrations/
-│   ├── index.js               # 迁移运行器（版本控制）
-│   └── v1.js                  # v1 迁移：完整表结构定义
+├── sqlite-manager.js          # 核心 SQLite 管理类（主文件，负责调用迁移 + CRUD）
+└── migrations/                # SQLite 迁移脚本（PRAGMA user_version 驱动）
+    ├── index.js               # runSQLiteMigrations 调度入口
+    └── v1.js                  # V1 Schema 迁移（建表 + 索引 + 外键）
 ```
 
 ## SQLite 实现细节
@@ -46,7 +46,7 @@ db.pragma("foreign_keys = ON"); // 启用外键约束
 
 **初始化和生命周期**
 
-- `initialize()`：创建/打开数据库，运行迁移，创建默认工程和 WIP 版本
+- `initialize()`：创建/打开数据库 → 启用 WAL/外键 → 调用 `runSQLiteMigrations`（基于 `PRAGMA user_version`）→ 创建默认工程和 WIP 版本
 - `close()`：关闭连接，清理缓存语句
 
 **Settings（应用设置）**
@@ -110,7 +110,7 @@ db.pragma("foreign_keys = ON"); // 启用外键约束
 - 创建默认工程（DEFAULT_PROJECT_UUID）
 - 创建默认 WIP（Work In Progress）版本，避免首次连接时没有可用版本
 
-### 数据库表结构（v1 迁移）
+### 数据库表结构（v1）
 
 **settings**
 
@@ -146,11 +146,11 @@ CREATE TABLE xml_versions (
   name TEXT,
   description TEXT,
   source_version_id TEXT NOT NULL,
-  is_keyframe INTEGER NOT NULL DEFAULT 1,
-  diff_chain_depth INTEGER NOT NULL DEFAULT 0,
+  is_keyframe INTEGER NOT NULL,
+  diff_chain_depth INTEGER NOT NULL,
   xml_content TEXT NOT NULL,
   metadata TEXT,
-  page_count INTEGER NOT NULL DEFAULT 1,
+  page_count INTEGER NOT NULL,
   page_names TEXT,
   preview_svg BLOB,
   pages_svg BLOB,
@@ -158,7 +158,7 @@ CREATE TABLE xml_versions (
   created_at INTEGER NOT NULL,
   FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
 )
--- 索引：project, source_version_id
+-- 索引：project_uuid, created_at
 ```
 
 **conversations**
@@ -168,11 +168,13 @@ CREATE TABLE conversations (
   id TEXT PRIMARY KEY,
   project_uuid TEXT NOT NULL,
   title TEXT NOT NULL,
+  is_streaming INTEGER NOT NULL DEFAULT 0,
+  streaming_since INTEGER DEFAULT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE
 )
--- 索引：project
+-- 索引：project_uuid, updated_at, created_at
 ```
 
 **messages**
@@ -182,8 +184,7 @@ CREATE TABLE messages (
   id TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL,
   role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  tool_invocations TEXT,
+  parts_structure TEXT NOT NULL,
   model_name TEXT,
   xml_version_id TEXT,
   sequence_number INTEGER,
@@ -191,7 +192,7 @@ CREATE TABLE messages (
   FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
   FOREIGN KEY (xml_version_id) REFERENCES xml_versions(id) ON DELETE SET NULL
 )
--- 索引：conversation, xml_version, conversation+sequence_number
+-- 索引：conversation_id, xml_version_id, (conversation_id, sequence_number)
 ```
 
 **conversation_sequences**
@@ -199,7 +200,7 @@ CREATE TABLE messages (
 ```sql
 CREATE TABLE conversation_sequences (
   conversation_id TEXT PRIMARY KEY,
-  last_sequence INTEGER NOT NULL DEFAULT 0,
+  last_sequence INTEGER NOT NULL,
   FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 )
 ```
@@ -323,3 +324,19 @@ const data = JSON.parse(jsonString); // { version, exportedAt, conversations }
 - **electron**：IPC、userData 路径
 - **app/lib/storage/constants-shared.js**：共享常量（DEFAULT_PROJECT_UUID 等）
 - **app/lib/storage/default-diagram-xml.js**：默认 XML 内容
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 提取 SQL 占位符生成工具，消除多处字符串拼接与 off-by-one 风险。
+- `exportConversations` 查询复用统一语句构造，减少冗余并保持字段顺序一致。
+- 文档记录本次抽象，提醒新查询优先复用占位符与通用构造函数。
+
+**影响文件**：1 个（sqlite-manager.js）
+
+**下次关注**：
+
+- 评估占位符工具在批量插入/删除场景的性能，必要时增加缓存。

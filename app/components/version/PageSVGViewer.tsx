@@ -13,6 +13,7 @@ import {
   ListBox,
 } from "@heroui/react";
 import type { Selection } from "react-aria-components";
+import { usePress } from "@react-aria/interactions";
 import {
   X,
   ChevronLeft,
@@ -25,32 +26,16 @@ import {
   Minimize2,
 } from "lucide-react";
 import type { XMLVersion } from "@/app/lib/storage/types";
-import { deserializeSVGsFromBlob } from "@/app/lib/svg-export-utils";
-import { createBlobFromSource, type BinarySource } from "./version-utils";
-import { useStorageXMLVersions } from "@/app/hooks/useStorageXMLVersions";
+import { useVersionPages } from "@/app/hooks/useVersionPages";
+import { usePanZoomStage } from "@/app/hooks/usePanZoomStage";
 import { useAppTranslation } from "@/app/i18n/hooks";
-import { createLogger } from "@/lib/logger";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
-
-const logger = createLogger("PageSVGViewer");
 
 interface PageSVGViewerProps {
   version: XMLVersion;
   isOpen: boolean;
   onClose: () => void;
   defaultPageIndex?: number;
-}
-
-interface PageState {
-  id: string;
-  name: string;
-  index: number;
-  svg: string;
-}
-
-interface Point {
-  x: number;
-  y: number;
 }
 
 export function PageSVGViewer({
@@ -60,165 +45,90 @@ export function PageSVGViewer({
   defaultPageIndex = 0,
 }: PageSVGViewerProps) {
   const { t: tVersion } = useAppTranslation("version");
-  const [pages, setPages] = React.useState<PageState[] | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const { pages, isLoading, error, resolvedVersion } = useVersionPages(
+    version,
+    { enabled: isOpen },
+  );
   const [currentIndex, setCurrentIndex] = React.useState(defaultPageIndex);
-  const [scale, setScale] = React.useState(1);
-  const [offset, setOffset] = React.useState<Point>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const stageRef = React.useRef<HTMLDivElement | null>(null);
-  const pointerStart = React.useRef<{ point: Point; offset: Point } | null>(
-    null,
-  );
   const imageNaturalSize = React.useRef<{
     width: number;
     height: number;
   } | null>(null);
-  const { loadVersionSVGFields } = useStorageXMLVersions();
-  const [resolvedVersion, setResolvedVersion] =
-    React.useState<XMLVersion>(version);
+  const {
+    scale,
+    offset,
+    isPanning,
+    canPan,
+    zoomIn,
+    zoomOut,
+    resetView,
+    setScale,
+    setOffset,
+    handleWheel,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+  } = usePanZoomStage({
+    wheelZoomStrategy: "ctrl-only",
+    minScale: 0.2,
+    maxScale: 4,
+    zoomStep: 1.2,
+    isPanAllowed: (value) => value > 1.01,
+  });
+  const overlayPressTargetRef = React.useRef(false);
+  const handleOverlayPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    overlayPressTargetRef.current = event.target === event.currentTarget;
+  };
+  const { pressProps: overlayPressProps } = usePress({
+    onPress: () => {
+      if (overlayPressTargetRef.current) {
+        onClose();
+      }
+      overlayPressTargetRef.current = false;
+    },
+  });
 
   React.useEffect(() => {
     if (!isOpen) {
-      setPages(null);
-      setError(null);
-      setLoading(false);
-      setScale(1);
-      setOffset({ x: 0, y: 0 });
+      resetView();
+      setCurrentIndex(defaultPageIndex);
       setIsFullscreen(false);
-      setIsPanning(false);
-      setResolvedVersion(version);
-      return;
     }
+  }, [defaultPageIndex, isOpen, resetView]);
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setPages(null);
-    setScale(1);
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (!pages.length) return;
+    const safeIndex = Math.min(Math.max(defaultPageIndex, 0), pages.length - 1);
+    setCurrentIndex(safeIndex);
     setOffset({ x: 0, y: 0 });
-    setIsPanning(false);
-    setResolvedVersion(version);
-
-    (async () => {
-      try {
-        let targetVersion = version;
-
-        if (!version.pages_svg) {
-          try {
-            const enriched = await loadVersionSVGFields(version);
-            if (cancelled) return;
-            targetVersion = enriched;
-          } catch (err) {
-            if (!cancelled) {
-              logger.warn("加载 PageSVG 数据失败", err);
-              throw new Error(tVersion("viewer.error"));
-            }
-          }
-        }
-
-        if (!targetVersion.pages_svg) {
-          throw new Error(tVersion("viewer.error"));
-        }
-
-        if (cancelled) return;
-        setResolvedVersion(targetVersion);
-
-        const blob = createBlobFromSource(
-          targetVersion.pages_svg as BinarySource,
-          "application/json",
-        );
-
-        if (!blob) {
-          throw new Error(tVersion("viewer.error"));
-        }
-
-        const parsed = await deserializeSVGsFromBlob(blob);
-        if (cancelled) return;
-
-        const totalPages = parsed.length;
-
-        const normalized = parsed
-          .map((item, idx) => ({
-            id: item.id ?? `page-${idx + 1}`,
-            name:
-              item.name ??
-              tVersion("viewer.nav.current", {
-                current: idx + 1,
-                total: totalPages,
-              }),
-            index: typeof item.index === "number" ? item.index : idx,
-            svg: item.svg,
-          }))
-          .sort((a, b) => a.index - b.index);
-
-        if (!normalized.length) {
-          throw new Error(tVersion("viewer.error"));
-        }
-
-        setPages(normalized);
-        const safeIndex = Math.min(
-          Math.max(defaultPageIndex, 0),
-          normalized.length - 1,
-        );
-        setCurrentIndex(safeIndex);
-        setScale(1);
-        setOffset({ x: 0, y: 0 });
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : tVersion("viewer.error"),
-          );
-          setPages(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, version, defaultPageIndex, loadVersionSVGFields, tVersion]);
+  }, [defaultPageIndex, isOpen, pages, setOffset]);
 
   const currentPage = React.useMemo(() => {
-    if (!pages || pages.length === 0) return null;
+    if (pages.length === 0) return null;
     return pages[Math.min(Math.max(currentIndex, 0), pages.length - 1)];
   }, [pages, currentIndex]);
 
   const canPrev = currentIndex > 0;
-  const canNext = pages ? currentIndex < pages.length - 1 : false;
-  const isPannable = scale > 1.01;
+  const canNext = pages.length ? currentIndex < pages.length - 1 : false;
+  const isPannable = canPan;
+  const errorMessage = error?.message ?? null;
 
   const handlePrev = React.useCallback(() => {
-    if (!pages) return;
+    if (!pages.length) return;
     setCurrentIndex((idx) => Math.max(0, idx - 1));
     setOffset({ x: 0, y: 0 });
-  }, [pages]);
+  }, [pages, setOffset]);
 
   const handleNext = React.useCallback(() => {
-    if (!pages) return;
+    if (!pages.length) return;
     setCurrentIndex((idx) => Math.min(pages.length - 1, Math.max(0, idx + 1)));
     setOffset({ x: 0, y: 0 });
-  }, [pages]);
-
-  const zoomIn = React.useCallback(() => {
-    setScale((s) => Math.min(4, parseFloat((s + 0.2).toFixed(2))));
-  }, []);
-
-  const zoomOut = React.useCallback(() => {
-    setScale((s) => Math.max(0.2, parseFloat((s - 0.2).toFixed(2))));
-    setOffset((o) => ({ x: o.x * 0.8, y: o.y * 0.8 }));
-  }, []);
-
-  const resetView = React.useCallback(() => {
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
-  }, []);
+  }, [pages, setOffset]);
 
   const fitToStage = React.useCallback(() => {
     if (!stageRef.current || !currentPage || !imageNaturalSize.current) {
@@ -236,11 +146,11 @@ export function PageSVGViewer({
     const best = Math.max(0.2, Math.min(scaleX, scaleY) * 0.98);
     setScale(parseFloat(best.toFixed(2)));
     setOffset({ x: 0, y: 0 });
-  }, [currentPage, resetView]);
+  }, [currentPage, resetView, setOffset, setScale]);
 
   const handleSelectPage = React.useCallback(
     (keys: Selection) => {
-      if (!pages || !pages.length) return;
+      if (!pages.length) return;
       const key = extractSingleKey(keys);
       if (key === null) return;
       const target = Number(key);
@@ -249,7 +159,7 @@ export function PageSVGViewer({
       setCurrentIndex(clamped);
       setOffset({ x: 0, y: 0 });
     },
-    [pages],
+    [pages, setOffset],
   );
 
   React.useEffect(() => {
@@ -294,54 +204,17 @@ export function PageSVGViewer({
 
   const handleExportAll = React.useCallback(() => {
     if (!pages || !pages.length) return;
+    const targetVersion = resolvedVersion ?? version;
     const blob = new Blob([JSON.stringify(pages)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `version-${resolvedVersion.semantic_version}-pages.json`;
+    a.download = `version-${targetVersion.semantic_version}-pages.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [pages, resolvedVersion.semantic_version]);
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPannable) return;
-    setIsPanning(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerStart.current = {
-      point: { x: event.clientX, y: event.clientY },
-      offset,
-    };
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPanning || !pointerStart.current) return;
-    const dx = event.clientX - pointerStart.current.point.x;
-    const dy = event.clientY - pointerStart.current.point.y;
-    setOffset({
-      x: pointerStart.current.offset.x + dx,
-      y: pointerStart.current.offset.y + dy,
-    });
-  };
-
-  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setIsPanning(false);
-    pointerStart.current = null;
-  };
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    if (event.deltaY < 0) {
-      zoomIn();
-    } else {
-      zoomOut();
-    }
-  };
+  }, [pages, resolvedVersion, version]);
 
   const toggleFullscreen = () => {
     setIsFullscreen((prev) => !prev);
@@ -374,11 +247,11 @@ export function PageSVGViewer({
       aria-label={tVersion("aria.viewer.root", {
         version: version.semantic_version,
       })}
-      onClick={onClose}
+      onPointerDown={handleOverlayPointerDown}
+      {...overlayPressProps}
     >
       <Card.Root
         className={`page-svg-viewer__container${isFullscreen ? " page-svg-viewer__container--fullscreen" : ""}`}
-        onClick={(e) => e.stopPropagation()}
       >
         <Card.Header className="page-svg-viewer__header">
           <div className="page-svg-viewer__title">
@@ -445,12 +318,10 @@ export function PageSVGViewer({
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <div className="page-svg-viewer__counter" role="status">
-                {pages
-                  ? tVersion("viewer.nav.current", {
-                      current: currentIndex + 1,
-                      total: pages.length,
-                    })
-                  : tVersion("viewer.nav.current", { current: 0, total: 0 })}
+                {tVersion("viewer.nav.current", {
+                  current: pages.length ? currentIndex + 1 : 0,
+                  total: pages.length,
+                })}
               </div>
               <Button
                 size="sm"
@@ -472,7 +343,7 @@ export function PageSVGViewer({
                   <p>{tVersion("viewer.nav.hint")}</p>
                 </TooltipContent>
               </TooltipRoot>
-              {pages && pages.length > 1 && (
+              {pages.length > 1 && (
                 <Select
                   className="page-svg-viewer__select"
                   selectedKey={String(currentIndex)}
@@ -486,7 +357,7 @@ export function PageSVGViewer({
                     <Select.Value className="page-svg-viewer__select-value" />
                     <Select.Indicator />
                   </Select.Trigger>
-                  <Select.Content className="page-svg-viewer__select-content">
+                  <Select.Popover className="page-svg-viewer__select-content">
                     <ListBox className="page-svg-viewer__select-list">
                       {pages.map((page) => (
                         <ListBox.Item
@@ -499,7 +370,7 @@ export function PageSVGViewer({
                         </ListBox.Item>
                       ))}
                     </ListBox>
-                  </Select.Content>
+                  </Select.Popover>
                 </Select>
               )}
             </div>
@@ -532,7 +403,7 @@ export function PageSVGViewer({
                 size="sm"
                 variant="tertiary"
                 onPress={handleExportAll}
-                isDisabled={!pages?.length}
+                isDisabled={!pages.length}
               >
                 {tVersion("viewer.export.all")}
               </Button>
@@ -544,24 +415,24 @@ export function PageSVGViewer({
             ref={stageRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
-            onPointerUp={endPan}
-            onPointerCancel={endPan}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
           >
-            {loading && (
+            {isLoading && (
               <div className="page-svg-viewer__status">
                 <Spinner size="sm" />
                 <span>{tVersion("viewer.loading")}</span>
               </div>
             )}
 
-            {!loading && error && (
+            {!isLoading && errorMessage && (
               <div className="page-svg-viewer__status page-svg-viewer__status--error">
-                <span>{error}</span>
+                <span>{errorMessage}</span>
               </div>
             )}
 
-            {!loading && !error && currentPage && (
+            {!isLoading && !errorMessage && currentPage && (
               <div
                 className="page-svg-viewer__canvas"
                 style={{

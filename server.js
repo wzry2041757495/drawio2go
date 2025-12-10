@@ -38,6 +38,17 @@ app.prepare().then(() => {
   // 存储待处理的工具调用请求
   // key: requestId, value: { resolve, reject }
   const pendingRequests = new Map();
+  const emitToolExecute = (request) => {
+    const targetProject = request?.projectUuid || "(unknown-project)";
+    const targetConversation =
+      request?.conversationId || "(unknown-conversation)";
+
+    console.log(
+      `[Socket.IO] 广播工具请求: ${request?.toolName ?? "unknown"} -> project=${targetProject}, conversation=${targetConversation}, requestId=${request?.requestId ?? "n/a"}`,
+    );
+
+    io.emit("tool:execute", request);
+  };
 
   io.on("connection", (socket) => {
     console.log("[Socket.IO] 客户端已连接:", socket.id);
@@ -58,7 +69,17 @@ app.prepare().then(() => {
         if (success) {
           pending.resolve(result);
         } else {
-          pending.reject(new Error(error || "工具执行失败"));
+          let errorMsg = "工具执行失败";
+          if (typeof error === "string" && error.trim()) {
+            errorMsg = error;
+          } else if (error !== undefined) {
+            try {
+              errorMsg = JSON.stringify(error);
+            } catch {
+              errorMsg = String(error);
+            }
+          }
+          pending.reject(new Error(errorMsg || "工具执行失败"));
         }
         pendingRequests.delete(requestId);
       } else {
@@ -78,6 +99,7 @@ app.prepare().then(() => {
   // 将 io 实例和 pendingRequests 挂载到全局，供 API Routes 使用
   global.io = io;
   global.pendingRequests = pendingRequests;
+  global.emitToolExecute = emitToolExecute;
 
   httpServer.listen(port, (err) => {
     if (err) throw err;

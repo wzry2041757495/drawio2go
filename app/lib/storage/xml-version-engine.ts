@@ -10,6 +10,9 @@ import {
 } from "./constants";
 import type { XMLVersion } from "./types";
 import { normalizeDiagramXml } from "../drawio-xml-utils";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("XMLVersion");
 
 type DiffEngine = InstanceType<typeof diff_match_patch>;
 
@@ -21,6 +24,13 @@ export interface VersionPayloadResult {
   diff_chain_depth: number;
   source_version_id: string;
 }
+
+const buildKeyframePayload = (xml: string): VersionPayloadResult => ({
+  xml_content: xml,
+  is_keyframe: true,
+  diff_chain_depth: 0,
+  source_version_id: ZERO_SOURCE_VERSION_ID,
+});
 
 const createDiffEngine = (): DiffEngine => {
   const engine = new diff_match_patch();
@@ -44,14 +54,11 @@ export async function computeVersionPayload({
   baseVersion: XMLVersion | null;
   resolveVersionById: VersionResolver;
 }): Promise<VersionPayloadResult | null> {
+  const fallbackPayload = buildKeyframePayload(newXml);
+
   // WIP 版本始终为关键帧（全量存储），允许相同内容更新
   if (semanticVersion === WIP_VERSION) {
-    return {
-      xml_content: newXml,
-      is_keyframe: true,
-      diff_chain_depth: 0,
-      source_version_id: ZERO_SOURCE_VERSION_ID,
-    };
+    return fallbackPayload;
   }
 
   // WIP 版本是独立草稿，不应作为其他版本的 diff 链基础
@@ -60,25 +67,41 @@ export async function computeVersionPayload({
 
   // 历史版本：使用关键帧 + Diff 混合策略
   if (!effectiveBaseVersion) {
-    return {
-      xml_content: newXml,
-      is_keyframe: true,
-      diff_chain_depth: 0,
-      source_version_id: ZERO_SOURCE_VERSION_ID,
-    };
+    return fallbackPayload;
   }
 
-  const baseXml = await materializeVersionXml(
-    effectiveBaseVersion,
-    resolveVersionById,
-  );
+  let baseXml: string;
+  try {
+    baseXml = await materializeVersionXml(
+      effectiveBaseVersion,
+      resolveVersionById,
+    );
+  } catch (error) {
+    logger.warn("基线版本恢复失败，降级为关键帧", {
+      error,
+      semanticVersion,
+      baseVersionId: effectiveBaseVersion.id,
+      projectUuid: effectiveBaseVersion.project_uuid,
+    });
+    return fallbackPayload;
+  }
   if (baseXml === newXml) {
     return null;
   }
 
   const diffEngine = createDiffEngine();
-  const diffs = diffEngine.diff_main(baseXml, newXml);
-  diffEngine.diff_cleanupSemantic(diffs);
+  let diffs;
+  try {
+    diffs = diffEngine.diff_main(baseXml, newXml);
+    diffEngine.diff_cleanupSemantic(diffs);
+  } catch (error) {
+    logger.warn("Diff 计算失败，降级为全量存储", {
+      error,
+      semanticVersion,
+      baseVersionId: effectiveBaseVersion.id,
+    });
+    return fallbackPayload;
+  }
 
   const changedCharacters = diffs.reduce((count, diff) => {
     const [operation, text] = diff;
@@ -103,8 +126,18 @@ export async function computeVersionPayload({
     };
   }
 
-  const patches = diffEngine.patch_make(baseXml, newXml);
-  const patchText = diffEngine.patch_toText(patches);
+  let patchText: string;
+  try {
+    const patches = diffEngine.patch_make(baseXml, newXml);
+    patchText = diffEngine.patch_toText(patches);
+  } catch (error) {
+    logger.warn("Diff 生成或序列化失败，降级为全量存储", {
+      error,
+      semanticVersion,
+      baseVersionId: effectiveBaseVersion.id,
+    });
+    return fallbackPayload;
+  }
 
   return {
     xml_content: patchText,
@@ -177,7 +210,7 @@ async function resolveMaterializedXml(
         versionProject: version.project_uuid,
       },
     )}`;
-    console.error("[XMLVersion] 拒绝跨项目版本链", {
+    logger.error("拒绝跨项目版本链", {
       currentVersionId: version.id,
       currentProject: version.project_uuid,
       parentVersionId: parent.id,
@@ -196,10 +229,18 @@ async function resolveMaterializedXml(
   const patches = diffEngine.patch_fromText(version.xml_content);
   const [result, applied] = diffEngine.patch_apply(patches, baseXml);
   if (applied.some((flag: boolean) => !flag)) {
-    console.warn("[XMLVersion] Diff 应用异常", {
+    logger.error("Diff 应用失败，终止恢复", {
       versionId: version.id,
       sourceVersionId: version.source_version_id,
     });
+    throw new Error(
+      `[${ErrorCodes.VERSION_DIFF_INTEGRITY_ERROR}] ${i18n.t(
+        "errors:version.diffIntegrityError",
+        {
+          version: version.id,
+        },
+      )}`,
+    );
   }
 
   const normalized = normalizeDiagramXml(result);

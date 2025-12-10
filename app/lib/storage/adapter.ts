@@ -206,6 +206,13 @@ export interface StorageAdapter {
    */
   getConversationsByProject(projectUuid: string): Promise<Conversation[]>;
 
+  /**
+   * 标记对话的流式状态
+   * @param id 对话 ID
+   * @param isStreaming 是否正在流式
+   */
+  setConversationStreaming(id: string, isStreaming: boolean): Promise<void>;
+
   // ==================== Messages ====================
 
   /**

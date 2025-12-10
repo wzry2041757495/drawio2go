@@ -1,5 +1,5 @@
 import { inflateRaw } from "pako";
-import { ErrorCodes } from "@/app/errors/error-codes";
+import { ErrorCodes, type ErrorCode } from "@/app/errors/error-codes";
 import type { XMLValidationResult } from "@/app/types/drawio-tools";
 import { getDomParser } from "./dom-parser-cache";
 
@@ -7,6 +7,8 @@ const DATA_URI_PREFIX = "data:image/svg+xml;base64,";
 const DIAGRAM_TAG_REGEX = /<diagram\b([^>]*)>([\s\S]*?)<\/diagram>/gi;
 const COMPRESSED_ATTR_REGEX =
   /\scompressed\s*=\s*"(?:true|false)"|\scompressed\s*=\s*'(?:true|false)'/gi;
+const buildXmlError = (code: ErrorCode, message: string) =>
+  new Error(`[${code}] ${message}`);
 
 /**
  * 验证 XML 格式是否合法
@@ -53,8 +55,9 @@ export function validateXMLFormat(xml: string): XMLValidationResult {
  */
 export function normalizeDiagramXml(payload: string): string {
   if (!payload) {
-    throw new Error(
-      `[${ErrorCodes.XML_PAYLOAD_EMPTY}] XML payload cannot be empty`,
+    throw buildXmlError(
+      ErrorCodes.XML_PAYLOAD_EMPTY,
+      "XML payload cannot be empty",
     );
   }
 
@@ -71,8 +74,9 @@ export function normalizeDiagramXml(payload: string): string {
       resolvedXml = decodeBase64(base64Content);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[${ErrorCodes.XML_DECODE_FAILED}] Failed to decode Base64 XML: ${message}`,
+      throw buildXmlError(
+        ErrorCodes.XML_DECODE_FAILED,
+        `Failed to decode Base64 XML: ${message}`,
       );
     }
   } else {
@@ -82,14 +86,16 @@ export function normalizeDiagramXml(payload: string): string {
       decoded = decodeBase64(trimmed);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[${ErrorCodes.XML_DECODE_FAILED}] Failed to decode Base64 XML: ${message}`,
+      throw buildXmlError(
+        ErrorCodes.XML_DECODE_FAILED,
+        `Failed to decode Base64 XML: ${message}`,
       );
     }
 
     if (!decoded.trimStart().startsWith("<")) {
-      throw new Error(
-        `[${ErrorCodes.XML_INVALID_FORMAT}] Decoded result is not valid XML`,
+      throw buildXmlError(
+        ErrorCodes.XML_INVALID_FORMAT,
+        "Decoded result is not valid XML",
       );
     }
     resolvedXml = decoded;
@@ -112,8 +118,9 @@ export function decodeBase64(base64: string): string {
     return new TextDecoder("utf-8").decode(bytes);
   }
 
-  throw new Error(
-    `[${ErrorCodes.XML_ENV_NOT_SUPPORTED}] Base64 decoding is not supported in the current environment`,
+  throw buildXmlError(
+    ErrorCodes.XML_ENV_NOT_SUPPORTED,
+    "Base64 decoding is not supported in the current environment",
   );
 }
 
@@ -131,8 +138,9 @@ function decodeBase64ToUint8Array(base64: string): Uint8Array {
     return bytes;
   }
 
-  throw new Error(
-    `[${ErrorCodes.XML_ENV_NOT_SUPPORTED}] Base64 decoding is not supported in the current environment`,
+  throw buildXmlError(
+    ErrorCodes.XML_ENV_NOT_SUPPORTED,
+    "Base64 decoding is not supported in the current environment",
   );
 }
 

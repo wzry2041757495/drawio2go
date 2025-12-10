@@ -1,0 +1,35 @@
+/* ProjectSelector 组件样式（使用主题变量） */
+
+.project-selector-card {
+  border: 1px solid var(--border-default, var(--border));
+  background: var(--surface, var(--background));
+  border-radius: var(--radius, 0.5rem);
+  transition:
+    border-color var(--transition-normal, 200ms ease),
+    box-shadow var(--transition-normal, 200ms ease),
+    background-color var(--transition-normal, 200ms ease);
+}
+
+.project-selector-card--inactive:hover {
+  border-color: var(--border-hover, var(--border));
+  box-shadow: var(--shadow-2);
+  background: color-mix(in oklch, var(--surface) 92%, transparent);
+}
+
+.project-selector-card--active {
+  border: 2px solid var(--accent);
+  background: color-mix(
+    in oklch,
+    var(--accent) 8%,
+    var(--surface, transparent)
+  );
+  box-shadow: var(--shadow-2);
+}
+
+.project-selector__description {
+  color: var(--foreground-secondary, var(--text-secondary));
+}
+
+.project-selector__meta {
+  color: var(--foreground-tertiary, var(--text-tertiary));
+}

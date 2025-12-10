@@ -3,6 +3,9 @@
 import { useRef, useCallback } from "react";
 import { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import { useStorageXMLVersions } from "./useStorageXMLVersions";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("useDrawioEditor");
 
 /**
  * DrawIO 编辑器管理 Hook
@@ -20,24 +23,24 @@ export function useDrawioEditor(projectId?: string) {
    */
   const loadProjectXml = useCallback(async (): Promise<string> => {
     if (!projectId) {
-      console.warn("⚠️ 未提供 projectId，返回空 XML");
+      logger.warn("未提供 projectId，返回空 XML");
       return "";
     }
 
     try {
-      console.log(`📂 正在加载工程 ${projectId} 的 XML...`);
+      logger.info("正在加载工程 XML", { projectId });
       const xml = (await getCurrentXML(projectId)) ?? "";
 
       if (editorRef.current) {
         editorRef.current.loadDiagram(xml);
-        console.log("✅ XML 已加载到编辑器");
+        logger.info("XML 已加载到编辑器", { projectId });
       } else {
-        console.warn("⚠️ 编辑器引用不可用");
+        logger.warn("编辑器引用不可用", { projectId });
       }
 
       return xml;
     } catch (error) {
-      console.error("❌ 加载 XML 失败:", error);
+      logger.error("加载 XML 失败", { projectId, error });
       throw error;
     }
   }, [projectId, getCurrentXML]);
@@ -47,27 +50,27 @@ export function useDrawioEditor(projectId?: string) {
    */
   const saveEditorXml = useCallback(async () => {
     if (!projectId) {
-      console.warn("⚠️ 未提供 projectId，跳过保存");
+      logger.warn("未提供 projectId，跳过保存");
       return;
     }
 
     try {
       if (editorRef.current) {
-        console.log("📤 正在导出编辑器 XML...");
+        logger.debug("正在导出编辑器 XML", { projectId });
         const xml = await editorRef.current.exportDiagram();
 
         if (xml) {
-          console.log(`💾 正在保存 XML 到工程 ${projectId}...`);
+          logger.info("正在保存 XML", { projectId });
           await saveXML(xml, projectId);
-          console.log("✅ XML 已保存");
+          logger.info("XML 已保存", { projectId });
         } else {
-          console.warn("⚠️ 导出的 XML 为空");
+          logger.warn("导出的 XML 为空", { projectId });
         }
       } else {
-        console.warn("⚠️ 编辑器引用不可用");
+        logger.warn("编辑器引用不可用", { projectId });
       }
     } catch (error) {
-      console.error("❌ 保存 XML 失败:", error);
+      logger.error("保存 XML 失败", { projectId, error });
       throw error;
     }
   }, [projectId, saveXML]);
@@ -81,13 +84,13 @@ export function useDrawioEditor(projectId?: string) {
   const replaceWithXml = useCallback(
     async (xml: string, forceLoad = true) => {
       if (!projectId) {
-        console.warn("⚠️ 未提供 projectId，跳过替换");
+        logger.warn("未提供 projectId，跳过替换");
         return;
       }
 
       try {
         if (editorRef.current) {
-          console.log("🔄 正在替换编辑器内容...");
+          logger.info("正在替换编辑器内容", { projectId, forceLoad });
 
           if (forceLoad) {
             editorRef.current.loadDiagram(xml);
@@ -95,14 +98,14 @@ export function useDrawioEditor(projectId?: string) {
             editorRef.current.mergeDiagram(xml);
           }
 
-          console.log(`💾 正在保存 XML 到工程 ${projectId}...`);
+          logger.info("正在保存替换后的 XML", { projectId });
           await saveXML(xml, projectId);
-          console.log("✅ XML 已替换并保存");
+          logger.info("XML 已替换并保存", { projectId });
         } else {
-          console.warn("⚠️ 编辑器引用不可用");
+          logger.warn("编辑器引用不可用", { projectId });
         }
       } catch (error) {
-        console.error("❌ 替换 XML 失败:", error);
+        logger.error("替换 XML 失败", { projectId, error });
         throw error;
       }
     },

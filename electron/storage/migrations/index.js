@@ -1,25 +1,56 @@
 const { applySQLiteV1Migration } = require("./v1");
+const { STORAGE_VERSION } = require("../../app/lib/storage/constants-shared");
+
+const defaultLogger = {
+  info: (...args) => console.log("[SQLiteMigration]", ...args),
+  warn: (...args) => console.warn("[SQLiteMigration]", ...args),
+  error: (...args) => console.error("[SQLiteMigration]", ...args),
+};
 
 /**
- * SQLite 数据库版本号
- * v1 包含完整的表结构（含 sequence_number 和 conversation_sequences）
+ * 执行 SQLite 迁移（基于 PRAGMA user_version）。
+ * @param {import("better-sqlite3")} db
+ * @param {{info?: Function, warn?: Function, error?: Function}} logger
+ * @returns {number} 应用后的版本号
  */
-const SQLITE_SCHEMA_VERSION = 1;
+function runSQLiteMigrations(db, logger = defaultLogger) {
+  const log = logger || defaultLogger;
+  const currentVersion = Number(
+    db.pragma("user_version", { simple: true }) || 0,
+  );
+  const targetVersion = STORAGE_VERSION;
 
-function runSQLiteMigrations(db) {
-  const currentVersion = db.pragma("user_version", { simple: true }) || 0;
+  log.info("Run SQLite migrations", { currentVersion, targetVersion });
 
-  if (currentVersion < 1) {
-    console.log(
-      `[SQLite] Applying v1 migration (current version: ${currentVersion})`,
-    );
-    applySQLiteV1Migration(db);
+  if (currentVersion > targetVersion) {
+    log.warn("SQLite user_version is ahead of migration scripts", {
+      currentVersion,
+      targetVersion,
+    });
+    return currentVersion;
   }
 
-  db.pragma(`user_version = ${SQLITE_SCHEMA_VERSION}`);
+  if (currentVersion === targetVersion) {
+    log.info("SQLite schema up-to-date", { version: currentVersion });
+    return currentVersion;
+  }
+
+  for (let next = currentVersion + 1; next <= targetVersion; next += 1) {
+    switch (next) {
+      case 1:
+        log.info("Applying SQLite V1 migration");
+        applySQLiteV1Migration(db, log);
+        break;
+      default:
+        log.warn("No SQLite migration handler for version", { version: next });
+        break;
+    }
+  }
+
+  return targetVersion;
 }
 
 module.exports = {
   runSQLiteMigrations,
-  SQLITE_SCHEMA_VERSION,
+  applySQLiteV1Migration,
 };

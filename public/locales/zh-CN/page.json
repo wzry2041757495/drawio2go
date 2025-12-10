@@ -1,5 +1,6 @@
 {
   "main": {
+    "loadingEditor": "正在加载 DrawIO 编辑器...",
     "loadingProject": "正在加载项目...",
     "loadingProjectDetail": "请稍候，正在从存储层加载项目数据。",
     "loadingFailed": "加载项目失败",

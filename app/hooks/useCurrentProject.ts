@@ -12,15 +12,15 @@ import {
 } from "@/app/lib/storage/current-project";
 import type { Project } from "@/app/lib/storage";
 import { createDefaultDiagramXml } from "@/app/lib/storage/default-diagram-xml";
-import { generateProjectUUID, withTimeout } from "@/app/lib/utils";
+import { generateProjectUUID } from "@/app/lib/utils";
 import { createLogger } from "@/app/lib/logger";
-import { ErrorCodes } from "@/app/errors/error-codes";
+import {
+  getStorageTimeoutMessage,
+  withStorageTimeout,
+} from "@/app/lib/storage/timeout-utils";
 import i18n from "@/app/i18n/client";
 
 const logger = createLogger("useCurrentProject");
-const getStorageTimeoutMessage = (seconds: number) =>
-  `[${ErrorCodes.STORAGE_TIMEOUT}] ${i18n.t("errors:storage.timeout", { seconds })}`;
-
 /**
  * 当前工程管理 Hook
  *
@@ -90,33 +90,33 @@ export function useCurrentProject() {
 
     try {
       setLoading(true);
-      const storage = await withTimeout(
+      const storage = await withStorageTimeout(
         getStorage(),
-        5000,
         getStorageTimeoutMessage(5),
+        5000,
       );
 
       // 1. 检查统一存储层中的当前工程 ID
-      let projectId = await withTimeout(
+      let projectId = await withStorageTimeout(
         getStoredCurrentProjectId(storage),
-        3000,
         getStorageTimeoutMessage(3),
+        3000,
       );
 
       // 2. 如果没有，检查是否有任何工程
       if (!projectId) {
-        const allProjects = await withTimeout(
+        const allProjects = await withStorageTimeout(
           storage.getAllProjects(),
-          5000,
           getStorageTimeoutMessage(5),
+          5000,
         );
 
         if (allProjects.length === 0) {
           // 3. 没有任何工程，创建默认工程
-          const defaultProject = await withTimeout(
+          const defaultProject = await withStorageTimeout(
             createDefaultProject(),
-            10000,
             getStorageTimeoutMessage(10),
+            10000,
           );
           projectId = defaultProject.uuid;
           await persistCurrentProjectId(projectId, storage);
@@ -132,19 +132,19 @@ export function useCurrentProject() {
       }
 
       // 5. 加载工程信息
-      const project = await withTimeout(
+      const project = await withStorageTimeout(
         storage.getProject(projectId),
-        5000,
         getStorageTimeoutMessage(5),
+        5000,
       );
 
       if (!project) {
         // 工程不存在，创建默认工程
         logger.warn("未找到项目，创建默认工程以恢复", { projectId });
-        const defaultProject = await withTimeout(
+        const defaultProject = await withStorageTimeout(
           createDefaultProject(),
-          10000,
           getStorageTimeoutMessage(10),
+          10000,
         );
         await persistCurrentProjectId(defaultProject.uuid, storage);
         setCurrentProject(defaultProject);

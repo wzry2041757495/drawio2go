@@ -13,6 +13,7 @@
 2. **版本管理引擎**：基于关键帧 + Diff-Match-Patch 的高效版本存储与恢复
 3. **跨端兼容性**：两端实现接口一致，业务层无需关心平台差异
 4. **元数据管理**：页面数量、页面名称、SVG 预览的统一验证与规范化
+5. **迁移体系**：IndexedDB / SQLite 分别通过独立的 migrations 目录幂等迁移到 v1 Schema
 
 ## 架构设计
 
@@ -64,8 +65,10 @@
 
 **Conversations & Messages**：聊天记录
 
-- Conversations: { id, project_uuid, title, created_at, updated_at }
+- Conversations: { id, project_uuid, title, is_streaming?, streaming_since?, created_at, updated_at }
 - Messages: { id, conversation_id, role, content, tool_invocations?, model_name?, xml_version_id?, sequence_number?, created_at }
+
+> v2 变更：新增流式状态字段 `is_streaming` / `streaming_since`，并提供 `setConversationStreaming(id, isStreaming)` 接口，在开始流式时打点时间戳，结束/异常恢复时清除标记。
 
 ### 版本管理策略
 
@@ -330,9 +333,9 @@ const bytes = data instanceof Blob ? await data.arrayBuffer() : data;
 
 ### 2. 数据库初始化
 
-- **IndexedDB**：通过 `idb.openDB(..., { upgrade })` 回调创建表结构
-- **SQLite**：通过主进程迁移脚本 (`electron/storage/migrations/v1.js`) 创建表
-- **迁移机制**：版本号存储在 `pragma user_version`，保证幂等
+- **IndexedDB**：`idb.openDB(..., { upgrade })` 调用 `runIndexedDbMigrations`（`app/lib/storage/migrations/indexeddb`），幂等迁移到 v1 Schema（含流式字段、序列号索引、source_version_id 索引）
+- **SQLite**：`electron/storage/sqlite-manager.js` 调用 `runSQLiteMigrations`（`electron/storage/migrations`），基于 `PRAGMA user_version` 的增量迁移，当前目标版本为 1
+- **版本策略**：当前阶段允许破坏性更新，若 Schema 变更需手动提升版本并清理旧库
 
 ### 3. 日期格式
 
@@ -361,9 +364,11 @@ app/lib/storage/
 ├── page-metadata.ts              # XML 页面元数据提取
 ├── page-metadata-validators.ts   # 页面数据校验工具
 ├── index.ts                      # 统一导出
-├── migrations/
-│   └── indexeddb/v1.ts          # IndexedDB 初始化脚本
-└── default-diagram-xml.d.ts      # 默认XML模板类型定义
+├── default-diagram-xml.d.ts      # 默认XML模板类型定义
+└── migrations/                   # 存储迁移（IndexedDB）
+    └── indexeddb/
+        ├── index.ts              # 迁移调度入口 runIndexedDbMigrations
+        └── v1.ts                 # V1 Schema 迁移（建表+索引）
 ```
 
 ## 常见问题
@@ -383,3 +388,20 @@ A: `materializeVersionXml()` 会抛出错误。需要从备份恢复或联系管
 ### Q: 如何限制 SVG 预览大小？
 
 A: SVG 在持久化前通过 `compression-utils` 进行 deflate-raw 压缩，上限为 8MB（`MAX_SVG_BLOB_BYTES`）。超过上限则不存储。
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 新增 `event-utils.ts`，将会话/版本事件分派逻辑从适配器与 writers 中抽离复用。
+- 超时常量集中到 `timeout-utils.ts`，统一 Web/Electron 的存储操作超时配置。
+- 适配器与写入管线改用上述工具，删除重复的事件广播与超时定义。
+
+**影响文件**：4 个（event-utils.ts、timeout-utils.ts、writers.ts、indexeddb/sqlite 适配器）
+
+**下次关注**：
+
+- 根据不同环境的性能数据调整默认超时并补充 i18n 文案。
+- 评估是否需要为事件分派增加调试开关或节流。

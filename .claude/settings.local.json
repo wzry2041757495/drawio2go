@@ -81,7 +81,10 @@
       "Bash(npm test:*)",
       "Bash(pnpm run lint:*)",
       "Bash(npm run build:*)",
-      "WebFetch(domain:api-docs.deepseek.com)"
+      "WebFetch(domain:api-docs.deepseek.com)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(npm run lint:*)"
     ],
     "deny": [],
     "ask": []

@@ -2,29 +2,33 @@
 
 ## 模块概述
 
-`app/components/settings/` 目录包含了应用全局设置面板的 React 组件。该模块提供多个独立的设置面板，覆盖通用配置、LLM API 配置、文件路径配置和版本管理。所有配置项均支持国际化，并通过父组件管理状态持久化。
+`app/components/settings/` 目录包含了应用全局设置面板的 React 组件。该模块提供多个独立的设置面板，覆盖通用配置、供应商/模型管理、Agent 系统提示词和版本管理。所有配置项均支持国际化，并通过父组件管理状态持久化。
 
 **关键特性：**
 
-- 多标签页设置面板（通用、LLM、版本）
-- LLM API 连接测试
-- 系统提示词编辑器（弹窗）
+- 多标签页设置面板（通用、模型、Agent、版本）
+- 连接测试器（按需接入）
+- 系统提示词内联编辑（AgentSettingsPanel）
 - 语言切换
 - 文件路径选择（Electron 环境）
 - 版本自动快照策略
+
+> 说明：原 SystemPromptEditor 弹窗组件已下线，系统提示词编辑已合并到 AgentSettingsPanel。
 
 ---
 
 ## 设置面板列表
 
-| 面板                     | 职责             | 核心配置项                                                                     |
-| ------------------------ | ---------------- | ------------------------------------------------------------------------------ |
-| **GeneralSettingsPanel** | 通用设置         | 语言选择、默认文件路径                                                         |
-| **LLMSettingsPanel**     | LLM 配置         | API URL、Provider、API Key、Model Name、Temperature、MaxToolRounds、系统提示词 |
-| **VersionSettingsPanel** | 版本管理         | AI 编辑前自动创建版本快照                                                      |
-| **SystemPromptEditor**   | 系统提示词编辑器 | 弹窗编辑模式，支持恢复默认值                                                   |
-| **ConnectionTester**     | 连接测试器       | 测试 LLM API 连接可用性                                                        |
-| **SettingsNav**          | 设置导航栏       | 标签页切换（图标导航）                                                         |
+| 面板                     | 职责            | 核心配置项                                                                 |
+| ------------------------ | --------------- | -------------------------------------------------------------------------- |
+| **GeneralSettingsPanel** | 通用设置        | 语言选择、默认文件路径                                                     |
+| **ModelsSettingsPanel**  | 供应商/模型管理 | 供应商列表（Accordion）、模型预览、删除供应商级联处理、Provider/Model 编辑 |
+| **ProviderEditDialog**   | 供应商新增/编辑 | HeroUI Modal 弹窗，支持新增/编辑供应商、表单校验、连接测试、Toast 反馈     |
+| **ModelEditDialog**      | 模型新增/编辑   | HeroUI Modal 弹窗，模型名称/温度/工具轮次校验，能力（思考/视觉）勾选       |
+| **AgentSettingsPanel**   | Agent 配置      | 全局系统提示词（System Prompt）编辑                                        |
+| **VersionSettingsPanel** | 版本管理        | AI 编辑前自动创建版本快照                                                  |
+| **ConnectionTester**     | 连接测试器      | 测试 LLM API 连接可用性                                                    |
+| **SettingsNav**          | 设置导航栏      | 标签页切换（通用 / 模型 / Agent / 版本，图标导航）                         |
 
 ---
 
@@ -44,25 +48,44 @@ interface GeneralSettingsPanelProps {
 - **语言选择** - 切换应用UI语言（中文/英文），使用 LanguageSwitcher 组件
 - **默认文件路径** - 设置文件浏览器打开的初始目录（Electron 环境）
 
-### LLMSettingsPanel（LLM 配置）
+### ModelsSettingsPanel（供应商/模型管理）
 
 ```typescript
-interface LLMSettingsPanelProps {
-  config: LLMConfig;
-  onChange: (updates: Partial<LLMConfig>) => void;
+interface ModelsSettingsPanelProps {
+  providers: ProviderConfig[];
+  models: ModelConfig[];
+  activeModel: ActiveModelReference | null;
+  onProvidersChange: (providers: ProviderConfig[]) => void;
+  onModelsChange: (models: ModelConfig[]) => void;
+  onActiveModelChange: (activeModel: ActiveModelReference | null) => void;
 }
 ```
 
-**配置项：**
+**功能点：**
 
-- **API URL** - LLM 服务地址（如 https://api.openai.com/v1）
-- **Provider Type** - 供应商类型选择（openai-compatible、deepseek、openai-reasoning）
-- **API Key** - 认证密钥（密码输入框）
-- **Model Name** - 模型名称（如 gpt-4o、deepseek-chat）
-- **Temperature** - 生成多样性（0.0 - 2.0，滑块）
-- **Max Tool Rounds** - 最大工具调用轮数（1 - 20，滑块）
-- **System Prompt** - 系统提示词（弹窗编辑）
-- **连接测试** - 点击按钮测试当前配置的可用性
+- 供应商列表（Accordion 展示）与模型预览
+- 删除供应商（级联删除模型）并处理活动模型切换，使用 ConfirmDialog 二次确认
+- Provider 编辑/新增对话框（ProviderEditDialog）
+- 模型完整 CRUD：Card 列表 + 能力徽章（思考/视觉/工具）、Popover 菜单（编辑/设为默认/删除）
+- ModelEditDialog 支持新增/编辑模型，ConfirmDialog 统一模型删除确认
+- 操作完成后自动刷新 provider/model/activeModel，并通过 Toast 反馈
+
+### AgentSettingsPanel（Agent 配置）
+
+```typescript
+interface AgentSettingsPanelProps {
+  systemPrompt: string;
+  onChange: (systemPrompt: string) => void;
+  error?: string;
+}
+```
+
+**功能点：**
+
+- 内联 TextField + TextArea 直接编辑系统提示词（15 行默认高度）
+- 恢复默认：按钮 + `ConfirmDialog`（variant="danger"），使用 `DEFAULT_SYSTEM_PROMPT`
+- 校验辅助：导出 `isSystemPromptValid` / `getSystemPromptError`，空白时展示 `FieldError`
+- 由父组件管理保存逻辑与时间戳更新（保持无副作用）
 
 ### VersionSettingsPanel（版本管理）
 
@@ -89,18 +112,16 @@ GeneralSettingsPanel
 ├── LanguageSwitcher（语言切换器）
 └── 默认路径输入 + 文件夹选择
 
-LLMSettingsPanel
-├── API URL 输入框
-├── Provider 下拉选择
-│   └── getProviderOptions(t) -> ProviderOption[]
-├── API Key 密码框
-├── Model Name 输入框
-├── Temperature 滑块
-├── MaxToolRounds 滑块
-├── SystemPromptEditor（系统提示词编辑器）
-│   └── 弹窗编辑模式
-└── ConnectionTester（连接测试器）
-    └── 弹窗显示测试结果
+ModelsSettingsPanel
+├── Provider 列表（Accordion）
+├── Model 卡片列表（能力徽章、状态、操作菜单）
+├── ProviderEditDialog（新增/编辑）
+├── ModelEditDialog（新增/编辑模型）
+├── ConfirmDialog（供应商/模型删除确认）
+└── 删除供应商级联模型 & 活动模型切换处理
+
+AgentSettingsPanel
+└── ConfirmDialog（恢复默认提示词）
 
 VersionSettingsPanel
 └── 自动版本化开关
@@ -110,7 +131,9 @@ VersionSettingsPanel
 
 ## 国际化支持
 
-所有面板使用 `useAppTranslation("settings")` hook 获取国际化文本，支持以下翻译键：
+默认使用 `useAppTranslation("settings")` 获取文案；`AgentSettingsPanel` 直接使用 `react-i18next` 的 `useTranslation("settings")`，并为关键文案提供中文 fallback。
+
+支持的翻译键：
 
 **通用设置：**
 
@@ -148,6 +171,12 @@ settings.llm.maxToolRounds.description
 settings.systemPrompt.label
 settings.systemPrompt.button
 settings.systemPrompt.description
+
+settings.agent.title
+settings.agent.description
+settings.agent.systemPrompt.label
+settings.agent.systemPrompt.description
+settings.agent.futureFeatures
 ```
 
 **文件设置：**
@@ -169,6 +198,22 @@ settings.version.description
 settings.version.autoVersionOnAIEdit.label
 settings.version.autoVersionOnAIEdit.description
 ```
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 删除 `ModelsSettingsPanel` 中的过时 TODO 注释，避免误导性待办。
+- 确认此次清理不改动模型/供应商 CRUD 逻辑，仅做注释层面瘦身。
+- 文档记录本次范围，后续若重构模型表单需另行评估。
+
+**影响文件**：1 个（ModelsSettingsPanel.tsx）
+
+**下次关注**：
+
+- 观察模型管理面板是否需要 onPress 统一或表单校验复用。
 
 **连接测试：**
 
@@ -193,16 +238,32 @@ settings.connectionTest.close
 import {
   SettingsNav,
   GeneralSettingsPanel,
-  LLMSettingsPanel,
+  ModelsSettingsPanel,
+  AgentSettingsPanel,
   VersionSettingsPanel,
+  isSystemPromptValid,
   type SettingsTab,
 } from "@/app/components/settings";
+import { DEFAULT_AGENT_SETTINGS } from "@/app/lib/config-utils";
+import type {
+  ActiveModelReference,
+  AgentSettings,
+  ModelConfig,
+  ProviderConfig,
+} from "@/app/types/chat";
 
 export function SettingsModal() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-  const [config, setConfig] = useState<LLMConfig>(defaultConfig);
   const [generalPath, setGeneralPath] = useState("");
   const [version, setVersion] = useState({ autoVersionOnAIEdit: true });
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(
+    DEFAULT_AGENT_SETTINGS,
+  );
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [activeModel, setActiveModel] = useState<ActiveModelReference | null>(
+    null,
+  );
 
   return (
     <div className="settings-container">
@@ -216,10 +277,32 @@ export function SettingsModal() {
           />
         )}
 
-        {activeTab === "llm" && (
-          <LLMSettingsPanel
-            config={config}
-            onChange={(updates) => setConfig({ ...config, ...updates })}
+        {activeTab === "models" && (
+          <ModelsSettingsPanel
+            providers={providers}
+            models={models}
+            activeModel={activeModel}
+            onProvidersChange={setProviders}
+            onModelsChange={setModels}
+            onActiveModelChange={setActiveModel}
+          />
+        )}
+
+        {activeTab === "agent" && (
+          <AgentSettingsPanel
+            systemPrompt={agentSettings.systemPrompt}
+            onChange={(systemPrompt) =>
+              setAgentSettings((prev) => ({
+                ...prev,
+                systemPrompt,
+                updatedAt: Date.now(),
+              }))
+            }
+            error={
+              isSystemPromptValid(agentSettings.systemPrompt)
+                ? undefined
+                : "系统提示词不能为空"
+            }
           />
         )}
 
@@ -232,34 +315,19 @@ export function SettingsModal() {
 }
 ```
 
-### LLM 设置与测试
-
-```tsx
-// 用户修改 API 配置
-<LLMSettingsPanel
-  config={llmConfig}
-  onChange={(updates) => {
-    // 更新配置到状态
-    saveLLMConfig({ ...llmConfig, ...updates });
-  }}
-/>
-
-// ConnectionTester 在 LLMSettingsPanel 内部调用
-// 点击"测试连接"按钮 -> 发送 POST /api/test -> 弹窗显示结果
-```
-
 ### 系统提示词编辑
 
 ```tsx
-// 在 LLMSettingsPanel 中包含：
-<SystemPromptEditor
-  value={config.systemPrompt}
-  onChange={(systemPrompt) => onChange({ systemPrompt })}
+<AgentSettingsPanel
+  systemPrompt={systemPrompt}
+  onChange={(next) => {
+    setSystemPrompt(next);
+    setUpdatedAt(Date.now());
+  }}
+  error={isSystemPromptValid(systemPrompt) ? undefined : "系统提示词不能为空"}
 />
 
-// 用户点击"编辑系统提示词" -> 弹窗打开
-// 可以修改文本或点击"恢复默认"
-// 点击"保存"将新值回调给 onChange
+// 面板内联编辑（TextArea rows=15），右侧按钮触发 ConfirmDialog 恢复 DEFAULT_SYSTEM_PROMPT。
 ```
 
 ---
@@ -290,20 +358,45 @@ const getProviderOptions = (t: TFunction): ProviderOption[] => {
 
 ### 类型定义
 
-来自 `@/app/types/chat`：
+来自 `@/app/types/chat`（节选）：
 
 ```typescript
-interface LLMConfig {
+type ProviderType =
+  | "openai-reasoning"
+  | "openai-compatible"
+  | "deepseek-native";
+
+interface ProviderConfig {
+  id: string;
+  displayName: string;
+  providerType: ProviderType;
   apiUrl: string;
   apiKey: string;
-  modelName: string;
-  temperature: number;
-  maxToolRounds: number;
-  systemPrompt: string;
-  providerType: ProviderType;
+  models: string[];
+  customConfig: Record<string, JsonValue>;
+  createdAt: number;
+  updatedAt: number;
 }
 
-type ProviderType = "openai-compatible" | "deepseek" | "openai-reasoning";
+interface ModelConfig {
+  id: string;
+  providerId: string;
+  modelName: string;
+  displayName: string;
+  temperature: number;
+  maxToolRounds: number;
+  isDefault: boolean;
+  capabilities: ModelCapabilities;
+  enableToolsInThinking: boolean;
+  customConfig: Record<string, JsonValue>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface AgentSettings {
+  systemPrompt: string;
+  updatedAt: number;
+}
 ```
 
 ---
@@ -351,9 +444,9 @@ type ProviderType = "openai-compatible" | "deepseek" | "openai-reasoning";
 1. **状态管理** - 各面板通过 props 回调管理状态，父组件负责持久化
 2. **Electron 环境检测** - 文件夹选择功能依赖 `window.electron?.selectFolder()`
 3. **密码输入** - API Key 使用密码类型输入框，不在 HTML 中暴露
-4. **验证** - 各个输入框没有内置验证，应在父组件或 API 层处理
+4. **验证** - AgentSettingsPanel 暴露 `isSystemPromptValid` / `getSystemPromptError` 处理空白校验，其他输入仍需父组件或 API 层处理
 5. **异步操作** - ConnectionTester 中的网络请求可能超时，应设置合理的超时时间
-6. **国际化** - 所有文本均通过 i18n，需要对应的翻译文件支持
+6. **国际化** - 大部分面板使用 `useAppTranslation("settings")`；AgentSettingsPanel 使用 `useTranslation("settings")` 并内置中文 fallback
 
 ---
 
@@ -364,9 +457,10 @@ app/components/settings/
 ├── index.ts                      # 模块导出
 ├── SettingsNav.tsx               # 设置导航栏（标签页）
 ├── GeneralSettingsPanel.tsx      # 通用设置面板
-├── LLMSettingsPanel.tsx          # LLM 配置面板
+├── ModelsSettingsPanel.tsx       # 供应商/模型管理面板（Accordion）
+├── AgentSettingsPanel.tsx        # Agent 配置面板（System Prompt）
+├── ProviderEditDialog.tsx        # 供应商新增/编辑对话框
 ├── VersionSettingsPanel.tsx      # 版本管理设置面板
-├── SystemPromptEditor.tsx        # 系统提示词编辑器（弹窗）
 ├── ConnectionTester.tsx          # 连接测试器（弹窗）
 └── constants.ts                  # 常量定义（供应商选项等）
 ```
@@ -376,10 +470,10 @@ app/components/settings/
 ## 与其他模块的关系
 
 - **LanguageSwitcher** - GeneralSettingsPanel 引入，来自 `app/components/LanguageSwitcher`
-- **i18n hooks** - 所有面板使用 `useAppTranslation("settings")`
-- **类型定义** - 依赖 `@/app/types/chat` 的 LLMConfig 等类型
-- **配置工具** - 使用 `normalizeLLMConfig`（来自 `app/lib/config-utils`）
+- **i18n hooks** - 绝大多数面板使用 `useAppTranslation("settings")`；AgentSettingsPanel 直接使用 `react-i18next` 的 `useTranslation`
+- **类型定义** - 依赖 `@/app/types/chat` 的 ProviderConfig / ModelConfig / AgentSettings 等类型
+- **配置工具** - 按需复用存储工具与默认常量（如 DEFAULT_AGENT_SETTINGS）
 
 ---
 
-**最后更新:** 2025年11月30日
+**最后更新:** 2025年12月04日

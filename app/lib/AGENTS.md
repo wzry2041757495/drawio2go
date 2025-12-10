@@ -16,6 +16,8 @@
 - **storage/writers.ts**: 统一的 WIP/历史版本写入管线（归一化 + 页面元数据 + 关键帧/Diff 计算 + 事件派发）
 - **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id + 几何语义匹配的元素级高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
+- **model-capabilities.ts**: 模型能力白名单与查找辅助函数（supportsThinking / supportsVision）
+- **model-icons.ts**: 模型与供应商图标映射工具（@lobehub/icons 品牌图标 + lucide fallback，按模型规则/供应商/通用优先级）
 - **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
 - **format-utils.ts**: 统一的日期格式化工具（版本时间戳、会话日期）
 - **select-utils.ts**: HeroUI Select 选择值提取与标准化工具，消除重复实现
@@ -181,18 +183,18 @@ import { restoreXMLFromVersion } from "@/lib/storage/xml-version-engine";
 const xml = await restoreXMLFromVersion("version-id", storage);
 ```
 
-**迁移机制** (2025-11-17):
+**Schema 初始化** (2025-12-07 破坏性更新):
 
-- IndexedDB: `migrations/indexeddb/v*.ts` 负责初始化和升级
-- SQLite: 主进程 `migrations/v*.js` 根据 `pragma user_version` 依次执行
-- 升级逻辑必须幂等，禁止强制清库
+- 迁移脚本已移除，v1 即当前完整 Schema（含流式字段 is_streaming/streaming_since）
+- IndexedDB / SQLite 在初始化阶段直接建表，`DB_VERSION` / `pragma user_version` 固定为 1
+- 目前允许破坏性变更，必要时可提升版本并清库，无需编写迁移脚本
 
 ## DrawIO Socket.IO 调用流程
 
-1. 后端工具通过 `executeToolOnClient()` 获取当前 XML 或请求前端写入
+1. 后端工具通过 `executeToolOnClient(toolName, input, projectUuid, conversationId)` 获取当前 XML 或请求前端写入（必须携带项目/会话上下文）
 2. 前端（`useDrawioSocket` + `drawio-tools.ts`）访问统一存储层并响应请求
 3. 服务端使用 `drawio-xml-service.ts` 对 XML 进行 XPath 查询或批量操作
-4. 编辑完成后再次通过 Socket.IO 将新 XML 写回前端
+4. 编辑完成后再次通过 Socket.IO 将新 XML 写回前端（前端按 projectUuid 过滤执行）
 
 ## DrawIO XML 转接层（`drawio-xml-service.ts`）
 
@@ -200,12 +202,15 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 - **原子性**: 批量操作全部成功后才写回，失败时无副作用
 - **无推断**: 仅处理 XPath 与原始字符串，不做领域特化解析
 - **支持操作**: `set_attribute`, `remove_attribute`, `insert_element`, `remove_element`, `replace_element`, `set_text_content`
-- **主要函数**: `executeDrawioRead()` 查询，`executeDrawioEditBatch()` 批量编辑
+- **主要函数**: `executeDrawioRead(input, context)` 查询，`executeDrawioEditBatch(operations, context)` 批量编辑（需提供 `projectUuid`/`conversationId`）
 
 ## DrawIO AI 工具（`drawio-ai-tools.ts`）
 
-- **`drawio_read`**: 可选 `xpath` 参数，默认返回根节点。输出为结构化 JSON 数组
-- **`drawio_edit_batch`**: `operations` 数组，严格遵循“全部成功或全部失败”规则
+- **`drawio_read`**：三种模式
+  - **ls**（默认）：列出所有 mxCell，支持 `filter`=`all/vertices/edges`
+  - **xpath**：XPath 精确查询
+  - **id**：按 mxCell `id`（单个或数组）快捷定位
+- **`drawio_edit_batch`**：`operations` 数组，定位可使用 `id` 或 `xpath`（同时提供时优先 `id`），全部成功或全部回滚
 - 输入参数使用 Zod 校验并在内部调用 `drawio-xml-service.ts`
 
 ## 工具执行路由器（`tool-executor.ts`）
@@ -219,14 +224,18 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 - 使用统一存储抽象层（Electron: SQLite, Web: IndexedDB）
 - 提供 `getDrawioXML()`、`replaceDrawioXML()`、`saveDrawioXML()` 三个接口
 - 通过 `drawio-xml-updated` 自定义事件通知编辑器更新
+- `replaceDrawioXML` 新增 `skipExportValidation`：AI merge 场景（`drawio_edit_batch`）信任 `drawio-merge-success`，跳过 export 校验；完整 load/overwrite 仍保留验证
+- export 校验仅比较关键语义（mxCell 数量与 id 集合），避免因属性排序/默认值导致误报
 - XML 归一化在 `storage/writers.prepareXmlContext` 统一处理
 - **WIP 工作区**: 实时自动保存到 v0.0.0，不计入历史版本，每次写入刷新时间戳
 
 ## 配置规范化工具（`config-utils.ts`）
 
-- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`, `DEFAULT_LLM_CONFIG`
-- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `normalizeLLMConfig()`
-- **用途**: 验证 provider 合法性，规范化 API URL，设置默认值
+- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`
+- **LLM 存储键**: `settings.llm.providers`, `settings.llm.models`, `settings.llm.agent`, `settings.llm.activeModel`
+- **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS` / `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`
+- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `initializeDefaultLLMConfig()`
+- **用途**: 验证 provider 合法性，规范化 API URL，初始化存储中的默认 LLM 配置
 
 ## 其他工具函数
 
@@ -301,10 +310,22 @@ export function ensureParser(): {
 ### logger.ts - 日志工厂
 
 ```typescript
-export function createLogger(componentName: string): Logger;
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("VersionSidebar");
+logger.info("init", { projectId });
+logger.warn("save:debounced", { pending: queue.length });
+logger.error("save:failed", err);
 ```
 
-支持 debug/info/warn/error 级别，自动加组件前缀
+**设计**：轻量级工厂，自动附加组件名前缀，暴露 `debug` / `info` / `warn` / `error` 四个级别，输出格式与浏览器/Electron 控制台兼容。
+
+**使用最佳实践**：
+
+- 在文件顶部创建单例 `logger`，避免在渲染中重复创建
+- 日志 key 采用 `模块:动作` 命名，便于过滤（如 `autosave:debounce`）
+- 传递结构化对象而非拼接字符串，方便后续接入日志收集
+- 生产环境关闭 `debug`，保留 `info` 以上；高频路径使用防抖/采样避免噪声
 
 ## 工具链工作流
 
@@ -509,10 +530,10 @@ const tools = [
 
 ### 修改存储层
 
-1. **Schema 变更**: 新增迁移文件 `migrations/indexeddb/vN.ts` 和 `migrations/vN.js`
-2. **递增版本号**: 更新迁移脚本中的版本检查
-3. **向后兼容**: 迁移脚本必须处理旧版本数据
-4. **测试**: 验证 Web 和 Electron 端均能正确升级
+1. **Schema 变更**：直接更新建表逻辑（`indexeddb-storage.ts` / `electron/storage/sqlite-manager.js`），保持 v1 内联
+2. **版本号**：必要时递增 `DB_VERSION` / `pragma user_version`，当前阶段可接受清库
+3. **兼容性**：暂不维护迁移脚本，若需保留数据需另行设计迁移方案
+4. **测试**：验证 Web 与 Electron 均能正常初始化、读写
 
 ### 添加 AI 工具
 
@@ -531,3 +552,21 @@ const tools = [
 5. **迁移脚本幂等性**: 数据库迁移脚本必须可重复执行，不能因重复运行而损坏数据
 6. **Socket.IO 原子性**: `drawio_edit_batch` 操作必须全部成功或全部失败，不允许部分修改
 7. **日志级别控制**: 生产环境应关闭 debug 级别日志，避免性能影响
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- 移除 `resetDomParserCache` 死代码，缓存管理保持内部自维护。
+- UUID 生成、版本格式化、错误消息提取分别集中到 `utils.ts` / `version-utils.ts` / `error-handler.ts`，消除重复实现。
+- 新增 `blob-utils.ts` 统一二进制/Blob 转换，便于版本 SVG 与存储层共享。
+- 增补 `buildXmlError` / `buildToolError`，统一工具调用与存储错误结构。
+
+**影响文件**：5 个（dom-parser-cache.ts、utils.ts、version-utils.ts、error-handler.ts、blob-utils.ts）
+
+**下次关注**：
+
+- 检查所有调用方是否已迁移到新错误构建器与 UUID/版本工具。
+- 观察 blob-utils 在浏览器/Electron 的兼容性与性能表现。

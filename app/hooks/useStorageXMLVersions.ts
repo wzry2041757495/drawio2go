@@ -24,25 +24,17 @@ import {
   getParentVersion,
   isSubVersion,
 } from "@/app/lib/version-utils";
-import { runStorageTask, withTimeout } from "@/app/lib/utils";
+import { runStorageTask } from "@/app/lib/utils";
 import {
   persistHistoricalVersion,
   persistWipVersion,
   prepareXmlContext,
 } from "@/app/lib/storage/writers";
 import { materializeVersionXml } from "@/app/lib/storage/xml-version-engine";
+import { createLogger } from "@/lib/logger";
+import { withStorageTimeout } from "@/app/lib/storage/timeout-utils";
 
-const DEFAULT_STORAGE_TIMEOUT = 8000;
-const getStorageTimeoutMessage = (
-  seconds: number = DEFAULT_STORAGE_TIMEOUT / 1000,
-) =>
-  `[${ErrorCodes.STORAGE_TIMEOUT}] ${i18n.t("errors:storage.timeout", { seconds })}`;
-const DEFAULT_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
-
-const withStorageTimeout = <T>(
-  promise: Promise<T>,
-  message: string = DEFAULT_TIMEOUT_MESSAGE,
-) => withTimeout(promise, DEFAULT_STORAGE_TIMEOUT, message);
+const logger = createLogger("useStorageXMLVersions");
 
 /**
  * XML 版本管理 Hook
@@ -98,7 +90,7 @@ export function useStorageXMLVersions() {
           try {
             callback(versions);
           } catch (error) {
-            console.warn("[useStorageXMLVersions] 订阅回调执行失败", error);
+            logger.warn("订阅回调执行失败", { error });
           }
         });
       }
@@ -143,7 +135,7 @@ export function useStorageXMLVersions() {
             }
           })
           .catch((error) => {
-            console.error("[useStorageXMLVersions] 初始化订阅失败", error);
+            logger.error("初始化订阅失败", { error, projectUuid });
             setError(error as Error);
             if (active && onError) {
               onError(error);
@@ -173,7 +165,7 @@ export function useStorageXMLVersions() {
         detail.projectUuid ?? versionsCacheRef.current?.projectUuid;
       if (!projectUuid) return;
       loadVersionsForProject(projectUuid).catch((error) => {
-        console.error("[useStorageXMLVersions] 刷新版本缓存失败", error);
+        logger.error("刷新版本缓存失败", { error, projectUuid });
         setError(error as Error);
       });
     };
@@ -420,16 +412,16 @@ export function useStorageXMLVersions() {
               if (exportedXml && exportedXml.trim().length > 0) {
                 wipXml = exportedXml;
               } else {
-                console.warn(
-                  "[useStorageXMLVersions] 实时导出 XML 为空，改用存储的 WIP XML",
-                );
+                logger.warn("实时导出 XML 为空，改用存储的 WIP XML", {
+                  projectUuid,
+                });
               }
             }
           } catch (exportErr) {
-            console.error(
-              "SVG 导出前导出 XML 失败，使用存储的 WIP XML",
-              exportErr,
-            );
+            logger.error("SVG 导出前导出 XML 失败，使用存储的 WIP XML", {
+              projectUuid,
+              error: exportErr,
+            });
           }
 
           const context = prepareXmlContext(wipXml);
@@ -459,10 +451,10 @@ export function useStorageXMLVersions() {
               }
             } catch (err) {
               exportError = err as Error;
-              console.warn(
-                "[useStorageXMLVersions] 导出 SVG 失败，已降级为仅存储 XML，错误:",
-                exportError,
-              );
+              logger.warn("导出 SVG 失败，已降级为仅存储 XML", {
+                projectUuid,
+                error: exportError,
+              });
             }
           }
 
@@ -481,9 +473,10 @@ export function useStorageXMLVersions() {
           await loadVersionsForProject(projectUuid, storage);
 
           if (exportError) {
-            console.info(
-              "[useStorageXMLVersions] 版本已保存，但 SVG 未包含在记录中（导出失败）",
-            );
+            logger.info("版本已保存，但 SVG 未包含在记录中（导出失败）", {
+              projectUuid,
+              semanticVersion,
+            });
           }
 
           return {
@@ -522,7 +515,7 @@ export function useStorageXMLVersions() {
           }
 
           if (targetVersion.project_uuid !== projectUuid) {
-            console.error("[rollbackToVersion] 拒绝跨项目回滚", {
+            logger.error("拒绝跨项目回滚", {
               versionId,
               requestedProject: projectUuid,
               versionProject: targetVersion.project_uuid,

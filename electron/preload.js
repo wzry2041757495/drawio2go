@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld("electronStorage", {
     ipcRenderer.invoke("storage:createConversation", conversation),
   updateConversation: (id, updates) =>
     ipcRenderer.invoke("storage:updateConversation", id, updates),
+  setConversationStreaming: (id, isStreaming) =>
+    ipcRenderer.invoke("storage:setConversationStreaming", id, isStreaming),
   deleteConversation: (id) =>
     ipcRenderer.invoke("storage:deleteConversation", id),
   batchDeleteConversations: (ids) =>

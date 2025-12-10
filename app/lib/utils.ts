@@ -91,14 +91,23 @@ export function withTimeout<T>(
 }
 
 export function generateProjectUUID(): string {
+  return generateUUID("project");
+}
+
+/**
+ * 通用 UUID 生成器
+ * - 默认前缀为 "id"
+ * - 优先使用 crypto.randomUUID，回退到时间戳 + 随机字符串
+ */
+export function generateUUID(prefix: string = "id"): string {
   if (
     typeof crypto !== "undefined" &&
     typeof crypto.randomUUID === "function"
   ) {
-    return `project-${crypto.randomUUID()}`;
+    return `${prefix}-${crypto.randomUUID()}`;
   }
 
   const random = Math.random().toString(36).slice(2, 10);
   const timestamp = Date.now();
-  return `project-${timestamp}-${random}`;
+  return `${prefix}-${timestamp}-${random}`;
 }

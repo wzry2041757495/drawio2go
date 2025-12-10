@@ -8,42 +8,35 @@ import {
   useCallback,
   type FormEvent,
 } from "react";
-import { AlertTriangle } from "lucide-react";
+import { Alert } from "@heroui/react";
 import { useChat } from "@ai-sdk/react";
 import {
-  useStorageSettings,
-  useStorageConversations,
-  useStorageXMLVersions,
+  useChatLock,
+  useNetworkStatus,
+  useChatSessionsController,
+  useLLMConfig,
+  useOperationToast,
 } from "@/app/hooks";
-import { useToast } from "@/app/components/toast";
+import { useAlertDialog } from "@/app/components/alert";
 import { useI18n } from "@/app/i18n/hooks";
 import { DEFAULT_PROJECT_UUID } from "@/app/lib/storage";
-import type {
-  ChatUIMessage,
-  LLMConfig,
-  MessageMetadata,
-} from "@/app/types/chat";
-import type { Conversation } from "@/app/lib/storage";
-import { DEFAULT_LLM_CONFIG, normalizeLLMConfig } from "@/app/lib/config-utils";
-import {
-  createChatSessionService,
-  fingerprintMessage,
-  type ChatSessionService,
-} from "@/app/lib/chat-session-service";
+import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
+import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
+import { fingerprintMessage } from "@/app/lib/chat-session-service";
+import { generateUUID } from "@/app/lib/utils";
 
-// 导入拆分后的组件
-import ChatSessionHeader from "./chat/ChatSessionHeader";
-import MessageList from "./chat/MessageList";
-import ChatInputArea from "./chat/ChatInputArea";
 import ChatHistoryView from "./chat/ChatHistoryView";
+import ChatShell from "./chat/ChatShell";
+import MessagePane from "./chat/MessagePane";
+import Composer from "./chat/Composer";
 
 // 导出工具
-import {
-  exportBlobContent,
-  exportSessionsAsJson,
-  type ExportSessionPayload,
-} from "./chat/utils/fileExport";
+import { exportBlobContent } from "./chat/utils/fileExport";
 import { createLogger } from "@/lib/logger";
+import {
+  hasConversationIdMetadata,
+  isAbnormalExitNoticeMessage,
+} from "@/app/lib/type-guards";
 
 const logger = createLogger("ChatSidebar");
 
@@ -57,6 +50,7 @@ interface ChatSidebarProps {
 // ========== 主组件 ==========
 
 export default function ChatSidebar({
+  isOpen = true,
   currentProjectId,
   isSocketConnected = true,
 }: ChatSidebarProps) {
@@ -68,57 +62,183 @@ export default function ChatSidebar({
     Record<string, boolean>
   >({});
   const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ========== 存储 Hooks ==========
-  const { getLLMConfig, error: settingsError } = useStorageSettings();
+  // ========== Hook 聚合 ==========
+  const { t, i18n } = useI18n();
+  const isI18nReady = i18n.isInitialized && Boolean(i18n.resolvedLanguage);
+  const { open: openAlertDialog, close: closeAlertDialog } = useAlertDialog();
+  const { pushErrorToast, showNotice, extractErrorMessage } =
+    useOperationToast();
 
   const {
-    createConversation,
-    updateConversation,
-    deleteConversation: deleteConversationFromStorage,
-    batchDeleteConversations,
-    exportConversations,
-    getMessages,
-    addMessages,
-    subscribeToConversations,
-    subscribeToMessages,
-    error: conversationsError,
-  } = useStorageConversations();
+    llmConfig,
+    configLoading,
+    selectorLoading,
+    providers,
+    models,
+    selectedModelId,
+    selectedModelLabel,
+    loadModelSelector,
+    handleModelChange,
+  } = useLLMConfig();
 
-  const { getAllXMLVersions, saveXML } = useStorageXMLVersions();
+  const [showSocketRecoveryHint, setShowSocketRecoveryHint] = useState(false);
+  const [showOnlineRecoveryHint, setShowOnlineRecoveryHint] = useState(false);
 
-  // ========== 本地状态 ==========
-  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
-  const [conversationMessages, setConversationMessages] = useState<
-    Record<string, ChatUIMessage[]>
-  >({});
-  const [defaultXmlVersionId, setDefaultXmlVersionId] = useState<string | null>(
-    null,
+  const translate = useCallback(
+    (key: string, fallback?: string) => t(key, fallback ?? key),
+    [t],
   );
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const { t, i18n } = useI18n();
-  const { push } = useToast();
+
+  const resolvedProjectUuid = currentProjectId ?? DEFAULT_PROJECT_UUID;
+  const { canChat, lockHolder, acquireLock, releaseLock } =
+    useChatLock(resolvedProjectUuid);
+  const { isOnline, offlineReason } = useNetworkStatus({
+    socketConnected: isSocketConnected,
+  });
+
+  const truncatedLockHolder = useMemo(() => {
+    if (!lockHolder) return null;
+    if (lockHolder.length <= 16) return lockHolder;
+    return `${lockHolder.slice(0, 8)}...${lockHolder.slice(-4)}`;
+  }, [lockHolder]);
+
+  const offlineReasonLabel = useMemo(() => {
+    switch (offlineReason) {
+      case "browser-offline":
+        return t("chat:status.networkOfflineBrowser", "浏览器离线");
+      case "ping-fail":
+        return t(
+          "chat:status.networkOfflinePing",
+          "心跳失败（可能无外网或被防火墙拦截）",
+        );
+      case "socket-disconnect":
+        return t("chat:status.networkOfflineSocket", "Socket 连接已断开");
+      default:
+        return null;
+    }
+  }, [offlineReason, t]);
+
+  const lockBlockedTitle = useMemo(
+    () => t("chat:messages.chatLockedTitle", "聊天被其他标签页占用"),
+    [t],
+  );
+  const lockBlockedMessage = useMemo(
+    () => t("chat:messages.chatLockedHint", "当前项目正在其他标签页中进行聊天"),
+    [t],
+  );
 
   // ========== 引用 ==========
   const sendingSessionIdRef = useRef<string | null>(null);
-  const creatingConversationPromiseRef = useRef<{
-    promise: Promise<Conversation>;
-    conversationId: string;
-  } | null>(null);
-  const creatingDefaultConversationRef = useRef(false);
-  const chatServiceRef = useRef<ChatSessionService | null>(null);
+  const alertOwnerRef = useRef<
+    "socket" | "single-delete" | "batch-delete" | null
+  >(null);
+  const socketAlertSeenRef = useRef(false);
+  const socketStopHandledRef = useRef(false);
+  const previousSocketStatusRef = useRef<boolean | null>(null);
+  const pageUnloadHandledRef = useRef(false);
+  const streamingFlagCacheRef = useRef<Record<string, boolean>>({});
+  const forceStopReasonRef = useRef<"sidebar" | "history" | null>(null);
+  const wasOfflineRef = useRef(false);
+  const previousOnlineStatusRef = useRef<boolean | null>(null);
 
   // ========== 派生状态 ==========
-  const activeConversation = useMemo(() => {
-    return conversations.find((c) => c.id === activeConversationId) || null;
-  }, [conversations, activeConversationId]);
+  const fallbackModelName = useMemo(
+    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
+    [llmConfig],
+  );
+
+  const ensureMessageMetadata = useCallback(
+    (message: ChatUIMessage): ChatUIMessage => {
+      const rawMetadata: MessageMetadata = message.metadata ?? {};
+
+      if (hasConversationIdMetadata(message)) {
+        logger.warn(
+          "[ChatSidebar] 忽略消息 metadata 中的 conversationId 字段",
+          {
+            messageId: message.id,
+          },
+        );
+      }
+
+      const normalizedMetadata: MessageMetadata = {
+        modelName:
+          typeof rawMetadata.modelName === "string"
+            ? rawMetadata.modelName
+            : (rawMetadata.modelName ?? null),
+        createdAt:
+          typeof rawMetadata.createdAt === "number"
+            ? rawMetadata.createdAt
+            : undefined,
+        isCancelled: rawMetadata.isCancelled === true,
+        isDisconnected: rawMetadata.isDisconnected === true,
+        isAbnormalExitNotice: rawMetadata.isAbnormalExitNotice === true,
+        disconnectReason:
+          typeof rawMetadata.disconnectReason === "string"
+            ? rawMetadata.disconnectReason
+            : undefined,
+      };
+
+      const resolvedMetadata: MessageMetadata = {
+        ...normalizedMetadata,
+        modelName: normalizedMetadata.modelName ?? fallbackModelName,
+        createdAt: normalizedMetadata.createdAt ?? Date.now(),
+      };
+
+      if (
+        !hasConversationIdMetadata(message) &&
+        message.metadata?.modelName === resolvedMetadata.modelName &&
+        message.metadata?.createdAt === resolvedMetadata.createdAt &&
+        message.metadata?.isAbnormalExitNotice ===
+          resolvedMetadata.isAbnormalExitNotice &&
+        message.metadata?.isCancelled === resolvedMetadata.isCancelled &&
+        message.metadata?.isDisconnected === resolvedMetadata.isDisconnected &&
+        message.metadata?.disconnectReason === resolvedMetadata.disconnectReason
+      ) {
+        return message;
+      }
+
+      return {
+        ...message,
+        metadata: resolvedMetadata,
+      };
+    },
+    [fallbackModelName],
+  );
+
+  const handleSaveError = useCallback(
+    (message: string) => {
+      const normalizedMessage = message?.trim() ?? "";
+      if (normalizedMessage) {
+        pushErrorToast(normalizedMessage);
+      }
+    },
+    [pushErrorToast],
+  );
+
+  const {
+    conversations,
+    activeConversationId,
+    setActiveConversationId,
+    conversationMessages,
+    abnormalExitConversations,
+    chatService,
+    createConversation,
+    ensureMessagesForConversation,
+    resolveConversationId,
+    startTempConversation,
+    removeConversationsFromState,
+    handleAbnormalExitIfNeeded,
+    markConversationAsStreaming,
+    markConversationAsCompleted,
+    exportConversations,
+    batchDeleteConversations,
+  } = useChatSessionsController({
+    currentProjectId,
+    t: translate,
+    ensureMessageMetadata,
+    onSaveError: handleSaveError,
+  });
 
   const initialMessages = useMemo<ChatUIMessage[]>(() => {
     return activeConversationId
@@ -126,307 +246,79 @@ export default function ChatSidebar({
       : [];
   }, [activeConversationId, conversationMessages]);
 
-  // 为 ChatSessionMenu 构造兼容的数据格式
-  const fallbackModelName = useMemo(
-    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
-    [llmConfig],
-  );
-
-  const pushErrorToast = useCallback(
-    (message: string, title = t("toasts.operationFailedTitle")) => {
-      push({
-        variant: "danger",
-        title,
-        description: message,
-      });
-    },
-    [push, t],
-  );
-
-  const extractErrorMessage = useCallback((error: unknown): string | null => {
-    if (!error) return null;
-    if (typeof error === "string") return error;
-    if (error instanceof Error) return error.message;
-    if (typeof error === "object" && "message" in error) {
-      const maybeMessage = (error as { message?: unknown }).message;
-      if (typeof maybeMessage === "string") return maybeMessage;
-    }
-    return null;
+  useEffect(() => {
+    console.info("[ChatSidebar] calling loadModelSelector on mount");
+    void loadModelSelector();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showNotice = useCallback(
-    (message: string, status: "success" | "warning" | "danger") => {
-      const title =
-        status === "success"
-          ? t("toasts.operationSuccessTitle")
-          : status === "warning"
-            ? t("toasts.operationWarningTitle")
-            : t("toasts.operationFailedTitle");
-      push({
-        variant: status,
-        title,
-        description: message,
-      });
-    },
-    [push, t],
-  );
-
-  const ensureMessageMetadata = useCallback(
-    (message: ChatUIMessage): ChatUIMessage => {
-      const metadata = (message.metadata as MessageMetadata | undefined) ?? {};
-      const resolvedMetadata: MessageMetadata = {
-        modelName: metadata.modelName ?? fallbackModelName,
-        createdAt: metadata.createdAt ?? Date.now(),
-      };
-
-      if (
-        metadata.modelName === resolvedMetadata.modelName &&
-        metadata.createdAt === resolvedMetadata.createdAt
-      ) {
-        return message;
-      }
-
-      return {
-        ...message,
-        metadata: {
-          ...metadata,
-          ...resolvedMetadata,
-        },
-      };
-    },
-    [fallbackModelName],
-  );
-
-  const handleMessagesChange = useCallback(
-    (conversationId: string, messages: ChatUIMessage[]) => {
-      setConversationMessages((prev) => ({
-        ...prev,
-        [conversationId]: messages,
-      }));
-    },
-    [],
-  );
-
-  const handleSaveError = useCallback(
-    (message: string) => {
-      const normalizedMessage = message?.trim() ?? "";
-      setSaveError(normalizedMessage || null);
-
-      if (normalizedMessage) {
-        push({ variant: "danger", description: normalizedMessage });
-      }
-    },
-    [push],
-  );
-
-  if (!chatServiceRef.current) {
-    chatServiceRef.current = createChatSessionService(
-      {
-        getMessages,
-        addMessages,
-        updateConversation,
-        subscribeToConversations,
-        subscribeToMessages,
-      },
-      {
-        ensureMessageMetadata,
-        defaultXmlVersionId,
-        onMessagesChange: handleMessagesChange,
-        onSavingChange: setIsSaving,
-        onSaveError: handleSaveError,
-      },
-    );
-  }
-
-  const chatService = chatServiceRef.current;
-
+  // Web 端偶发出现模型列表为空（IndexedDB 数据已存在但未加载到状态）。
+  // 当侧栏重新展开或依然为空时主动重载一次，避免卡在“暂无可用模型”空态。
   useEffect(() => {
-    chatService.setEnsureMessageMetadata(ensureMessageMetadata);
-  }, [chatService, ensureMessageMetadata]);
-
-  useEffect(() => {
-    chatService.updateDefaultXmlVersionId(defaultXmlVersionId ?? null);
-  }, [chatService, defaultXmlVersionId]);
-
-  useEffect(
-    () => () => {
-      chatService.dispose();
-    },
-    [chatService],
-  );
-
-  const ensureMessagesForConversation = useCallback(
-    (conversationId: string): Promise<ChatUIMessage[]> => {
-      return chatService.ensureMessages(conversationId);
-    },
-    [chatService],
-  );
-
-  const resolveConversationId = useCallback(
-    async (conversationId: string): Promise<string> => {
-      if (!conversationId.startsWith("temp-")) return conversationId;
-      if (
-        creatingConversationPromiseRef.current &&
-        creatingConversationPromiseRef.current.conversationId === conversationId
-      ) {
-        const created = await creatingConversationPromiseRef.current.promise;
-        setActiveConversationId(created.id);
-        return created.id;
-      }
-      return conversationId;
-    },
-    [],
-  );
-
-  const removeConversationsFromState = useCallback(
-    (ids: string[]) => {
-      setConversationMessages((prev) => {
-        const next = { ...prev };
-        ids.forEach((id) => delete next[id]);
-        return next;
-      });
-      chatService.removeConversationCaches(ids);
-
-      // 清理双向指纹缓存，防止已删除会话的指纹残留导致内存增长
-      ids.forEach((id) => {
-        delete lastSyncedToUIRef.current[id];
-        delete lastSyncedToStoreRef.current[id];
-      });
-    },
-    [chatService],
-  );
-
-  const exportSessions = useCallback(
-    async (sessions: ExportSessionPayload[], defaultFilename: string) => {
-      const success = await exportSessionsAsJson(sessions, defaultFilename, {
-        t,
-        locale: i18n.language,
-      });
-      if (success) {
-        showNotice(t("toasts.sessionExportSuccess"), "success");
-      } else {
-        showNotice(
-          t("toasts.sessionExportFailed", {
-            error: t("toasts.unknownError"),
-          }),
-          "danger",
-        );
-      }
-    },
-    [showNotice, t, i18n.language],
-  );
-
-  // ========== 初始化 ==========
-  useEffect(() => {
-    async function initialize() {
-      try {
-        // 1. 加载 LLM 配置
-        const config = await getLLMConfig();
-        if (config) {
-          const normalized = normalizeLLMConfig(config);
-          setLlmConfig(normalized);
-        } else {
-          setLlmConfig({ ...DEFAULT_LLM_CONFIG });
-        }
-        setConfigLoading(false);
-
-        // 2. 确保有默认 XML 版本
-        const xmlVersions = await getAllXMLVersions();
-        let defaultVersionId: string;
-
-        if (xmlVersions.length === 0) {
-          // 创建默认空白 XML 版本
-          const defaultXml = await saveXML(
-            '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>',
-            currentProjectId,
-            undefined,
-            t("chat:messages.defaultVersion"),
-            t("chat:messages.initialVersion"),
-          );
-          defaultVersionId = defaultXml;
-        } else {
-          // 使用最新的 XML 版本
-          defaultVersionId = xmlVersions[0].id;
-        }
-        setDefaultXmlVersionId(defaultVersionId);
-      } catch (error) {
-        logger.error("[ChatSidebar] 初始化失败:", error);
-        // 降级到默认配置
-        setLlmConfig({ ...DEFAULT_LLM_CONFIG });
-        setConfigLoading(false);
-      }
+    if (!isOpen) return;
+    if (providers.length === 0 || models.length === 0) {
+      void loadModelSelector({ preserveSelection: true });
     }
-
-    initialize();
-  }, [getLLMConfig, getAllXMLVersions, saveXML, currentProjectId, t]);
-
-  useEffect(() => {
-    const projectUuid = currentProjectId ?? DEFAULT_PROJECT_UUID;
-    let isUnmounted = false;
-
-    const unsubscribe = chatService.subscribeConversations(
-      projectUuid,
-      (list) => {
-        if (isUnmounted) return;
-        setConversations(list);
-
-        if (list.length === 0) {
-          if (creatingDefaultConversationRef.current) return;
-          creatingDefaultConversationRef.current = true;
-          const defaultConversationTitle = t(
-            "chat:messages.defaultConversation",
-          );
-          createConversation(defaultConversationTitle, projectUuid)
-            .then((newConv) => {
-              setConversationMessages((prev) => ({
-                ...prev,
-                [newConv.id]: prev[newConv.id] ?? [],
-              }));
-              setActiveConversationId(newConv.id);
-            })
-            .catch((error) => {
-              logger.error("[ChatSidebar] 创建默认对话失败:", error);
-            })
-            .finally(() => {
-              creatingDefaultConversationRef.current = false;
-            });
-          return;
-        }
-
-        setActiveConversationId((prev) => {
-          if (prev && list.some((conv) => conv.id === prev)) return prev;
-          return list[0]?.id ?? null;
-        });
-      },
-      (error) => {
-        logger.error("[ChatSidebar] 会话订阅失败:", error);
-      },
-    );
-
-    return () => {
-      isUnmounted = true;
-      unsubscribe?.();
-    };
-  }, [createConversation, currentProjectId, t, chatService]);
-
-  useEffect(() => {
-    if (!activeConversationId) return undefined;
-
-    const unsubscribe = chatService.subscribeMessages(
-      activeConversationId,
-      (error) => {
-        logger.error("[ChatSidebar] 消息订阅失败:", error);
-      },
-    );
-
-    void chatService.ensureMessages(activeConversationId);
-
-    return unsubscribe;
-  }, [activeConversationId, chatService]);
+  }, [isOpen, providers.length, models.length, loadModelSelector]);
 
   useEffect(() => {
     chatService.handleConversationSwitch(activeConversationId);
   }, [chatService, activeConversationId]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    void handleAbnormalExitIfNeeded(activeConversationId);
+  }, [activeConversationId, handleAbnormalExitIfNeeded]);
+
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+
+    const recoverUnloadData = async () => {
+      const keys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("chat:unload:"),
+      );
+
+      for (const key of keys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) {
+            localStorage.removeItem(key);
+            continue;
+          }
+
+          const parsed = JSON.parse(raw) as {
+            conversationId?: string;
+            messages?: ChatUIMessage[];
+          };
+
+          if (
+            !parsed ||
+            typeof parsed.conversationId !== "string" ||
+            !Array.isArray(parsed.messages)
+          ) {
+            localStorage.removeItem(key);
+            continue;
+          }
+
+          logger.info("[ChatSidebar] 恢复卸载时未保存的消息", { key });
+
+          await chatService.saveNow(parsed.conversationId, parsed.messages, {
+            resolveConversationId,
+            onConversationResolved: (resolvedId) => {
+              setActiveConversationId((prev) => prev ?? resolvedId);
+            },
+          });
+
+          localStorage.removeItem(key);
+        } catch (error) {
+          logger.error("[ChatSidebar] 恢复卸载数据失败", { key, error });
+          localStorage.removeItem(key);
+        }
+      }
+    };
+
+    void recoverUnloadData();
+  }, [chatService, resolveConversationId, setActiveConversationId]);
 
   // ========== useChat 集成 ==========
   const {
@@ -442,12 +334,12 @@ export default function ChatSidebar({
     onFinish: async ({ messages: finishedMessages }) => {
       const targetSessionId = sendingSessionIdRef.current;
 
-      if (!targetSessionId) {
-        logger.error("[ChatSidebar] onFinish: 没有记录的目标会话ID");
-        return;
-      }
-
       try {
+        if (!targetSessionId) {
+          logger.error("[ChatSidebar] onFinish: 没有记录的目标会话ID");
+          return;
+        }
+
         await chatService.saveNow(targetSessionId, finishedMessages, {
           forceTitleUpdate: true,
           resolveConversationId,
@@ -458,7 +350,11 @@ export default function ChatSidebar({
       } catch (error) {
         logger.error("[ChatSidebar] 保存消息失败:", error);
       } finally {
+        if (targetSessionId) {
+          void updateStreamingFlag(targetSessionId, false);
+        }
         sendingSessionIdRef.current = null;
+        releaseLock();
       }
     },
   });
@@ -470,16 +366,46 @@ export default function ChatSidebar({
   const lastSyncedToStoreRef = useRef<Record<string, string[]>>({});
   const applyingFromStorageRef = useRef(false);
 
+  const clearSyncedFingerprints = useCallback((ids: string[]) => {
+    ids.forEach((id) => {
+      delete lastSyncedToUIRef.current[id];
+      delete lastSyncedToStoreRef.current[id];
+    });
+  }, []);
+
   useEffect(() => {
     setMessagesRef.current = setMessages;
   }, [setMessages]);
 
   const isChatStreaming = status === "submitted" || status === "streaming";
 
+  useEffect(() => {
+    if (!isChatStreaming) {
+      forceStopReasonRef.current = null;
+    }
+  }, [isChatStreaming]);
+
   const displayMessages = useMemo(
     () => messages.map(ensureMessageMetadata),
     [messages, ensureMessageMetadata],
   );
+
+  const lastMessageIsUser = useMemo(() => {
+    if (!displayMessages || displayMessages.length === 0) return false;
+    const lastMsg = displayMessages[displayMessages.length - 1];
+    return lastMsg.role === "user";
+  }, [displayMessages]);
+
+  const canSendNewMessage = useMemo(() => {
+    if (!canChat) return false;
+    if (isChatStreaming) return true;
+    return !lastMessageIsUser;
+  }, [canChat, isChatStreaming, lastMessageIsUser]);
+
+  const activeConversationHasAbnormalExit = useMemo(() => {
+    if (!activeConversationId) return false;
+    return abnormalExitConversations.has(activeConversationId);
+  }, [abnormalExitConversations, activeConversationId]);
 
   const areFingerprintsEqual = useCallback(
     (a: string[] | undefined, b: string[] | undefined) => {
@@ -489,6 +415,297 @@ export default function ChatSidebar({
     },
     [],
   );
+
+  const updateStreamingFlag = useCallback(
+    async (
+      conversationId: string | null,
+      isStreaming: boolean,
+      options?: { syncOnly?: boolean },
+    ) => {
+      if (!conversationId) return;
+
+      // 先做同步标记，避免卸载时异步任务被浏览器中断
+      streamingFlagCacheRef.current[conversationId] = isStreaming;
+      if (options?.syncOnly) return;
+
+      try {
+        const resolvedId = await resolveConversationId(conversationId);
+        if (isStreaming) {
+          await markConversationAsStreaming(resolvedId);
+        } else {
+          await markConversationAsCompleted(resolvedId);
+        }
+      } catch (error) {
+        logger.error("[ChatSidebar] 更新流式状态失败", {
+          conversationId,
+          isStreaming,
+          error,
+        });
+      }
+    },
+    [
+      markConversationAsCompleted,
+      markConversationAsStreaming,
+      resolveConversationId,
+    ],
+  );
+
+  useEffect(() => {
+    const previousSocketStatus = previousSocketStatusRef.current;
+    const socketStatusChanged = previousSocketStatus !== isSocketConnected;
+    previousSocketStatusRef.current = isSocketConnected;
+
+    const handleSocketDisconnected = () => {
+      if (socketStopHandledRef.current || !isChatStreaming) return;
+
+      socketStopHandledRef.current = true;
+      logger.warn("[ChatSidebar] Socket 断开，停止聊天请求");
+
+      stop();
+      releaseLock();
+
+      const targetConversationId =
+        activeConversationId ?? sendingSessionIdRef.current;
+
+      if (targetConversationId) {
+        void updateStreamingFlag(targetConversationId, false);
+        void resolveConversationId(targetConversationId)
+          .then((resolvedId) => markConversationAsCompleted(resolvedId))
+          .catch((error) => {
+            logger.error("[ChatSidebar] Socket 断开后标记对话完成失败", {
+              conversationId: targetConversationId,
+              error,
+            });
+          });
+      }
+    };
+
+    if (socketStatusChanged && !isSocketConnected) {
+      handleSocketDisconnected();
+    }
+
+    if (socketStatusChanged && isSocketConnected) {
+      socketStopHandledRef.current = false;
+    }
+
+    if (!isOpen) {
+      if (alertOwnerRef.current === "socket") {
+        alertOwnerRef.current = null;
+        closeAlertDialog();
+      }
+      socketAlertSeenRef.current = false;
+      setShowSocketRecoveryHint(false);
+      return;
+    }
+
+    if (!isI18nReady) {
+      return;
+    }
+
+    if (!isSocketConnected) {
+      const socketTitle = t(
+        "chat:status.socketDisconnected",
+        "Socket 连接已断开",
+      );
+      const socketDescription = t(
+        "chat:status.socketDisconnectedWithStop",
+        "Socket 连接已断开，正在进行的聊天已停止",
+      );
+      const confirmLabel = t("actions.confirm", "确认");
+      const cancelLabel = t("actions.cancel", "取消");
+
+      if (!socketAlertSeenRef.current) {
+        socketAlertSeenRef.current = true;
+        alertOwnerRef.current = "socket";
+        openAlertDialog({
+          status: "danger",
+          title: socketTitle,
+          description: socketDescription,
+          actionLabel: confirmLabel,
+          cancelLabel: cancelLabel,
+          isDismissable: true,
+          onAction: () => {
+            alertOwnerRef.current = null;
+          },
+          onCancel: () => {
+            alertOwnerRef.current = null;
+          },
+        });
+      }
+
+      setShowSocketRecoveryHint(false);
+      return;
+    }
+
+    socketAlertSeenRef.current = false;
+    if (alertOwnerRef.current === "socket") {
+      alertOwnerRef.current = null;
+      closeAlertDialog();
+    }
+
+    if (socketStatusChanged && previousSocketStatus === false) {
+      setShowSocketRecoveryHint(true);
+      logger.info("[ChatSidebar] Socket 已重新连接");
+    }
+  }, [
+    activeConversationId,
+    closeAlertDialog,
+    isChatStreaming,
+    isI18nReady,
+    isOpen,
+    isSocketConnected,
+    markConversationAsCompleted,
+    openAlertDialog,
+    releaseLock,
+    resolveConversationId,
+    stop,
+    t,
+    offlineReasonLabel,
+    updateStreamingFlag,
+  ]);
+
+  const forceStopStreaming = useCallback(
+    (reason: "sidebar" | "history") => {
+      if (!isChatStreaming) return;
+      if (forceStopReasonRef.current) return;
+
+      forceStopReasonRef.current = reason;
+
+      if (reason === "sidebar") {
+        logger.info("[ChatSidebar] 侧栏关闭，停止聊天请求");
+      } else {
+        logger.info("[ChatSidebar] 切换到历史视图，停止聊天请求");
+      }
+
+      stop();
+      releaseLock();
+
+      const targetConversationId =
+        activeConversationId ?? sendingSessionIdRef.current;
+
+      if (targetConversationId) {
+        void updateStreamingFlag(targetConversationId, false);
+      }
+    },
+    [
+      activeConversationId,
+      isChatStreaming,
+      releaseLock,
+      stop,
+      updateStreamingFlag,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isOpen) {
+      forceStopStreaming("sidebar");
+    }
+  }, [forceStopStreaming, isOpen]);
+
+  useEffect(() => {
+    if (currentView === "history") {
+      forceStopStreaming("history");
+    }
+  }, [currentView, forceStopStreaming]);
+
+  useEffect(() => {
+    const previousOnline = previousOnlineStatusRef.current;
+    const isFirstRender = previousOnline === null;
+    const onlineStatusChanged = previousOnline !== isOnline;
+    previousOnlineStatusRef.current = isOnline;
+
+    if (isFirstRender && offlineReason === "socket-disconnect") {
+      return;
+    }
+
+    if (!onlineStatusChanged) return;
+
+    if (!isOnline) {
+      setShowOnlineRecoveryHint(false);
+
+      if (isChatStreaming) {
+        logger.warn("[ChatSidebar] 网络断开，停止聊天请求");
+      } else {
+        logger.warn("[ChatSidebar] 网络断开，当前无流式请求，释放聊天锁");
+      }
+
+      stop();
+      releaseLock();
+
+      const targetConversationId =
+        activeConversationId ?? sendingSessionIdRef.current;
+
+      if (targetConversationId) {
+        void updateStreamingFlag(targetConversationId, false);
+        void resolveConversationId(targetConversationId)
+          .then((resolvedId) => markConversationAsCompleted(resolvedId))
+          .catch((error) => {
+            logger.error("[ChatSidebar] 网络断开后标记对话完成失败", {
+              error,
+              conversationId: targetConversationId,
+            });
+          });
+      }
+
+      openAlertDialog({
+        status: "danger",
+        title: t("chat:status.networkOffline"),
+        description: offlineReasonLabel
+          ? `${t("chat:status.networkOfflineDesc")}（${offlineReasonLabel}）`
+          : t("chat:status.networkOfflineDesc"),
+        isDismissable: true,
+      });
+
+      wasOfflineRef.current = true;
+      return;
+    }
+
+    if (wasOfflineRef.current) {
+      wasOfflineRef.current = false;
+      setShowOnlineRecoveryHint(true);
+      logger.info("[ChatSidebar] 网络恢复，允许继续聊天");
+
+      openAlertDialog({
+        status: "warning",
+        title: t("chat:status.networkOnline"),
+        description: t("chat:status.networkOnlineDesc"),
+        isDismissable: true,
+      });
+    }
+  }, [
+    activeConversationId,
+    isChatStreaming,
+    isOnline,
+    markConversationAsCompleted,
+    openAlertDialog,
+    releaseLock,
+    resolveConversationId,
+    stop,
+    t,
+    offlineReason,
+    offlineReasonLabel,
+    updateStreamingFlag,
+  ]);
+
+  useEffect(() => {
+    if (!showSocketRecoveryHint) return;
+
+    const timer = window.setTimeout(() => {
+      setShowSocketRecoveryHint(false);
+    }, 3600);
+
+    return () => window.clearTimeout(timer);
+  }, [showSocketRecoveryHint]);
+
+  useEffect(() => {
+    if (!showOnlineRecoveryHint) return;
+
+    const timer = window.setTimeout(() => {
+      setShowOnlineRecoveryHint(false);
+    }, 4800);
+
+    return () => window.clearTimeout(timer);
+  }, [showOnlineRecoveryHint]);
 
   useEffect(() => {
     const targetConversationId = activeConversationId;
@@ -546,10 +763,6 @@ export default function ChatSidebar({
   ]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayMessages]);
-
-  useEffect(() => {
     if (!activeConversationId) return;
 
     // 存储侧变更已经在上方 useEffect 标记处理中，这里跳过以阻断回环
@@ -586,26 +799,132 @@ export default function ChatSidebar({
   ]);
 
   useEffect(() => {
-    const message = extractErrorMessage(settingsError);
-    if (message) {
-      pushErrorToast(message, t("toasts.settingsLoadFailed"));
-    }
-  }, [extractErrorMessage, settingsError, pushErrorToast, t]);
-
-  useEffect(() => {
-    const message = extractErrorMessage(conversationsError);
-    if (message) {
-      pushErrorToast(message, t("toasts.conversationsSyncFailed"));
-    }
-  }, [conversationsError, extractErrorMessage, pushErrorToast, t]);
-
-  useEffect(() => {
     const message = extractErrorMessage(chatError);
 
     if (message) {
       pushErrorToast(message, t("toasts.chatRequestFailed"));
     }
   }, [chatError, extractErrorMessage, pushErrorToast, t]);
+
+  useEffect(() => {
+    pageUnloadHandledRef.current = false;
+
+    const handlePageUnload = (
+      _event: BeforeUnloadEvent | PageTransitionEvent,
+    ) => {
+      if (pageUnloadHandledRef.current) return;
+      pageUnloadHandledRef.current = true;
+
+      logger.warn("[ChatSidebar] 页面即将卸载，停止聊天请求");
+
+      // 1) 立即中断正在进行的流式请求
+      stop();
+
+      // 2) 释放聊天锁，避免遗留占用
+      releaseLock();
+
+      const targetConversationId =
+        activeConversationId ?? sendingSessionIdRef.current;
+      if (!targetConversationId) return;
+
+      // 3) 同步标记流式结束，避免卸载时遗留 streaming 状态
+      updateStreamingFlag(targetConversationId, false, { syncOnly: true });
+      void updateStreamingFlag(targetConversationId, false);
+
+      const pageClosedText = t("chat:messages.pageClosed");
+      const baseMessages =
+        chatService.getCachedMessages(targetConversationId) ?? displayMessages;
+
+      const hasPageClosedMessage = baseMessages.some(
+        (message) =>
+          message.metadata?.isDisconnected &&
+          message.parts.some(
+            (part) => part.type === "text" && part.text === pageClosedText,
+          ),
+      );
+
+      const disconnectMessage: ChatUIMessage = {
+        id: generateUUID("msg"),
+        role: "system",
+        parts: [
+          {
+            type: "text",
+            text: pageClosedText,
+          },
+        ],
+        metadata: {
+          createdAt: Date.now(),
+          isDisconnected: true,
+        },
+      };
+
+      const nextMessages = hasPageClosedMessage
+        ? baseMessages
+        : [...baseMessages, disconnectMessage];
+
+      // 4) 刷新待保存队列，确保 debounce 队列立即写入
+      chatService.flushPending(targetConversationId);
+
+      try {
+        // 5) 优先尝试 sendBeacon（适合卸载场景）
+        if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+          const payload = JSON.stringify({
+            conversationId: targetConversationId,
+            messages: nextMessages,
+          });
+          const sent = navigator.sendBeacon(
+            "/api/chat/unload",
+            new Blob([payload], { type: "application/json" }),
+          );
+          if (sent) return;
+        }
+      } catch (error) {
+        logger.error("[ChatSidebar] sendBeacon 发送失败:", error);
+      }
+
+      // 6) 回落：同步写入 localStorage，避免 beforeunload 异步中断
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(
+            `chat:unload:${targetConversationId}`,
+            JSON.stringify({
+              conversationId: targetConversationId,
+              messages: nextMessages,
+            }),
+          );
+        }
+      } catch (error) {
+        logger.error("[ChatSidebar] 卸载回落保存失败:", error);
+      }
+    };
+
+    window.addEventListener("beforeunload", handlePageUnload);
+    window.addEventListener("pagehide", handlePageUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handlePageUnload);
+      window.removeEventListener("pagehide", handlePageUnload);
+      pageUnloadHandledRef.current = false;
+    };
+  }, [
+    activeConversationId,
+    chatService,
+    displayMessages,
+    releaseLock,
+    stop,
+    t,
+    updateStreamingFlag,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (sendingSessionIdRef.current) {
+        sendingSessionIdRef.current = null;
+        releaseLock();
+      }
+    },
+    [releaseLock],
+  );
 
   // ========== 事件处理函数 ==========
 
@@ -616,50 +935,47 @@ export default function ChatSidebar({
       return;
     }
 
+    if (!isSocketConnected) {
+      logger.warn("[ChatSidebar] Socket 未连接，无法发送消息");
+      openAlertDialog({
+        status: "warning",
+        title: t("chat:status.socketDisconnected"),
+        description: t("chat:status.socketRequiredForChat"),
+        isDismissable: true,
+      });
+      return;
+    }
+
+    if (!canSendNewMessage) {
+      if (!canChat) {
+        showNotice(lockBlockedMessage, "warning");
+      }
+      return;
+    }
+
+    if (!currentProjectId || currentProjectId.trim().length === 0) {
+      showNotice(
+        t("chat:messages.projectRequired", "请选择或创建项目后再发送消息"),
+        "warning",
+      );
+      return;
+    }
+
+    const locked = acquireLock();
+    if (!locked) {
+      showNotice(lockBlockedMessage, "warning");
+      return;
+    }
+
     let targetSessionId = activeConversationId;
 
     // 如果没有活动会话，立即启动异步创建（不阻塞消息发送）
     if (!targetSessionId) {
       logger.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
-
-      // 生成临时 ID 用于追踪正在创建的对话
-      const tempConversationId = `temp-${Date.now()}`;
-      const conversationTitle = t("chat:messages.defaultConversation");
-
-      // 立即启动异步创建对话，不等待完成
-      const createPromise = createConversation(
-        conversationTitle,
-        currentProjectId,
-      )
-        .then((newConv) => {
-          logger.debug(
-            `[ChatSidebar] 异步创建对话完成: ${newConv.id} (标题: ${conversationTitle})`,
-          );
-
-          setActiveConversationId(newConv.id);
-          setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
-          creatingConversationPromiseRef.current = null;
-
-          return newConv;
-        })
-        .catch((error) => {
-          logger.error("[ChatSidebar] 异步创建新对话失败:", error);
-          // 清理 ref
-          if (
-            creatingConversationPromiseRef.current?.conversationId ===
-            tempConversationId
-          ) {
-            creatingConversationPromiseRef.current = null;
-          }
-          throw error;
-        });
-
-      // 保存到 ref 供 onFinish 等待
-      creatingConversationPromiseRef.current = {
-        promise: createPromise,
-        conversationId: tempConversationId,
-      };
-
+      const tempConversationId = startTempConversation(
+        t("chat:messages.defaultConversation"),
+      );
+      setActiveConversationId(tempConversationId);
       targetSessionId = tempConversationId;
     }
 
@@ -668,17 +984,28 @@ export default function ChatSidebar({
 
     setInput("");
 
+    let lockTransferredToStream = false;
     try {
       await sendMessage(
         { text: trimmedInput },
         {
-          body: { llmConfig },
+          body: {
+            llmConfig,
+            projectUuid: currentProjectId,
+            conversationId: targetSessionId,
+          },
         },
       );
+      lockTransferredToStream = true;
+      void updateStreamingFlag(targetSessionId, true);
     } catch (error) {
       logger.error("[ChatSidebar] 发送消息失败:", error);
       sendingSessionIdRef.current = null;
       setInput(trimmedInput);
+    } finally {
+      if (!lockTransferredToStream) {
+        releaseLock();
+      }
     }
   };
 
@@ -687,11 +1014,126 @@ export default function ChatSidebar({
     await submitMessage();
   };
 
-  const handleCancel = () => {
-    if (isChatStreaming) {
-      stop();
+  const handleCancel = useCallback(async () => {
+    if (!isChatStreaming) return;
+
+    logger.info("[ChatSidebar] 用户取消聊天");
+    stop();
+
+    const targetConversationId =
+      activeConversationId ?? sendingSessionIdRef.current;
+
+    if (!targetConversationId) {
+      sendingSessionIdRef.current = null;
+      return;
     }
-  };
+
+    const cancelMessage: ChatUIMessage = {
+      id: generateUUID("msg"),
+      role: "system",
+      parts: [
+        {
+          type: "text",
+          text: t("chat:messages.userCancelled"),
+        },
+      ],
+      metadata: {
+        createdAt: Date.now(),
+        isCancelled: true,
+      },
+    };
+
+    const baseMessages =
+      activeConversationId === targetConversationId
+        ? displayMessages
+        : (chatService.getCachedMessages(targetConversationId) ?? []);
+
+    const nextMessages = [...baseMessages, cancelMessage];
+
+    if (activeConversationId === targetConversationId) {
+      setMessages(nextMessages);
+    }
+
+    try {
+      await chatService.saveNow(targetConversationId, nextMessages, {
+        resolveConversationId,
+        onConversationResolved: (resolvedId) => {
+          setActiveConversationId(resolvedId);
+        },
+      });
+      logger.info("[ChatSidebar] 取消消息已同步保存");
+    } catch (error) {
+      logger.error("[ChatSidebar] 保存取消消息失败:", error);
+      pushErrorToast(
+        extractErrorMessage(error) ?? t("toasts.unknownError"),
+        t("toasts.autoSaveFailed"),
+      );
+    } finally {
+      void updateStreamingFlag(targetConversationId, false);
+      sendingSessionIdRef.current = null;
+      releaseLock();
+    }
+  }, [
+    activeConversationId,
+    chatService,
+    displayMessages,
+    extractErrorMessage,
+    isChatStreaming,
+    pushErrorToast,
+    updateStreamingFlag,
+    resolveConversationId,
+    setActiveConversationId,
+    setMessages,
+    stop,
+    t,
+    releaseLock,
+  ]);
+
+  const handleRetry = useCallback(() => {
+    if (!lastMessageIsUser) return;
+
+    const lastMessage = displayMessages[displayMessages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") return;
+
+    const textParts =
+      lastMessage.parts
+        ?.filter((part) => (part as { type?: unknown }).type === "text")
+        .map((part) =>
+          typeof (part as { text?: unknown }).text === "string"
+            ? (part as { text?: string }).text
+            : "",
+        )
+        .filter(Boolean) ?? [];
+
+    const messageText = textParts.join(" ").trim();
+
+    if (!messageText) {
+      logger.warn("[ChatSidebar] 重试失败：最后一条消息为空");
+      return;
+    }
+
+    setInput(messageText);
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const lastPrev = prev[prev.length - 1];
+      if (lastPrev.role !== "user") return prev;
+      return prev.slice(0, -1);
+    });
+
+    showNotice(
+      `${t("chat:messages.retryTitle")} · ${t("chat:messages.retryDescription")}`,
+      "success",
+    );
+
+    logger.info("[ChatSidebar] 已准备重试上一条消息");
+  }, [
+    displayMessages,
+    lastMessageIsUser,
+    setInput,
+    setMessages,
+    showNotice,
+    t,
+  ]);
 
   const handleNewChat = useCallback(async () => {
     try {
@@ -700,85 +1142,13 @@ export default function ChatSidebar({
         currentProjectId,
       );
       setActiveConversationId(newConv.id);
-      setConversationMessages((prev) => ({ ...prev, [newConv.id]: [] }));
     } catch (error) {
       logger.error("[ChatSidebar] 创建新对话失败:", error);
     }
-  }, [createConversation, currentProjectId, t]);
+  }, [createConversation, currentProjectId, setActiveConversationId, t]);
 
   const handleHistory = () => {
     setCurrentView("history");
-  };
-
-  const handleDeleteSession = useCallback(async () => {
-    if (!activeConversation) return;
-
-    if (conversations.length === 1) {
-      showNotice(t("toasts.sessionDeleteKeepOne"), "warning");
-      return;
-    }
-
-    if (
-      confirm(t("chat:aria.deleteConfirm", { title: activeConversation.title }))
-    ) {
-      try {
-        await deleteConversationFromStorage(activeConversation.id);
-
-        setActiveConversationId(null);
-        removeConversationsFromState([activeConversation.id]);
-      } catch (error) {
-        logger.error("[ChatSidebar] 删除对话失败:", error);
-        const errorMessage =
-          extractErrorMessage(error) ?? t("toasts.unknownError");
-        showNotice(
-          t("toasts.sessionDeleteFailed", { error: errorMessage }),
-          "danger",
-        );
-      }
-    }
-  }, [
-    activeConversation,
-    extractErrorMessage,
-    conversations.length,
-    deleteConversationFromStorage,
-    removeConversationsFromState,
-    showNotice,
-    t,
-  ]);
-
-  const handleExportSession = async () => {
-    if (!activeConversation) return;
-
-    const messages = await ensureMessagesForConversation(activeConversation.id);
-    await exportSessions(
-      [
-        {
-          id: activeConversation.id,
-          title: activeConversation.title,
-          messages,
-          createdAt: activeConversation.created_at,
-          updatedAt: activeConversation.updated_at,
-        },
-      ],
-      `chat-${activeConversation.title}.json`,
-    );
-  };
-
-  const handleExportAllSessions = async () => {
-    const allSessions = await Promise.all(
-      conversations.map(async (conv) => ({
-        id: conv.id,
-        title: conv.title,
-        messages: await ensureMessagesForConversation(conv.id),
-        createdAt: conv.created_at,
-        updatedAt: conv.updated_at,
-      })),
-    );
-
-    await exportSessions(
-      allSessions,
-      `all-chats-${new Date().toISOString().split("T")[0]}.json`,
-    );
   };
 
   const handleSessionSelect = async (sessionId: string) => {
@@ -798,37 +1168,107 @@ export default function ChatSidebar({
   const handleBatchDelete = useCallback(
     async (ids: string[]) => {
       if (!ids || ids.length === 0) return;
-      const remaining = conversations.length - ids.length;
-      if (remaining <= 0) {
-        const confirmed = confirm(t("chat:aria.deleteAllConfirm"));
-        if (!confirmed) return;
-      }
+      const uniqueIds = Array.from(new Set(ids));
+      const remaining = conversations.length - uniqueIds.length;
+      const conversationMap = new Map(
+        conversations.map((conv) => [conv.id, conv]),
+      );
 
-      const deletingActive =
-        activeConversationId != null && ids.includes(activeConversationId);
+      const messageCounts = await Promise.all(
+        uniqueIds.map(async (id) => {
+          try {
+            const messages = await ensureMessagesForConversation(id);
+            return { id, count: messages.length };
+          } catch (error) {
+            logger.error("[ChatSidebar] 统计会话消息数量失败:", {
+              conversationId: id,
+              error,
+            });
+            return { id, count: 0 };
+          }
+        }),
+      );
 
-      try {
-        await batchDeleteConversations(ids);
-        removeConversationsFromState(ids);
-        if (deletingActive) {
-          setActiveConversationId(null);
-        }
-      } catch (error) {
-        logger.error("[ChatSidebar] 批量删除对话失败:", error);
-        const errorMessage =
-          extractErrorMessage(error) ?? t("toasts.unknownError");
-        showNotice(
-          t("toasts.batchDeleteFailed", { error: errorMessage }),
-          "danger",
-        );
-      }
+      const totalMessages = messageCounts.reduce(
+        (sum, item) => sum + item.count,
+        0,
+      );
+      const messageCountLabel = t("chat:messages.counts.messageCount", {
+        count: totalMessages,
+      });
+
+      const isSingle = uniqueIds.length === 1;
+      const targetTitle =
+        conversationMap.get(uniqueIds[0])?.title ??
+        t("chat:conversations.defaultName", { number: 1 });
+
+      const baseDescription = t(
+        isSingle
+          ? "chat:dialogs.deleteConversationDescription"
+          : "chat:dialogs.deleteConversationsDescription",
+        {
+          title: targetTitle,
+          count: uniqueIds.length,
+          messageCount: messageCountLabel,
+        },
+      );
+
+      const description =
+        remaining <= 0
+          ? `${baseDescription} ${t("chat:aria.deleteAllConfirm")}`
+          : baseDescription;
+
+      alertOwnerRef.current = isSingle ? "single-delete" : "batch-delete";
+
+      openAlertDialog({
+        status: "danger",
+        title: isSingle
+          ? t("chat:dialogs.deleteConversationTitle", { title: targetTitle })
+          : t("chat:dialogs.deleteConversationsTitle", {
+              count: uniqueIds.length,
+            }),
+        description,
+        actionLabel: t("chat:conversations.actions.delete"),
+        cancelLabel: t("actions.cancel", "取消"),
+        isDismissable: false,
+        onCancel: () => {
+          alertOwnerRef.current = null;
+        },
+        onAction: async () => {
+          const deletingActive =
+            activeConversationId != null &&
+            uniqueIds.includes(activeConversationId);
+          try {
+            await batchDeleteConversations(uniqueIds);
+            removeConversationsFromState(uniqueIds);
+            clearSyncedFingerprints(uniqueIds);
+            if (deletingActive) {
+              setActiveConversationId(null);
+            }
+            alertOwnerRef.current = null;
+          } catch (error) {
+            logger.error("[ChatSidebar] 批量删除对话失败:", error);
+            const errorMessage =
+              extractErrorMessage(error) ?? t("toasts.unknownError");
+            showNotice(
+              t("toasts.batchDeleteFailed", { error: errorMessage }),
+              "danger",
+            );
+            throw error;
+          }
+        },
+      });
     },
     [
       activeConversationId,
       batchDeleteConversations,
-      conversations.length,
+      conversations,
+      ensureMessagesForConversation,
+      clearSyncedFingerprints,
       extractErrorMessage,
+      openAlertDialog,
       removeConversationsFromState,
+      setActiveConversationId,
       showNotice,
       t,
     ],
@@ -877,11 +1317,186 @@ export default function ChatSidebar({
     }));
   };
 
-  const showSocketWarning = !isSocketConnected;
+  const modelSelectorDisabled = isChatStreaming || selectorLoading;
 
-  if (currentView === "history") {
-    return (
-      <div className="chat-sidebar-content">
+  useEffect(
+    () => () => {
+      const streaming = status === "submitted" || status === "streaming";
+      const targetConversationId =
+        activeConversationId ?? sendingSessionIdRef.current;
+      if (!streaming || !targetConversationId) return;
+
+      const runCleanup = async () => {
+        try {
+          const resolvedId = await resolveConversationId(targetConversationId);
+          const cached =
+            chatService.getCachedMessages(resolvedId) ?? displayMessages;
+
+          const hasNotice = cached.some(isAbnormalExitNoticeMessage);
+
+          const noticeMessage: ChatUIMessage = {
+            id: generateUUID("sys"),
+            role: "system",
+            parts: [
+              {
+                type: "text",
+                text: "[系统] 上次对话异常中断",
+              },
+            ],
+            metadata: {
+              createdAt: Date.now(),
+              isAbnormalExitNotice: true,
+            },
+          };
+
+          const nextMessages = hasNotice
+            ? cached
+            : [noticeMessage, ...(cached ?? [])];
+
+          await chatService.saveNow(resolvedId, nextMessages, {
+            resolveConversationId,
+          });
+          await updateStreamingFlag(resolvedId, false);
+        } catch (error) {
+          logger.error("[ChatSidebar] 卸载时清理流式状态失败", {
+            conversationId: targetConversationId,
+            error,
+          });
+        }
+      };
+
+      void runCleanup();
+    },
+    [
+      activeConversationId,
+      chatService,
+      displayMessages,
+      resolveConversationId,
+      status,
+      updateStreamingFlag,
+    ],
+  );
+
+  const alerts = (
+    <>
+      {!isSocketConnected && (
+        <div className="mb-3">
+          <Alert status="danger">
+            <Alert.Title>⚠️ {t("chat:status.socketDisconnected")}</Alert.Title>
+            <Alert.Description>
+              {t(
+                "chat:status.socketDisconnectedWithStop",
+                "Socket 连接已断开，正在进行的聊天已停止",
+              )}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+      {showSocketRecoveryHint && isSocketConnected && (
+        <div className="mb-3">
+          <Alert status="success">
+            <Alert.Title>{t("chat:status.socketReconnected")}</Alert.Title>
+            <Alert.Description>
+              {t("chat:status.socketReconnected")}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+      {!isOnline && (
+        <div className="mb-3">
+          <Alert status="danger">
+            <Alert.Title>{t("chat:status.networkOffline")}</Alert.Title>
+            <Alert.Description>
+              {offlineReasonLabel
+                ? `${t("chat:status.networkOfflineDesc")}（${offlineReasonLabel}）`
+                : t("chat:status.networkOfflineDesc")}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+      {showOnlineRecoveryHint && (
+        <div className="mb-3">
+          <Alert status="success">
+            <Alert.Title>{t("chat:status.networkOnline")}</Alert.Title>
+            <Alert.Description>
+              {t("chat:status.networkOnlineDesc")}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+      {!canChat && (
+        <div className="mb-3">
+          <Alert status="warning">
+            <Alert.Title>{lockBlockedTitle}</Alert.Title>
+            <Alert.Description>
+              {lockBlockedMessage}
+              {truncatedLockHolder ? `（${truncatedLockHolder}）` : ""}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+      {activeConversationHasAbnormalExit && (
+        <div className="mb-3">
+          <Alert status="warning">
+            <Alert.Title>
+              {t("chat:messages.abnormalExitTitle", "上次对话异常中断")}
+            </Alert.Title>
+            <Alert.Description>
+              {t(
+                "chat:messages.abnormalExitDescription",
+                "上次对话异常中断，可能未保存完整内容",
+              )}
+            </Alert.Description>
+          </Alert>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <ChatShell
+      view={currentView}
+      alerts={alerts}
+      chatPane={
+        <>
+          <MessagePane
+            messages={displayMessages}
+            configLoading={configLoading}
+            llmConfig={llmConfig}
+            status={status}
+            expandedToolCalls={expandedToolCalls}
+            expandedThinkingBlocks={expandedThinkingBlocks}
+            onToolCallToggle={handleToolCallToggle}
+            onThinkingBlockToggle={handleThinkingBlockToggle}
+          />
+          <Composer
+            input={input}
+            setInput={setInput}
+            isChatStreaming={isChatStreaming}
+            configLoading={configLoading}
+            llmConfig={llmConfig}
+            canSendNewMessage={canSendNewMessage}
+            lastMessageIsUser={lastMessageIsUser}
+            isOnline={isOnline}
+            isSocketConnected={isSocketConnected}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onNewChat={handleNewChat}
+            onHistory={handleHistory}
+            onRetry={handleRetry}
+            modelSelectorProps={{
+              providers,
+              models,
+              selectedModelId,
+              onSelectModel: handleModelChange,
+              isDisabled: modelSelectorDisabled,
+              isLoading: selectorLoading,
+              modelLabel: selectedModelLabel,
+            }}
+          />
+        </>
+      }
+      historyPane={
         <ChatHistoryView
           currentProjectId={currentProjectId}
           conversations={conversations}
@@ -890,72 +1505,7 @@ export default function ChatSidebar({
           onDeleteConversations={handleBatchDelete}
           onExportConversations={handleBatchExport}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="chat-sidebar-content">
-      {/* 消息内容区域 - 无分隔线一体化设计 */}
-      <div className="chat-messages-area">
-        {/* 会话标题栏 */}
-        <ChatSessionHeader
-          activeSession={
-            activeConversation
-              ? {
-                  id: activeConversation.id,
-                  title: activeConversation.title,
-                  messages: conversationMessages[activeConversation.id] || [],
-                  createdAt: activeConversation.created_at,
-                  updatedAt: activeConversation.updated_at,
-                }
-              : null
-          }
-          isSaving={isSaving}
-          saveError={saveError}
-          onHistoryClick={handleHistory}
-          onDeleteSession={handleDeleteSession}
-          onExportSession={handleExportSession}
-          onExportAllSessions={handleExportAllSessions}
-        />
-
-        {showSocketWarning && (
-          <div className="chat-inline-warning" role="status">
-            <span className="chat-inline-warning-icon" aria-hidden>
-              <AlertTriangle size={16} />
-            </span>
-            <div className="chat-inline-warning-text">
-              <p>{t("chat:status.socketDisconnected")}</p>
-              <p>{t("chat:status.socketWarning")}</p>
-            </div>
-          </div>
-        )}
-
-        {/* 消息列表 */}
-        <MessageList
-          messages={displayMessages}
-          configLoading={configLoading}
-          llmConfig={llmConfig}
-          status={status}
-          expandedToolCalls={expandedToolCalls}
-          expandedThinkingBlocks={expandedThinkingBlocks}
-          onToolCallToggle={handleToolCallToggle}
-          onThinkingBlockToggle={handleThinkingBlockToggle}
-        />
-      </div>
-
-      {/* 底部输入区域 - 一体化设计 */}
-      <ChatInputArea
-        input={input}
-        setInput={setInput}
-        isChatStreaming={isChatStreaming}
-        configLoading={configLoading}
-        llmConfig={llmConfig}
-        onSubmit={handleSubmit}
-        onCancel={handleCancel}
-        onNewChat={handleNewChat}
-        onHistory={handleHistory}
-      />
-    </div>
+      }
+    />
   );
 }

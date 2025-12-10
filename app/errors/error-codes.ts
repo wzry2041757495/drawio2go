@@ -31,8 +31,10 @@ export const ErrorCodes = {
   CHAT_SEND_FAILED: 3003,
   CHAT_STREAM_ERROR: 3004,
   CHAT_TIMEOUT_ERROR: 3005,
+  CHAT_REQUEST_CANCELLED: 3006,
   CHAT_API_KEY_INVALID: 3010,
   CHAT_MODEL_NOT_FOUND: 3011,
+  CHAT_CONVERSATION_FORBIDDEN: 3012,
 
   // 4000-4999: 版本管理错误
   VERSION_RESTORE_FAILED: 4001,
@@ -81,15 +83,20 @@ export const ErrorCodes = {
   XML_XPATH_VALIDATION_FAILED: 6010,
   XML_OPERATION_UNKNOWN: 6011,
   XML_BATCH_EDIT_FAILED: 6012,
-} as const;
+} as const satisfies Record<string, number>;
 
-export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+export type ErrorCodeKey = keyof typeof ErrorCodes;
+export type ErrorCode = (typeof ErrorCodes)[ErrorCodeKey];
+
+const ERROR_CODE_ENTRIES = Object.entries(ErrorCodes) as Array<
+  [ErrorCodeKey, ErrorCode]
+>;
 
 /**
  * 错误码到 i18n 键值的映射
  */
 export function getErrorI18nKey(code: ErrorCode): string {
-  const entry = Object.entries(ErrorCodes).find(([_, value]) => value === code);
+  const entry = ERROR_CODE_ENTRIES.find(([, value]) => value === code);
   if (!entry) return "common.unknownError";
 
   const [key] = entry;

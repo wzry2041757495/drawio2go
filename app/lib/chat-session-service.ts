@@ -9,6 +9,9 @@ import type {
   MessageMetadata,
   ToolInvocationState,
 } from "@/app/types/chat";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("chat-session-service");
 
 export type SubscribeToConversations = (
   projectUuid: string,
@@ -519,11 +522,10 @@ export function convertMessageToUIMessage(msg: Message): ChatUIMessage {
         );
     }
   } catch (error) {
-    console.error(
-      "[chat-session-service] 解析 parts_structure 失败:",
+    logger.error("解析 parts_structure 失败", {
+      messageId: msg.id,
       error,
-      msg.id,
-    );
+    });
   }
 
   const metadata: MessageMetadata = {
@@ -717,7 +719,10 @@ export function createChatSessionService(
         try {
           await updateConversation(conversationId, { title: nextTitle });
         } catch (error) {
-          console.error("[chat-session-service] 强制更新对话标题失败:", error);
+          logger.error("强制更新对话标题失败", {
+            conversationId,
+            error,
+          });
         }
       }
 
@@ -759,10 +764,11 @@ export function createChatSessionService(
         pendingSavePayload = null;
         return;
       } catch (error) {
-        console.error(
-          `[chat-session-service] 保存消息失败（第 ${attempt} 次）:`,
+        logger.error("保存消息失败", {
+          conversationId,
+          attempt,
           error,
-        );
+        });
 
         if (attempt >= maxRetries) {
           const message =

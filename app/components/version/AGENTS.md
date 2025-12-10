@@ -279,6 +279,11 @@ function VersionPanel({ projectUuid, versions }) {
 - **pages_svg**: 用户点击"展开缩略图"时加载
 - **解压处理**: 自动处理 deflate-raw 压缩的 Blob
 
+### 共享逻辑
+
+- **缩放/平移复用**: PageSVGViewer 与 VersionCompare 均使用 `usePanZoomStage` 统一处理缩放、拖拽和滚轮逻辑（可配置 Ctrl-only / always）。
+- **页面解析复用**: 版本多页数据加载统一通过 `useVersionPages`（解压 pages_svg + 合并 page_names + 兜底名称）。
+
 ### 内存管理
 
 - **页面 URL 清理**: 使用 useRef 和 cleanup 机制防止泄漏
@@ -294,7 +299,6 @@ app/components/version/
 ├── VersionCompare.tsx        # 版本对比组件
 ├── PageSVGViewer.tsx         # 页面查看器组件
 ├── CreateVersionDialog.tsx   # 版本创建对话框
-├── version-utils.ts          # 工具函数（Blob 处理、页面名称解析）
 ├── index.ts                  # 统一导出
 └── __tests__/               # 单元测试
 ```
@@ -353,3 +357,21 @@ interface SmartDiffStats {
 3. **虚拟滚动粒度**: 由于动态高度，虚拟滚动估计可能有偏差（大约 ±20%）
 4. **智能差异限制**: 受限于 DrawIO 导出的坐标精度，匹配率通常 60~90%
 5. **查看器内存**: 多页查看器加载时会占用内存，关闭后自动清理
+
+## 代码腐化清理记录
+
+### 2025-12-08 清理
+
+**执行的操作**：
+
+- `PageSVGViewer` 与 `VersionCompare` 迁移到新 hooks（`usePanZoomStage`、`useVersionPages`），缩放/分页逻辑下沉复用。
+- 删除 `components/version/version-utils.ts`，版本格式化改用 `app/lib/version-utils.ts`。
+- 事件处理统一 `onPress`，对齐 `@react-aria/interactions` 的交互语义。
+- SVG/Blob 解析改用 `blob-utils.ts`，简化多页数据解压与兜底。
+
+**影响文件**：3 个（PageSVGViewer、VersionCompare、version-utils 删除）
+
+**下次关注**：
+
+- 评估新 hooks 在多页大图场景下的性能与内存占用。
+- 若增加更多对比布局，考虑将对比状态管理提取独立 hook。

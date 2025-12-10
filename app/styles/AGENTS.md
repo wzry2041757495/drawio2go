@@ -23,6 +23,13 @@
 - **阴影层级**: Material Design 4 层阴影系统
 - **间距系统**: 4px 基准
 
+### 设计原则（Milestone 8 同步）
+
+- **CSS 变量优先**：颜色、圆角、阴影、间距必须引用 `var(--*)`，禁止新建硬编码值
+- **Material Design 一致性**：遵循 4/8/12px 圆角、4 层阴影、对比度友好的 OKLCH 调色
+- **样式集中管理**：删除组件内联样式，统一落地到 `app/styles` 下对应层级文件
+- **可访问性基础**：覆盖层、按钮、输入态必须提供可聚焦状态和清晰的视觉反馈
+
 ### 核心原则
 
 1. **一致性优先** - 统一使用设计令牌
@@ -178,6 +185,11 @@ app/styles/
 ├── themes/
 │   └── drawio2go.css  # HeroUI 主题 (浅/深色)
 └── utilities/      # 动画、Markdown、滚动条等
+
+### 新增文件（Milestone 8）
+
+- `components/loading.css`：全局加载与错误遮罩层样式，覆盖 Spin/空状态，统一半透明背景与文本对比度
+- `components/project-selector.css`：项目选择器样式，包含列表项悬停态、选中态、空状态占位
 ```
 
 ### 导入顺序

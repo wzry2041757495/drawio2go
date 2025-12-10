@@ -4,6 +4,9 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("Test API");
 
 export const runtime = "edge";
 
@@ -67,7 +70,7 @@ export async function POST(req: NextRequest) {
       provider: normalizedConfig.providerType,
     });
   } catch (error: unknown) {
-    console.error("测试请求失败:", error);
+    logger.error("测试请求失败", { error });
     return NextResponse.json(
       {
         success: false,

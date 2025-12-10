@@ -1,0 +1,108 @@
+.model-selector {
+  width: 100%;
+}
+
+.model-combobox-wrapper {
+  position: relative;
+  min-width: 0;
+}
+
+.model-combobox {
+  width: 100%;
+}
+
+.model-combobox .heroui-input-wrapper {
+  box-shadow: none;
+}
+
+.model-combobox-input {
+  min-height: 36px;
+  height: 36px;
+  border-radius: var(--radius-md, 0.5rem);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-default, var(--border));
+  box-shadow: none;
+}
+
+.model-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.model-option-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  justify-content: space-between;
+}
+
+.model-option-content .model-name {
+  font-weight: 500;
+  color: var(--foreground-primary, var(--foreground));
+}
+
+.model-option-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  justify-content: space-between;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.model-option-content .model-params {
+  font-size: 0.75rem;
+  color: var(--foreground-secondary, var(--text-secondary));
+  opacity: 0.8;
+}
+
+.provider-name {
+  margin-left: auto;
+  font-size: 0.875rem;
+  color: var(--foreground-secondary, var(--text-secondary));
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-compact-md, 0.25rem);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.model-selector-empty {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--foreground-tertiary, var(--text-tertiary));
+  font-size: 0.875rem;
+}
+
+.model-combobox-spinner {
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-sm, 0.5rem);
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--foreground-secondary, var(--text-secondary));
+}
+
+.model-selector [aria-disabled="true"],
+.model-selector [data-disabled="true"] {
+  opacity: 0.6;
+}
+
+@media (max-width: 640px) {
+  .provider-name {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .model-option-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-compact-md, 0.25rem);
+  }
+}

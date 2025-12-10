@@ -50,11 +50,11 @@
 
 /* 侧栏容器 */
 .sidebar-container {
-  padding: 0.75rem;
+  padding: var(--spacing-3);
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--spacing-3);
   position: relative;
 }
 
@@ -74,7 +74,7 @@
 .sidebar-tab-strip {
   display: flex;
   align-items: center;
-  padding: 0 0.5rem;
+  padding: 0 var(--spacing-sm);
   height: var(--sidebar-tabs-height);
   border-bottom: 1px solid var(--border-light);
   background: var(--background, #ffffff);
@@ -147,7 +147,7 @@
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0.75rem 0;
+  padding: var(--spacing-3) 0;
 }
 
 /* 侧边栏拖拽分隔条 */
@@ -186,7 +186,7 @@
 
 /* 设置区块样式 */
 .settings-section {
-  padding: 0.5rem 0;
+  padding: var(--spacing-sm) 0;
 }
 
 .section-title {
@@ -227,8 +227,8 @@
   border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem 0.5rem;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-sm);
   flex-shrink: 0;
 }
 
@@ -244,7 +244,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   border: none;
   color: var(--foreground-secondary, #6b7280);
@@ -285,13 +285,13 @@
 .settings-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0.75rem;
+  padding: var(--spacing-3);
   padding-bottom: calc(var(--spacing-xl) + var(--spacing-sm));
 }
 
 /* 设置面板 */
 .settings-panel {
-  padding: 1rem;
+  padding: var(--spacing-sm);
 }
 
 .settings-action-bar {
@@ -322,8 +322,8 @@
 }
 
 .status-dot {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: var(--spacing-sm);
+  height: var(--spacing-sm);
   border-radius: var(--radius-lg);
   background: var(--warning);
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--warning) 25%, transparent);
@@ -333,4 +333,17 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+@media (max-width: 768px) {
+  .unified-sidebar,
+  .settings-sidebar {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+  }
+
+  .sidebar-tab-strip {
+    padding: 0 var(--spacing-sm);
+  }
 }

@@ -9,16 +9,19 @@ app/api/
 ├── AGENTS.md           # 本文档
 ├── chat/
 │   └── route.ts        # 聊天 API（流式响应 + 工具调用）
+├── health/
+│   └── route.ts        # 轻量级健康检查（在线心跳）
 └── test/
     └── route.ts        # 连接测试 API
 ```
 
 ## 端点列表
 
-| 端点        | 方法 | 功能                       | 运行时  |
-| ----------- | ---- | -------------------------- | ------- |
-| `/api/chat` | POST | 流式聊天 + DrawIO 工具调用 | Node.js |
-| `/api/test` | POST | LLM 配置连接测试           | Edge    |
+| 端点          | 方法       | 功能                       | 运行时  |
+| ------------- | ---------- | -------------------------- | ------- |
+| `/api/chat`   | POST       | 流式聊天 + DrawIO 工具调用 | Node.js |
+| `/api/test`   | POST       | LLM 配置连接测试           | Edge    |
+| `/api/health` | HEAD / GET | 健康检查（<100ms 心跳）    | Edge    |
 
 ---
 
@@ -37,6 +40,8 @@ app/api/
 ```typescript
 interface ChatRequest {
   messages: UIMessage[]; // @ai-sdk/react 的 UIMessage 类型
+  projectUuid: string; // 当前项目 ID（用于工具转发过滤）
+  conversationId: string; // 必填，会话 ID，仅接受 body 提供的值
   llmConfig: {
     apiUrl: string; // API 端点 URL（自动添加 /v1）
     apiKey: string; // API 密钥
@@ -62,9 +67,10 @@ type ProviderType = "openai-reasoning" | "openai-compatible" | "deepseek";
 1. 解析请求 → 验证 messages + llmConfig
 2. 规范化配置 → normalizeLLMConfig()
 3. 转换消息 → convertToModelMessages()
-4. 创建 Provider → 根据 providerType 选择
-5. 执行流式生成 → streamText() + drawioTools
-6. 返回流响应 → toUIMessageStreamResponse()
+4. 校验会话所有权 → conversationId 必须属于当前 projectUuid
+5. 创建 Provider → 根据 providerType 选择
+6. 执行流式生成 → streamText() + createDrawioTools({ projectUuid, conversationId })
+7. 返回流响应 → toUIMessageStreamResponse()
 ```
 
 #### Provider 选择逻辑
@@ -132,18 +138,36 @@ interface TestRequest {
 
 ---
 
+### `/api/health` - 健康检查端点
+
+**文件**: `drawio2go/app/api/health/route.ts`
+
+**功能描述**
+
+用于网络连通性心跳检测，供 `useNetworkStatus` 判定“真在线 / 假在线”。
+
+**运行时**: `export const runtime = "edge"`（超轻量，默认 <100ms）
+
+**方法**:
+
+- `HEAD /api/health` → `204 No Content`
+- `GET /api/health` → `{ ok: true, timestamp }`
+
+**缓存**: `Cache-Control: no-store`，避免 CDN/浏览器缓存导致误判。
+
+---
+
 ## AI 工具集成
 
-### DrawIO 工具定义
+### DrawIO 工具定义（按请求上下文实例化）
 
 **来源**: `drawio2go/app/lib/drawio-ai-tools.ts`
 
 ```typescript
-export const drawioTools = {
-  drawio_read: drawioReadTool, // XPath 读取 XML
-  drawio_edit_batch: drawioEditBatchTool, // 原子化批量编辑
-  drawio_overwrite: drawioOverwriteTool, // 完整覆写 XML
-};
+const tools = createDrawioTools({
+  projectUuid, // 必填：当前项目 ID
+  conversationId, // 必填：请求所属会话 ID
+});
 ```
 
 ### 工具详情

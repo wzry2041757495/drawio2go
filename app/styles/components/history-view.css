@@ -16,40 +16,28 @@
 .history-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   padding: 0.25rem 0;
-}
-
-.history-toolbar__search {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-lg, 10px);
-  border: 1px solid var(--border-color, #e5e7eb);
-  background: var(--surface-1, #fff);
 }
 
 .history-toolbar__filters {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   align-items: center;
-  gap: 0.5rem;
+}
+
+.history-toolbar__search {
+  flex: 1 1 300px;
+  min-width: 0;
 }
 
 .history-toolbar__date {
-  display: inline-flex;
+  flex: 0 1 auto;
+  display: flex;
+  gap: 0.5rem;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: var(--radius-lg, 10px);
-  background: color-mix(in oklch, var(--accent) 6%, transparent);
-}
-
-.dark .history-toolbar__date {
-  border-color: color-mix(in oklch, var(--accent) 30%, transparent);
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  color: var(--foreground-secondary, #6b7280);
 }
 
 .history-toolbar__date-sep {
@@ -71,18 +59,23 @@
   color: var(--foreground-secondary, #6b7280);
 }
 
-.history-toolbar__search-input,
-.history-toolbar__date-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: 0.95rem;
-  outline: none;
+.history-date-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  background: var(--surface, #f8fafc);
   color: var(--foreground, #0f172a);
+  font-size: 0.875rem;
+  min-width: 9.5rem;
+  transition:
+    border-color var(--duration-medium, 200ms) var(--ease-out-cubic, ease),
+    box-shadow var(--duration-medium, 200ms) var(--ease-out-cubic, ease);
 }
 
-.history-toolbar__date-input {
-  min-width: 9.5rem;
+.history-date-input:focus {
+  outline: 2px solid var(--accent, #3388bb);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 20%, transparent);
 }
 
 .history-list {
@@ -90,34 +83,40 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-right: 0.25rem;
+  gap: 0.75rem;
+  padding: 1rem;
 }
 
 .history-card {
   display: flex;
-  align-items: center;
-  padding: 0.5rem 0.6rem;
+  padding: 0;
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: var(--radius-lg, 10px);
   background: var(--surface-1, #fff);
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.06));
   transition:
-    border-color 0.2s var(--ease-out-cubic),
-    box-shadow 0.2s var(--ease-out-cubic),
-    transform 0.2s var(--ease-out-cubic);
+    border-color var(--duration-fast, 150ms) var(--ease-out-cubic),
+    box-shadow var(--duration-fast, 150ms) var(--ease-out-cubic),
+    transform var(--duration-fast, 150ms) var(--ease-out-cubic);
 }
 
 .history-card:hover {
   border-color: color-mix(in oklch, var(--accent) 40%, transparent);
-  box-shadow: var(--shadow-sm, 0 4px 10px rgba(0, 0, 0, 0.08));
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-md, 0 8px 20px rgba(0, 0, 0, 0.12));
+  transform: translateY(-2px);
 }
 
 .history-card[data-selected="true"] {
   border-color: var(--accent, #3388bb);
   box-shadow: var(--shadow-md, 0 8px 20px rgba(0, 0, 0, 0.12));
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  background: color-mix(in oklch, var(--accent) 5%, var(--surface-1, #fff));
+}
+
+.history-card__content {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .history-card__body {
@@ -164,6 +163,7 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  margin-left: auto;
 }
 
 .history-empty {
@@ -209,6 +209,7 @@
     opacity 0.28s var(--ease-out-cubic);
 }
 
+.history-preview[data-visible="true"],
 .history-view[data-preview-open="true"] .history-preview {
   opacity: 1;
   pointer-events: auto;
@@ -328,11 +329,20 @@
   .history-toolbar__filters {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .history-toolbar__search,
+  .history-toolbar__date {
+    width: 100%;
   }
 
   .history-toolbar__date {
-    width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+  }
+
+  .history-list {
+    padding: 0.75rem 0.5rem 0.5rem;
   }
 
   .history-view--with-preview {
@@ -343,8 +353,24 @@
     position: fixed;
     inset: auto 0 0 0;
     width: 100%;
-    height: 55vh;
+    height: 60vh;
+    max-height: 600px;
     border-left: none;
     border-top: 1px solid var(--border-color, #e5e7eb);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(100%);
+    z-index: 50;
+  }
+
+  .history-preview[data-visible="true"] {
+    transform: translateY(0);
+    transition: transform var(--duration-medium, 200ms)
+      var(--ease-out-cubic, ease);
+  }
+
+  .history-preview[data-visible="false"] {
+    transform: translateY(100%);
+    transition: transform var(--duration-medium, 200ms)
+      var(--ease-out-cubic, ease);
   }
 }

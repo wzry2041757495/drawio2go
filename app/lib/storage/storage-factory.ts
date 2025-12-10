@@ -48,6 +48,9 @@
 import type { StorageAdapter } from "./adapter";
 import { SQLiteStorage } from "./sqlite-storage";
 import { IndexedDBStorage } from "./indexeddb-storage";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("StorageFactory");
 
 /**
  * 存储实例缓存
@@ -98,8 +101,8 @@ export async function getStorage(): Promise<StorageAdapter> {
  * 内部初始化函数
  */
 async function _initializeStorage(): Promise<StorageAdapter> {
-  console.log("[Storage] Initializing storage...");
-  console.log("[Storage] Environment check:", {
+  logger.info("Initializing storage...");
+  logger.debug("Environment check", {
     hasWindow: typeof window !== "undefined",
     hasElectronStorage:
       typeof window !== "undefined" && !!window.electronStorage,
@@ -111,12 +114,12 @@ async function _initializeStorage(): Promise<StorageAdapter> {
 
   // 检测 Electron 环境
   if (typeof window !== "undefined" && window.electronStorage) {
-    console.log("[Storage] Detected Electron environment, using SQLite");
+    logger.info("Detected Electron environment，使用 SQLite");
     storage = new SQLiteStorage();
   }
   // 检测 Web 环境
   else if (typeof window !== "undefined" && typeof indexedDB !== "undefined") {
-    console.log("[Storage] Detected Web environment, using IndexedDB");
+    logger.info("Detected Web environment，使用 IndexedDB");
     storage = new IndexedDBStorage();
   }
   // 不支持的环境
@@ -141,7 +144,7 @@ async function _initializeStorage(): Promise<StorageAdapter> {
 export function resetStorage(): void {
   storageInstance = null;
   initializationPromise = null;
-  console.log("[Storage] Storage instance reset");
+  logger.warn("Storage instance reset");
 }
 
 /**

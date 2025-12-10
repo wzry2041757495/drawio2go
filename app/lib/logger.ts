@@ -1,5 +1,6 @@
 type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 type ConsoleLevel = "debug" | "info" | "warn" | "error";
+type LogContext = Record<string, unknown>;
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
   debug: 10,
@@ -20,7 +21,13 @@ function resolveGlobalLevel(): LogLevel {
     return envLevel as LogLevel;
   }
 
-  return "info";
+  const isDev =
+    (typeof process !== "undefined" && process.env.NODE_ENV !== "production") ||
+    (typeof window !== "undefined" &&
+      (window as unknown as Record<string, unknown>).__DRAWIO2GO_DEV__ ===
+        true);
+
+  return isDev ? "debug" : "info";
 }
 
 const DEFAULT_LEVEL = resolveGlobalLevel();
@@ -32,13 +39,30 @@ const consoleMethod: Record<Exclude<LogLevel, "silent">, ConsoleLevel> = {
   error: "error",
 };
 
-export function createLogger(componentName: string, level?: LogLevel) {
+interface LoggerOptions {
+  level?: LogLevel;
+  context?: LogContext;
+}
+
+export type Logger = ReturnType<typeof createLogger>;
+
+export function createLogger(componentName: string, options?: LoggerOptions) {
   const prefix = `[${componentName}]`;
-  const currentLevel = level ?? DEFAULT_LEVEL;
+  const currentLevel = options?.level ?? DEFAULT_LEVEL;
+  const baseContext = options?.context;
 
   const shouldLog = (incoming: LogLevel) =>
     LEVEL_ORDER[incoming] >= LEVEL_ORDER[currentLevel] &&
     currentLevel !== "silent";
+
+  const appendContext = (
+    args: unknown[],
+    extraContext?: LogContext,
+  ): unknown[] => {
+    const mergedContext = { ...baseContext, ...extraContext };
+    const hasContext = Object.keys(mergedContext).length > 0;
+    return hasContext ? [...args, mergedContext] : args;
+  };
 
   const log =
     (incoming: Exclude<LogLevel, "silent">) =>
@@ -48,7 +72,7 @@ export function createLogger(componentName: string, level?: LogLevel) {
       const logger = (
         console as Record<ConsoleLevel, (...values: unknown[]) => void>
       )[method];
-      logger(prefix, ...args);
+      logger(prefix, ...appendContext(args));
     };
 
   return {
@@ -56,5 +80,10 @@ export function createLogger(componentName: string, level?: LogLevel) {
     info: log("info"),
     warn: log("warn"),
     error: log("error"),
+    withContext: (context: LogContext) =>
+      createLogger(componentName, {
+        level: currentLevel,
+        context: { ...baseContext, ...context },
+      }),
   };
 }

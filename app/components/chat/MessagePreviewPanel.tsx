@@ -6,6 +6,9 @@ import { X, MessageSquare, User, Bot } from "lucide-react";
 import type { Conversation, Message } from "@/app/lib/storage";
 import { formatConversationDate } from "@/app/lib/format-utils";
 import { useAppTranslation } from "@/app/i18n/hooks";
+import { createLogger } from "@/app/lib/logger";
+
+const logger = createLogger("MessagePreviewPanel");
 
 interface MessagePreviewPanelProps {
   isOpen: boolean;
@@ -41,7 +44,7 @@ export default function MessagePreviewPanel({
   );
 
   return (
-    <aside className="history-preview" aria-live="polite">
+    <aside className="history-preview" aria-live="polite" data-visible={isOpen}>
       <div className="history-preview__header">
         <div className="history-preview__title">
           <p className="history-preview__name">{conversation.title}</p>
@@ -74,7 +77,7 @@ export default function MessagePreviewPanel({
       <div className="history-preview__content">
         {loading ? (
           <div className="history-preview__loading">
-            <Spinner size="sm" />
+            <Spinner size="md" />
             <span>{t("messages.loading")}</span>
           </div>
         ) : messages.length === 0 ? (
@@ -116,11 +119,10 @@ export default function MessagePreviewPanel({
                         ""
                       );
                     } catch (error) {
-                      console.error(
-                        "[MessagePreviewPanel] 解析 parts_structure 失败:",
+                      logger.error("解析 parts_structure 失败", {
                         error,
-                        msg.id,
-                      );
+                        messageId: msg.id,
+                      });
                       return (
                         t("messages.emptyMessage", { defaultValue: "" }) || ""
                       );

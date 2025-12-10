@@ -4,13 +4,13 @@
  * 定义后端和前端之间通过 Socket.IO 传递的消息格式
  */
 
+import type { ToolCallRequest as BaseToolCallRequest } from "./socket";
+
 /**
  * 后端 → 前端：工具调用请求
  */
-export interface ToolCallRequest {
-  requestId: string;
+export interface ToolCallRequest extends BaseToolCallRequest {
   toolName: "get_drawio_xml" | "replace_drawio_xml";
-  input: Record<string, unknown>;
   timeout: number;
   /**
    * AI 侧传入的操作描述，供自动版本创建时生成版本描述使用

@@ -102,7 +102,6 @@ app/
 │   │   ├── constants-shared.js  # 跨环境共享常量
 │   │   ├── default-diagram-xml.js # 默认空白图表 XML
 │   │   ├── types.ts             # 存储层类型定义
-│   │   ├── migrations/          # 数据库迁移脚本
 │   │   ├── AGENTS.md            # 存储层详细文档
 │   │   └── index.ts             # 统一导出
 │   └── AGENTS.md                 # 工具库完整文档
@@ -256,6 +255,39 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 - 务必主动调用`pnpm run lint`获得语法错误检查信息，避免在编译时才处理语法错误
 
 ## 代码腐化清理记录
+
+### 2025-12-08 清理（阶段6）
+
+**执行的操作**：
+
+- 死代码清理：移除 `resetDomParserCache`，精简 `DrawioEditBatchRequest`，清除 ModelsSettingsPanel 过时 TODO。
+- 重复合并：UUID 生成、版本格式化、错误消息提取集中到通用工具；存储事件分派/超时常量下沉；Electron Buffer 与 SQL 占位符工具化；ToolCallCard 样式抽出到 utilities。
+- 一致性：组件事件统一 `onPress`（ToolCallCard/ProjectSelector/PageSVGViewer）；新增 `buildXmlError/buildToolError`；存储超时提示补齐国际化；`useChatLock` 的 clientIdRef 改为 `useEffect` 初始化；`exportConversations` 复用 SQL 语句。
+- 重大重构：提炼 `usePanZoomStage` / `useVersionPages`；PageSVGViewer 与 VersionCompare 迁移到新 hooks；删除 `components/version/version-utils.ts` 下沉到 lib；新增 `blob-utils.ts` 统一二进制转换。
+- 依赖：新增 `@react-aria/interactions` 支持 `usePress`。
+
+**影响文件**：约 25 个（跨 components/hooks/lib/electron/storage）
+
+**下次关注**：
+
+- 观察新 hooks 对版本/对比场景的性能与可访问性回归。
+- 跟踪 usePress 引入后是否还有遗留 onClick 或事件冒泡问题。
+
+### 2025-12-05 清理（Milestone 8）
+
+**执行的操作**：
+
+- 样式系统统一：移除组件内联样式，补齐缺失的 CSS 变量引用，集中到样式文件
+- 性能优化：自动保存加防抖，嵌套渲染分段更新，日志系统统一输出，AI 版本快照路径降噪
+- 代码质量：TypeScript/ESLint 全量通过，消除警告与悬挂类型
+
+**影响文件**：约 20+ 个文件
+
+**下次关注**：
+
+- 补充可访问性专项（见遗留问题清单）
+- 继续压缩渲染关键路径的无关重渲染
+- 观察自动保存防抖对极端场景的稳定性
 
 ### 2025-12-02 清理（Components 模块）
 
@@ -504,11 +536,16 @@ pnpm format               # 使用 Prettier 格式化所有代码
 
 - **对话 API**：`getConversationsByXMLVersion` 全面下线，所有会话按 `project_uuid` 维度查询，前端 Hook 与 Electron IPC 均已同步。
 - **页面元数据校验**：新增 `app/lib/storage/page-metadata-validators.ts`，统一 `page_count`、`page_names` 解析规则与 SVG Blob（8MB）体积校验，IndexedDB/SQLite 复用同一逻辑。
-- **迁移体系**：
-  - 数据库版本统一为 v1（包含所有表结构）
-  - IndexedDB 通过 `storage/migrations/indexeddb/v1.ts` 执行幂等迁移
-  - SQLite 通过 `electron/storage/migrations/v1.js` 自动执行迁移并更新 `user_version`
-  - v1 已包含完整表结构（含 sequence_number 字段和 conversation_sequences 表）
-  - 禁止删除/重建存储，仅通过迁移脚本更新
+- **Schema 初始化（2025-12-07 破坏性更新）**：
+  - 迁移体系下线，v1 即当前完整 Schema（含 sequence_number、conversation_sequences、is_streaming/streaming_since）（已于 2025-12-08 恢复迁移机制，见下节）
+  - IndexedDB / SQLite 在初始化阶段直接建表，`pragma user_version` 固定为 1
+  - 需要结构变更时直接提升版本号并重建（允许清库，暂无迁移脚本）
 
-_最后更新: 2025-11-30_
+### 迁移体系恢复（2025-12-08）
+
+- 恢复存储迁移目录：`app/lib/storage/migrations/indexeddb`、`electron/storage/migrations`
+- IndexedDB：upgrade 回调使用 `runIndexedDbMigrations`，V1 迁移包含 settings/projects/xml_versions/conversations/messages/conversation_sequences，补回 `source_version_id` 及消息序列索引，幂等可重复执行
+- SQLite：基于 `PRAGMA user_version` 的 `runSQLiteMigrations`，V1 迁移创建全部表、索引（含 `source_version_id`）、外键约束，保持 WAL 与外键开启
+- 现有用户库版本仍为 1，如需应用迁移可删除本地库重新初始化（未来版本将基于此体系增量迭代）
+
+_最后更新: 2025-12-08_

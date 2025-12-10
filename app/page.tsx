@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Alert, Button, Spinner } from "@heroui/react";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import TopBar from "./components/TopBar";
 import UnifiedSidebar, { type SidebarTab } from "./components/UnifiedSidebar";
@@ -15,6 +16,10 @@ import { useDrawioEditor } from "./hooks/useDrawioEditor";
 import { WIP_VERSION } from "./lib/storage/constants";
 import { useToast } from "./components/toast";
 import { useAppTranslation, useI18n } from "./i18n/hooks";
+import { createLogger } from "./lib/logger";
+import { toErrorString } from "./lib/error-handler";
+
+const logger = createLogger("Page");
 
 export default function Home() {
   // 存储 Hook
@@ -57,6 +62,9 @@ export default function Home() {
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] =
     useState<boolean>(false);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedXmlRef = useRef<string>("");
+  const pendingXmlRef = useRef<string | null>(null);
 
   // 初始化 Socket.IO 连接
   const { isConnected } = useDrawioSocket(editorRef);
@@ -74,10 +82,13 @@ export default function Home() {
           const defaultXml =
             '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
           await saveXML(defaultXml, projectUuid);
-          console.log("✅ 已创建 WIP 版本");
+          logger.info("已创建 WIP 版本", { projectId: projectUuid });
         }
       } catch (error) {
-        console.error("❌ 创建 WIP 版本失败:", error);
+        logger.error("创建 WIP 版本失败", {
+          projectId: projectUuid,
+          error,
+        });
       }
     },
     [getAllXMLVersions, saveXML],
@@ -87,6 +98,8 @@ export default function Home() {
   const syncDiagramXml = useCallback(async () => {
     const xml = await loadProjectXml();
     setDiagramXml(xml);
+    lastSavedXmlRef.current = xml;
+    pendingXmlRef.current = null;
   }, [loadProjectXml]);
 
   // 加载当前工程的 XML
@@ -99,7 +112,10 @@ export default function Home() {
           // 然后加载工程 XML 到编辑器并同步状态
           await syncDiagramXml();
         } catch (error) {
-          console.error("初始化工程失败:", error);
+          logger.error("初始化工程失败", {
+            projectId: currentProject.uuid,
+            error,
+          });
         }
       })();
     }
@@ -118,26 +134,12 @@ export default function Home() {
             setSettings({ defaultPath: savedPath });
           }
         } catch (error) {
-          console.error("加载默认路径失败:", error);
+          logger.error("加载默认路径失败", { error });
         }
       };
 
       loadDefaultPath();
-
-      // 监听 AI 工具触发的 XML 替换事件
-      const handleAIXmlReplaced = (event: Event) => {
-        const customEvent = event as CustomEvent<{ xml: string }>;
-        if (customEvent.detail?.xml && editorRef.current) {
-          console.log("🤖 AI 工具更新了 XML，正在加载到编辑器");
-          editorRef.current.loadDiagram(customEvent.detail.xml);
-        }
-      };
-
-      window.addEventListener("ai-xml-replaced", handleAIXmlReplaced);
-
-      return () => {
-        window.removeEventListener("ai-xml-replaced", handleAIXmlReplaced);
-      };
+      return undefined;
     }
   }, [getDefaultPath, editorRef]);
 
@@ -156,7 +158,10 @@ export default function Home() {
         (typeof error === "string" && error.trim()) ||
         tp("main.unknownError");
 
-      console.error("[DrawIO] 图表更新失败:", error, message);
+      logger.error("[DrawIO] 图表更新失败", {
+        error,
+        message,
+      });
       push({
         variant: "danger",
         title: t("toasts.diagramUpdateFailedTitle"),
@@ -172,23 +177,79 @@ export default function Home() {
   }, [push, t, tp]);
 
   // 自动保存图表到统一存储层
-  const handleAutoSave = async (xml: string) => {
-    if (currentProject && typeof window !== "undefined") {
-      try {
-        await saveXML(xml, currentProject.uuid);
-        // 更新 diagramXml 用于手动保存功能
-        setDiagramXml(xml);
-      } catch (error) {
-        console.error("自动保存失败:", error);
-        // 可以在这里添加用户提示，但不中断编辑流程
+  const flushPendingSave = useCallback(
+    async (options?: { skipStateUpdate?: boolean }) => {
+      if (
+        !currentProject ||
+        typeof window === "undefined" ||
+        !pendingXmlRef.current
+      ) {
+        return;
       }
-    }
-  };
+
+      const xmlToSave = pendingXmlRef.current;
+
+      if (xmlToSave === lastSavedXmlRef.current) {
+        pendingXmlRef.current = null;
+        return;
+      }
+
+      try {
+        await saveXML(xmlToSave, currentProject.uuid);
+        lastSavedXmlRef.current = xmlToSave;
+        if (!options?.skipStateUpdate) {
+          setDiagramXml(xmlToSave);
+        }
+      } catch (error) {
+        logger.error("自动保存失败", {
+          projectId: currentProject.uuid,
+          error,
+        });
+        // 可以在这里添加用户提示，但不中断编辑流程
+      } finally {
+        pendingXmlRef.current = null;
+      }
+    },
+    [currentProject, saveXML],
+  );
+
+  const handleAutoSave = useCallback(
+    (xml: string) => {
+      if (!currentProject || typeof window === "undefined") return;
+
+      // 清除旧的定时器
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+      }
+
+      pendingXmlRef.current = xml;
+
+      // 设置新的防抖定时器（1.5 秒）
+      saveDebounceRef.current = setTimeout(() => {
+        void flushPendingSave();
+      }, 1500);
+    },
+    [currentProject, flushPendingSave],
+  );
+
+  // 组件卸载或工程切换时清理定时器并保存未落盘内容
+  useEffect(() => {
+    return () => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      void flushPendingSave({ skipStateUpdate: true });
+    };
+  }, [flushPendingSave]);
 
   // 处理 DrawIO 选区变化
   const handleSelectionChange = (info: DrawioSelectionInfo) => {
     setSelectionInfo(info);
-    console.log("🎯 选中元素详情:", JSON.stringify(info.cells, null, 2));
+    logger.debug("选中元素详情", {
+      projectId: currentProject?.uuid,
+      cells: info.cells,
+    });
   };
 
   // 手动保存到文件
@@ -233,9 +294,9 @@ export default function Home() {
         URL.revokeObjectURL(url);
       }
     } catch (error) {
-      console.error("手动保存失败:", error);
+      logger.error("手动保存失败", { error });
       push({
-        description: t("toasts.saveFailed", { error: String(error) }),
+        description: t("toasts.saveFailed", { error: toErrorString(error) }),
         variant: "danger",
       });
     }
@@ -247,12 +308,19 @@ export default function Home() {
       const result = await window.electron.loadDiagram();
       if (result.success && result.xml) {
         try {
-          console.log("📂 用户手动加载文件，使用完全重载");
+          logger.info("用户手动加载文件，使用完全重载", {
+            projectId: currentProject?.uuid,
+          });
           await replaceWithXml(result.xml, true); // 使用 load 动作完全重载
         } catch (error) {
-          console.error("加载文件失败:", error);
+          logger.error("加载文件失败", {
+            projectId: currentProject?.uuid,
+            error,
+          });
           push({
-            description: t("toasts.loadFailed", { error: String(error) }),
+            description: t("toasts.loadFailed", {
+              error: toErrorString(error),
+            }),
             variant: "danger",
           });
         }
@@ -274,12 +342,19 @@ export default function Home() {
           reader.onload = async (event) => {
             const xml = event.target?.result as string;
             try {
-              console.log("📂 用户手动加载文件，使用完全重载");
+              logger.info("用户手动加载文件，使用完全重载", {
+                projectId: currentProject?.uuid,
+              });
               await replaceWithXml(xml, true); // 使用 load 动作完全重载
             } catch (error) {
-              console.error("加载文件失败:", error);
+              logger.error("加载文件失败", {
+                projectId: currentProject?.uuid,
+                error,
+              });
               push({
-                description: t("toasts.loadFailed", { error: String(error) }),
+                description: t("toasts.loadFailed", {
+                  error: toErrorString(error),
+                }),
                 variant: "danger",
               });
             }
@@ -312,7 +387,10 @@ export default function Home() {
     if (!currentProject) return;
 
     try {
-      console.log(`🔄 开始回滚到版本 ${versionId}`);
+      logger.info("开始回滚版本", {
+        projectId: currentProject.uuid,
+        versionId,
+      });
 
       // 执行回滚操作（将历史版本覆盖到 WIP）
       await rollbackToVersion(currentProject.uuid, versionId);
@@ -320,9 +398,16 @@ export default function Home() {
       // 重新加载 WIP 到编辑器并同步状态
       await syncDiagramXml();
 
-      console.log("✅ 版本回滚成功");
+      logger.info("版本回滚成功", {
+        projectId: currentProject.uuid,
+        versionId,
+      });
     } catch (error) {
-      console.error("❌ 版本回滚失败:", error);
+      logger.error("版本回滚失败", {
+        projectId: currentProject.uuid,
+        versionId,
+        error,
+      });
       push({
         description: t("toasts.versionRollbackFailed"),
         variant: "danger",
@@ -344,7 +429,7 @@ export default function Home() {
       await switchProject(projectId);
       // 切换工程后会自动触发 useEffect 加载新工程的 XML
     } catch (error) {
-      console.error("切换工程失败:", error);
+      logger.error("切换工程失败", { projectId, error });
       push({
         description: t("toasts.projectSwitchFailed"),
         variant: "danger",
@@ -359,7 +444,7 @@ export default function Home() {
       await switchProject(newProject.uuid);
       setShowProjectSelector(false);
     } catch (error) {
-      console.error("创建工程失败:", error);
+      logger.error("创建工程失败", { error });
       push({
         description: t("toasts.projectCreateFailed"),
         variant: "danger",
@@ -390,53 +475,20 @@ export default function Home() {
   // 如果正在加载项目，显示加载界面
   if (projectLoading && !currentProject) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f5f5f5",
-          zIndex: 10000,
-        }}
-      >
-        <div
-          style={{
-            background: "white",
-            padding: "40px",
-            borderRadius: "12px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-            textAlign: "center",
-            maxWidth: "400px",
-          }}
-        >
-          <div
-            style={{
-              width: "60px",
-              height: "60px",
-              border: "4px solid #e0e0e0",
-              borderTop: "4px solid #4CAF50",
-              borderRadius: "50%",
-              margin: "0 auto 20px",
-              animation: "spin 1s linear infinite",
-            }}
+      <div className="loading-overlay">
+        <div className="loading-overlay__card">
+          <Spinner
+            size="xl"
+            color="success"
+            aria-label={tp("main.loadingProject")}
+            className="loading-overlay__spinner"
           />
-          <h2 style={{ margin: "0 0 10px", fontSize: "20px", color: "#333" }}>
+          <h2 className="loading-overlay__title">
             {tp("main.loadingProject")}
           </h2>
-          <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+          <p className="loading-overlay__description">
             {tp("main.loadingProjectDetail")}
           </p>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
         </div>
       </div>
     );
@@ -444,100 +496,38 @@ export default function Home() {
 
   return (
     <main className={`main-container ${isSidebarOpen ? "sidebar-open" : ""}`}>
-      {/* 顶部通知区域：Socket 断连 & DrawIO 合并错误 */}
-      {!isConnected && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-            padding: "8px 16px",
-            zIndex: 9999,
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            style={{
-              background: "#ff6b6b",
-              color: "white",
-              padding: "8px 12px",
-              textAlign: "center",
-              fontSize: "14px",
-              borderRadius: "8px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-              pointerEvents: "auto",
-            }}
-          >
-            {tp("main.socketDisconnected")}
-          </div>
-        </div>
-      )}
-
       {/* 项目加载失败提示 */}
       {!projectLoading && !currentProject && (
-        <div
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            background: "white",
-            padding: "40px",
-            borderRadius: "12px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-            textAlign: "center",
-            maxWidth: "500px",
-            zIndex: 10000,
-          }}
-        >
-          <div
-            style={{
-              fontSize: "48px",
-              marginBottom: "20px",
-            }}
-          >
-            ⚠️
+        <div className="error-overlay">
+          <div className="error-overlay__card">
+            <div
+              className="error-overlay__emoji"
+              role="img"
+              aria-label="warning"
+            >
+              ⚠️
+            </div>
+            <Alert status="danger">
+              <Alert.Content className="error-overlay__alert-content">
+                <Alert.Title className="error-overlay__title">
+                  {tp("main.loadingFailed")}
+                </Alert.Title>
+                <Alert.Description className="error-overlay__description">
+                  {tp("main.loadingFailedLine1")}
+                  <br />
+                  {tp("main.loadingFailedLine2")}
+                </Alert.Description>
+              </Alert.Content>
+            </Alert>
+            <div className="error-overlay__actions">
+              <Button
+                variant="primary"
+                onPress={() => window.location.reload()}
+              >
+                {tp("main.reloadPage")}
+              </Button>
+            </div>
           </div>
-          <h2
-            style={{
-              margin: "0 0 10px",
-              fontSize: "24px",
-              color: "#d32f2f",
-            }}
-          >
-            {tp("main.loadingFailed")}
-          </h2>
-          <p
-            style={{
-              margin: "0 0 20px",
-              fontSize: "14px",
-              color: "#666",
-              lineHeight: "1.6",
-            }}
-          >
-            {tp("main.loadingFailedLine1")}
-            <br />
-            {tp("main.loadingFailedLine2")}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              background: "#4CAF50",
-              color: "white",
-              border: "none",
-              padding: "12px 24px",
-              borderRadius: "6px",
-              fontSize: "16px",
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(76,175,80,0.3)",
-            }}
-          >
-            {tp("main.reloadPage")}
-          </button>
         </div>
       )}
 
@@ -574,6 +564,7 @@ export default function Home() {
         projectUuid={currentProject?.uuid}
         onVersionRestore={handleVersionRestore}
         editorRef={editorRef}
+        isSocketConnected={isConnected}
       />
 
       {/* 工程选择器 */}

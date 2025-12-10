@@ -1,89 +1,121 @@
 import type { IDBPDatabase, IDBPObjectStore, IDBPTransaction } from "idb";
 
-type VersionChangeStore = IDBPObjectStore<
+// Type alias 便于约束 upgrade 事务
+export type IndexedDbUpgradeTransaction = IDBPTransaction<
   unknown,
-  ArrayLike<string>,
+  string[],
+  "versionchange"
+>;
+
+type UpgradeObjectStore = IDBPObjectStore<
+  unknown,
+  string[],
   string,
   "versionchange"
 >;
 
-const INDEX_OPTIONS = { unique: false } as const;
+const hasIndex = (store: UpgradeObjectStore, name: string): boolean => {
+  const names = Array.from(store.indexNames || []);
+  return names.includes(name);
+};
 
-function hasIndex(store: VersionChangeStore, name: string): boolean {
-  const list = store.indexNames;
-  if (!list) {
-    return false;
-  }
-  if (typeof list.contains === "function") {
-    return list.contains(name);
-  }
-  for (let i = 0; i < list.length; i += 1) {
-    if (list[i] === name) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function ensureIndex(
-  store: VersionChangeStore,
+const ensureIndex = (
+  store: UpgradeObjectStore,
   name: string,
   keyPath: string | string[],
-) {
+  options?: IDBIndexParameters,
+) => {
   if (!hasIndex(store, name)) {
-    store.createIndex(name, keyPath, INDEX_OPTIONS);
+    store.createIndex(name, keyPath, options);
   }
-}
+};
 
-function ensureStore(
+const getOrCreateStore = (
   db: IDBPDatabase<unknown>,
-  tx: IDBPTransaction<unknown, string[], "versionchange">,
+  tx: IndexedDbUpgradeTransaction,
   name: string,
   options: IDBObjectStoreParameters,
-): VersionChangeStore {
-  if (!db.objectStoreNames.contains(name)) {
-    return db.createObjectStore(name, options) as VersionChangeStore;
+): UpgradeObjectStore => {
+  if (db.objectStoreNames.contains(name)) {
+    return tx.objectStore(name);
   }
-  return tx.objectStore(name) as VersionChangeStore;
-}
+  return db.createObjectStore(name, options);
+};
 
 /**
- * IndexedDB v1 迁移
- *
- * 包含完整的表结构：
- * - settings: 应用设置
- * - projects: 项目信息
- * - xml_versions: XML 版本管理
- * - conversations: 聊天会话
- * - messages: 聊天消息（含 sequence_number 字段）
- * - conversation_sequences: 会话序列号追踪
+ * V1 迁移：完整建表 + 索引，幂等可重复执行
  */
 export function applyIndexedDbV1Migration(
   db: IDBPDatabase<unknown>,
-  tx: IDBPTransaction<unknown, string[], "versionchange">,
-) {
-  ensureStore(db, tx, "settings", { keyPath: "key" });
-  ensureStore(db, tx, "projects", { keyPath: "uuid" });
-
-  const xmlStore = ensureStore(db, tx, "xml_versions", { keyPath: "id" });
-  ensureIndex(xmlStore, "project_uuid", "project_uuid");
-  ensureIndex(xmlStore, "source_version_id", "source_version_id");
-
-  const convStore = ensureStore(db, tx, "conversations", { keyPath: "id" });
-  ensureIndex(convStore, "project_uuid", "project_uuid");
-
-  // messages: { id, conversation_id, role, parts_structure, model_name?, xml_version_id?, sequence_number?, created_at }
-  const msgStore = ensureStore(db, tx, "messages", { keyPath: "id" });
-  ensureIndex(msgStore, "conversation_id", "conversation_id");
-  ensureIndex(msgStore, "xml_version_id", "xml_version_id");
-  // 消息序列号复合索引（用于按序查询）
-  ensureIndex(msgStore, "conversation_id_sequence_number", [
-    "conversation_id",
-    "sequence_number",
-  ]);
-
-  // 会话序列号追踪表
-  ensureStore(db, tx, "conversation_sequences", {
-    keyPath: "conversation_id",
+  tx: IndexedDbUpgradeTransaction,
+): void {
+  // settings
+  const settingsStore = getOrCreateStore(db, tx, "settings", {
+    keyPath: "key",
   });
+  ensureIndex(settingsStore, "by_key", "key", { unique: true });
+
+  // projects
+  const projectsStore = getOrCreateStore(db, tx, "projects", {
+    keyPath: "uuid",
+  });
+  ensureIndex(projectsStore, "by_uuid", "uuid", { unique: true });
+  ensureIndex(projectsStore, "by_created_at", "created_at", {
+    unique: false,
+  });
+
+  // xml_versions
+  const xmlVersionsStore = getOrCreateStore(db, tx, "xml_versions", {
+    keyPath: "id",
+  });
+  ensureIndex(xmlVersionsStore, "project_uuid", "project_uuid", {
+    unique: false,
+  });
+  ensureIndex(xmlVersionsStore, "source_version_id", "source_version_id", {
+    unique: false,
+  });
+  ensureIndex(xmlVersionsStore, "semantic_version", "semantic_version", {
+    unique: false,
+  });
+  ensureIndex(xmlVersionsStore, "created_at", "created_at", {
+    unique: false,
+  });
+
+  // conversations
+  const conversationsStore = getOrCreateStore(db, tx, "conversations", {
+    keyPath: "id",
+  });
+  ensureIndex(conversationsStore, "project_uuid", "project_uuid", {
+    unique: false,
+  });
+  ensureIndex(conversationsStore, "updated_at", "updated_at", {
+    unique: false,
+  });
+  ensureIndex(conversationsStore, "created_at", "created_at", {
+    unique: false,
+  });
+
+  // messages
+  const messagesStore = getOrCreateStore(db, tx, "messages", {
+    keyPath: "id",
+  });
+  ensureIndex(messagesStore, "conversation_id", "conversation_id", {
+    unique: false,
+  });
+  ensureIndex(messagesStore, "xml_version_id", "xml_version_id", {
+    unique: false,
+  });
+  ensureIndex(
+    messagesStore,
+    "conversation_id_sequence_number",
+    ["conversation_id", "sequence_number"],
+    { unique: false },
+  );
+
+  // conversation_sequences
+  if (!db.objectStoreNames.contains("conversation_sequences")) {
+    db.createObjectStore("conversation_sequences", {
+      keyPath: "conversation_id",
+    });
+  }
 }

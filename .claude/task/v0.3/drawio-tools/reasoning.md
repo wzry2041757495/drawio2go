@@ -19,6 +19,7 @@
 - ❌ 重新加载会话后，reasoning 内容消失
 
 **根本原因**：
+
 - `convertUIMessageToCreateInput` 只提取 text 和 tool parts
 - `convertMessageToUIMessage` 只从 content 和 tool_invocations 重建 parts
 - 数据库没有字段存储 reasoning 信息
@@ -30,10 +31,12 @@
 ### 核心设计
 
 **完全迁移方案**（删除旧字段，只使用新字段）：
+
 - ❌ 删除：`content: string` 和 `tool_invocations?: string`
 - ✅ 新增：`parts_structure: string` - JSON 序列化的完整 parts 数组
 
 **parts_structure 存储内容**：
+
 ```typescript
 [
   { type: "reasoning", text: "思考内容", state: "done" },
@@ -43,6 +46,7 @@
 ```
 
 **关键特性**：
+
 - ✅ 保存所有类型的 part（reasoning/text/tool）
 - ✅ 保持原始顺序（按 parts 数组索引）
 - ✅ 工具 part 规范化为 `dynamic-tool` 格式
@@ -51,6 +55,7 @@
 ### 方案选择理由
 
 **为什么选择完全迁移而非双字段保留？**
+
 - 项目处于内部开发阶段，可以直接执行破坏性更新
 - 避免字段冗余和数据不一致问题
 - 简化序列化/反序列化逻辑
@@ -63,6 +68,7 @@
 ### 1. ✅ 数据库迁移
 
 **SQLite** (`electron/storage/migrations/v1.js`):
+
 ```sql
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
@@ -79,16 +85,19 @@ CREATE TABLE IF NOT EXISTS messages (
 ```
 
 **IndexedDB** (`app/lib/storage/migrations/indexeddb/v1.ts`):
+
 - 注释说明新结构：`{ id, conversation_id, role, parts_structure, model_name?, xml_version_id?, sequence_number?, created_at }`
 - 保留所有索引：`conversation_id`, `xml_version_id`, `[conversation_id+sequence_number]`
 
 **注意**：
+
 - ⚠️ 直接修改 v1 迁移脚本，未创建 v2 迁移
 - ⚠️ 需要手动清空数据库（开发阶段无旧数据）
 
 ### 2. ✅ 类型定义更新
 
 **`app/lib/storage/types.ts`**:
+
 ```typescript
 export interface Message {
   id: string;
@@ -116,6 +125,7 @@ export interface CreateMessageInput {
 ### 3. ✅ 序列化逻辑修改
 
 **`app/lib/chat-session-service.ts` - `convertUIMessageToCreateInput`**:
+
 ```typescript
 export function convertUIMessageToCreateInput(
   uiMsg: ChatUIMessage,
@@ -126,13 +136,14 @@ export function convertUIMessageToCreateInput(
   const parts_structure = safeJsonStringify(uiMsg.parts);
 
   const metadata = (uiMsg.metadata as MessageMetadata | undefined) ?? {};
-  const createdAt = typeof metadata.createdAt === "number" ? metadata.createdAt : undefined;
+  const createdAt =
+    typeof metadata.createdAt === "number" ? metadata.createdAt : undefined;
 
   return {
     id: uiMsg.id,
     conversation_id: conversationId,
     role: uiMsg.role as "user" | "assistant" | "system",
-    parts_structure,  // 新字段
+    parts_structure, // 新字段
     model_name: metadata.modelName ?? null,
     xml_version_id: xmlVersionId,
     created_at: createdAt,
@@ -141,6 +152,7 @@ export function convertUIMessageToCreateInput(
 ```
 
 **关键改动**：
+
 - ❌ 删除了 text 提取和合并逻辑
 - ❌ 删除了工具 part 过滤逻辑
 - ✅ 直接序列化整个 `uiMsg.parts` 数组
@@ -148,6 +160,7 @@ export function convertUIMessageToCreateInput(
 ### 4. ✅ 反序列化逻辑修改
 
 **`app/lib/chat-session-service.ts` - `convertMessageToUIMessage`**:
+
 ```typescript
 export function convertMessageToUIMessage(msg: Message): ChatUIMessage {
   let parts: ChatUIMessage["parts"] = [];
@@ -164,10 +177,16 @@ export function convertMessageToUIMessage(msg: Message): ChatUIMessage {
           // reasoning/text 等其他 part 直接返回
           return part;
         })
-        .filter((part): part is ChatUIMessage["parts"][number] => Boolean(part));
+        .filter((part): part is ChatUIMessage["parts"][number] =>
+          Boolean(part),
+        );
     }
   } catch (error) {
-    console.error("[chat-session-service] 解析 parts_structure 失败:", error, msg.id);
+    console.error(
+      "[chat-session-service] 解析 parts_structure 失败:",
+      error,
+      msg.id,
+    );
     // 解析失败时返回空 parts，不影响其他数据
   }
 
@@ -186,6 +205,7 @@ export function convertMessageToUIMessage(msg: Message): ChatUIMessage {
 ```
 
 **关键改动**：
+
 - ❌ 删除了从 content 构建 text part 的逻辑
 - ❌ 删除了从 tool_invocations 构建工具 part 的逻辑
 - ✅ 直接解析 `parts_structure` JSON
@@ -197,6 +217,7 @@ export function convertMessageToUIMessage(msg: Message): ChatUIMessage {
 **`electron/storage/sqlite-manager.js`**:
 
 **createMessage 方法**:
+
 ```javascript
 const upsertStmt = this.db.prepare(`
   INSERT INTO messages (
@@ -217,11 +238,11 @@ upsertStmt.run(
   message.id,
   message.conversation_id,
   message.role,
-  message.parts_structure,  // 新参数
+  message.parts_structure, // 新参数
   message.model_name ?? null,
   message.xml_version_id ?? null,
   sequenceNumber,
-  createdAt
+  createdAt,
 );
 ```
 
@@ -232,12 +253,13 @@ upsertStmt.run(
 **`app/lib/storage/indexeddb-storage.ts`**:
 
 **createMessage 方法**:
+
 ```typescript
 const fullMessage: Message = {
   id: message.id,
   conversation_id: message.conversation_id,
   role: message.role,
-  parts_structure: message.parts_structure,  // 新字段
+  parts_structure: message.parts_structure, // 新字段
   model_name: message.model_name ?? null,
   xml_version_id: message.xml_version_id,
   sequence_number: sequenceNumber,
@@ -255,6 +277,7 @@ await store.put(fullMessage);
 **`app/hooks/useStorageConversations.ts`**:
 
 **addMessageToConversation 签名修改**:
+
 ```typescript
 // 修改前
 async (conversationId, role, content, toolInvocations?, modelName?, xmlVersionId?, createdAt?)
@@ -264,12 +287,13 @@ async (conversationId, role, parts, modelName?, xmlVersionId?, createdAt?)
 ```
 
 **调用存储层**:
+
 ```typescript
 return await storage.createMessage({
   id: uuidv4(),
   conversation_id: conversationId,
   role,
-  parts_structure: JSON.stringify(parts ?? []),  // 序列化 parts
+  parts_structure: JSON.stringify(parts ?? []), // 序列化 parts
   model_name: modelName ?? null,
   xml_version_id: xmlVersionId,
   created_at: createdAt,
@@ -279,25 +303,35 @@ return await storage.createMessage({
 ### 8. ✅ UI 层适配
 
 **`app/components/chat/MessagePreviewPanel.tsx`**:
+
 ```tsx
-{(() => {
-  try {
-    const parsed = JSON.parse(msg.parts_structure);
-    const textParts = Array.isArray(parsed)
-      ? parsed
-          .filter((part) => part?.type === "text" && typeof part.text === "string")
-          .map((part) => part.text)
-      : [];
-    const textContent = textParts.join("\n");
-    return textContent.slice(0, 160) || t("messages.emptyMessage") || "";
-  } catch (error) {
-    console.error("[MessagePreviewPanel] 解析 parts_structure 失败:", error, msg.id);
-    return t("messages.emptyMessage") || "";
-  }
-})()}
+{
+  (() => {
+    try {
+      const parsed = JSON.parse(msg.parts_structure);
+      const textParts = Array.isArray(parsed)
+        ? parsed
+            .filter(
+              (part) => part?.type === "text" && typeof part.text === "string",
+            )
+            .map((part) => part.text)
+        : [];
+      const textContent = textParts.join("\n");
+      return textContent.slice(0, 160) || t("messages.emptyMessage") || "";
+    } catch (error) {
+      console.error(
+        "[MessagePreviewPanel] 解析 parts_structure 失败:",
+        error,
+        msg.id,
+      );
+      return t("messages.emptyMessage") || "";
+    }
+  })();
+}
 ```
 
 **关键改动**：
+
 - ❌ 不再直接使用 `msg.content`
 - ✅ 从 `parts_structure` 解析并提取 text 类型的 part
 - ✅ 错误处理：解析失败时显示空消息提示
@@ -307,6 +341,7 @@ return await storage.createMessage({
 **新增文件**：`app/lib/__tests__/chat-session-service.test.ts`
 
 **测试覆盖场景**（7 个测试用例，45 个断言）：
+
 1. ✅ 序列化包含 reasoning 的消息
 2. ✅ 序列化 text + tool + reasoning，保持顺序
 3. ✅ 序列化空 parts 数组
@@ -316,6 +351,7 @@ return await storage.createMessage({
 7. ✅ 往返序列化/反序列化一致性测试
 
 **测试示例**:
+
 ```typescript
 test("序列化包含 reasoning 的消息", () => {
   const uiMsg: ChatUIMessage = {
@@ -343,6 +379,7 @@ test("序列化包含 reasoning 的消息", () => {
 ## 验证清单（已完成）
 
 ### 功能验证 ✅
+
 - ✅ 保存带有 reasoning 的消息，`parts_structure` 字段正确写入数据库
 - ✅ 重新加载会话，reasoning 内容正确显示在 ThinkingBlock 中
 - ✅ reasoning 位置准确还原到原始位置（在 parts 数组中的顺序）
@@ -351,14 +388,16 @@ test("序列化包含 reasoning 的消息", () => {
 - ✅ 无 reasoning 的消息仍正常工作
 
 ### 代码质量验证 ✅
+
 - ✅ `pnpm run lint` 通过（ESLint + TypeScript）
 - ✅ `npx tsc --noEmit` 无类型错误
 - ✅ `pnpm run test` 全部通过（45 个断言）
 
 ### 边界情况验证 ✅
+
 - ✅ 空 parts 数组序列化为 `"[]"`，反序列化为 `[]`
 - ✅ 无效 JSON 返回空 parts + console.error
-- ✅ 工具 part 正确规范化（tool-* → dynamic-tool）
+- ✅ 工具 part 正确规范化（tool-\* → dynamic-tool）
 - ✅ reasoning/text part 不被工具 part 过滤器影响
 
 ---
@@ -366,6 +405,7 @@ test("序列化包含 reasoning 的消息", () => {
 ## 实际修改的文件清单
 
 ### 核心修改文件（8 个）
+
 1. ✅ `electron/storage/migrations/v1.js` - SQLite Schema（直接修改 v1，未创建 v2）
 2. ✅ `app/lib/storage/migrations/indexeddb/v1.ts` - IndexedDB Schema
 3. ✅ `app/lib/storage/types.ts` - 类型定义
@@ -376,9 +416,11 @@ test("序列化包含 reasoning 的消息", () => {
 8. ✅ `app/components/chat/MessagePreviewPanel.tsx` - UI 层（新增修改）
 
 ### 新增文件（1 个）
+
 9. ✅ `app/lib/__tests__/chat-session-service.test.ts` - 单元测试（新建）
 
 ### 依赖文件（无需修改）
+
 - ✅ `app/components/chat/ThinkingBlock.tsx` - reasoning 渲染组件（已完善）
 - ✅ `app/components/chat/MessageContent.tsx` - 消息内容渲染
 - ✅ `app/api/chat/route.ts` - API 调用（已启用 sendReasoning）
@@ -410,12 +452,14 @@ function isToolRelatedPart(part: unknown): boolean {
 ```
 
 **关键点**：
+
 - ✅ `reasoning` 和 `text` **不属于**工具类型
 - ✅ 反序列化时 reasoning/text part 直接返回，不经过 `normalizeStoredToolPart`
 
 ### 2. 工具 Part 规范化
 
 **序列化时**：工具 part 统一规范化为 `dynamic-tool` 格式
+
 ```typescript
 {
   type: "dynamic-tool",
@@ -428,23 +472,30 @@ function isToolRelatedPart(part: unknown): boolean {
 ```
 
 **好处**：
+
 - ✅ 避免同一工具多种表示形式（`tool-drawio_read` vs `dynamic-tool`）
 - ✅ 统一存储格式，简化查询和解析逻辑
 
 ### 3. 错误处理策略
 
 **JSON 解析失败时**：
+
 ```typescript
 try {
   const parsedParts = JSON.parse(msg.parts_structure);
   // ...
 } catch (error) {
-  console.error("[chat-session-service] 解析 parts_structure 失败:", error, msg.id);
+  console.error(
+    "[chat-session-service] 解析 parts_structure 失败:",
+    error,
+    msg.id,
+  );
   // 返回空 parts，不影响其他字段
 }
 ```
 
 **UI 显示降级**：
+
 - MessagePreviewPanel：显示 `t("messages.emptyMessage")`
 - MessageContent：不渲染任何内容（空数组）
 
@@ -452,16 +503,16 @@ try {
 
 ## 修改统计
 
-| 维度 | 数量 |
-|------|------|
-| **修改文件** | 8 个 |
-| **新增文件** | 1 个 |
-| **新增代码** | +98 行 |
-| **删除代码** | -79 行 |
-| **净增加** | +19 行 |
-| **测试用例** | 7 个 |
-| **测试断言** | 45 个 |
-| **测试通过率** | 100% |
+| 维度           | 数量   |
+| -------------- | ------ |
+| **修改文件**   | 8 个   |
+| **新增文件**   | 1 个   |
+| **新增代码**   | +98 行 |
+| **删除代码**   | -79 行 |
+| **净增加**     | +19 行 |
+| **测试用例**   | 7 个   |
+| **测试断言**   | 45 个  |
+| **测试通过率** | 100%   |
 
 ---
 
@@ -470,10 +521,12 @@ try {
 ### ⚠️ 破坏性变更
 
 **需要手动清空数据库**：
+
 - **原因**：数据模型完全变更（content/tool_invocations → parts_structure）
 - **影响**：旧版本的消息无法读取（`parts_structure` 字段不存在）
 
 **操作方法**：
+
 ```bash
 # Electron 端
 rm ~/.config/drawio2go/app.db
@@ -485,6 +538,7 @@ rm ~/.config/drawio2go/app.db
 ### ✅ 向前兼容
 
 **新代码不支持旧数据**：
+
 - 如果 `parts_structure` 为空或解析失败，返回空 parts
 - UI 显示空消息或友好提示
 - 不会崩溃或报错
@@ -492,6 +546,7 @@ rm ~/.config/drawio2go/app.db
 ### 🟡 未来扩展
 
 **如需支持旧数据迁移**（可延后实现）：
+
 ```sql
 -- 示例：v2 迁移脚本
 ALTER TABLE messages ADD COLUMN parts_structure TEXT;
@@ -511,6 +566,7 @@ ALTER TABLE messages DROP COLUMN tool_invocations;
 ## 建议的手动测试
 
 ### 测试场景 1：发送包含 reasoning 的消息
+
 1. 启动应用，创建新会话
 2. 使用 o1/o3 等推理模型发送消息
 3. 验证：
@@ -519,6 +575,7 @@ ALTER TABLE messages DROP COLUMN tool_invocations;
    - ✅ 刷新页面后 reasoning 仍然显示
 
 ### 测试场景 2：发送包含工具调用的消息
+
 1. 发送触发 DrawIO 工具的消息（如 "读取 test.drawio"）
 2. 验证：
    - ✅ 工具执行结果正确显示
@@ -526,6 +583,7 @@ ALTER TABLE messages DROP COLUMN tool_invocations;
    - ✅ 刷新后工具调用历史完整
 
 ### 测试场景 3：复杂消息（reasoning + text + tool）
+
 1. 发送一条包含思考、文本和工具调用的复杂消息
 2. 验证：
    - ✅ 所有 parts 按正确顺序显示
@@ -575,12 +633,14 @@ BREAKING CHANGE: 数据模型变更，需要清空旧数据库
 **代码质量**：优秀（类型安全、测试完善、错误处理健壮）
 
 **核心成果**：
+
 - ✅ Reasoning 信息完整保存且顺序准确
 - ✅ UI 刷新后 reasoning 内容正确显示
 - ✅ 所有测试通过，代码质量高
 - ✅ 适配所有存储层（SQLite + IndexedDB）
 
 **后续建议**：
+
 1. ✅ 代码可以直接提交到 `dev` 分支
 2. ⚠️ 部署前清空开发环境数据库
 3. ✅ 进行一轮手动测试验证完整流程

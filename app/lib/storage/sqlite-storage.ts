@@ -18,25 +18,10 @@ import {
   assertValidSvgBinary,
   resolvePageMetadataFromXml,
 } from "./page-metadata-validators";
+import { createLogger } from "@/lib/logger";
+import { dispatchConversationEvent } from "./event-utils";
 
-type ConversationEventType =
-  | "conversation-created"
-  | "conversation-updated"
-  | "conversation-deleted"
-  | "messages-updated";
-
-function dispatchConversationEvent(
-  event: ConversationEventType,
-  detail: {
-    projectUuid?: string;
-    conversationId?: string;
-    conversationIds?: string[];
-    messageIds?: string[];
-  },
-) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(event, { detail }));
-}
+const logger = createLogger("SQLiteStorage");
 
 function parseMetadata(value: unknown): Record<string, unknown> | null {
   if (value == null) return null;
@@ -44,7 +29,7 @@ function parseMetadata(value: unknown): Record<string, unknown> | null {
     try {
       return JSON.parse(value);
     } catch (error) {
-      console.warn("[SQLiteStorage] Failed to parse metadata", error);
+      logger.warn("Failed to parse metadata", { error });
       return null;
     }
   }
@@ -176,7 +161,7 @@ export class SQLiteStorage implements StorageAdapter {
       const message =
         `安全错误：版本 ${id} 不属于当前项目 ${projectUuid}。` +
         `该版本属于项目 ${normalized.project_uuid}，已拒绝访问。`;
-      console.error("[SQLiteStorage] 拒绝跨项目访问", {
+      logger.error("拒绝跨项目访问", {
         versionId: id,
         requestedProject: projectUuid,
         versionProject: normalized.project_uuid,
@@ -259,7 +244,7 @@ export class SQLiteStorage implements StorageAdapter {
       const message =
         `安全错误：版本 ${id} 的 SVG 数据属于项目 ${svgData.project_uuid}，` +
         `与请求的项目 ${projectUuid} 不一致。`;
-      console.error("[SQLiteStorage] 拒绝跨项目 SVG 访问", {
+      logger.error("拒绝跨项目 SVG 访问", {
         versionId: id,
         requestedProject: projectUuid,
         versionProject: svgData.project_uuid,
@@ -346,8 +331,12 @@ export class SQLiteStorage implements StorageAdapter {
     conversation: CreateConversationInput,
   ): Promise<Conversation> {
     await this.ensureElectron();
-    const created =
-      await window.electronStorage!.createConversation(conversation);
+    const payload: CreateConversationInput = {
+      ...conversation,
+      is_streaming: conversation.is_streaming ?? false,
+      streaming_since: conversation.streaming_since ?? null,
+    };
+    const created = await window.electronStorage!.createConversation(payload);
     dispatchConversationEvent("conversation-created", {
       projectUuid: created.project_uuid,
       conversationId: created.id,
@@ -362,6 +351,19 @@ export class SQLiteStorage implements StorageAdapter {
     await this.ensureElectron();
     const conversation = await window.electronStorage!.getConversation(id);
     await window.electronStorage!.updateConversation(id, updates);
+    dispatchConversationEvent("conversation-updated", {
+      projectUuid: conversation?.project_uuid,
+      conversationId: id,
+    });
+  }
+
+  async setConversationStreaming(
+    id: string,
+    isStreaming: boolean,
+  ): Promise<void> {
+    await this.ensureElectron();
+    await window.electronStorage!.setConversationStreaming(id, isStreaming);
+    const conversation = await window.electronStorage!.getConversation(id);
     dispatchConversationEvent("conversation-updated", {
       projectUuid: conversation?.project_uuid,
       conversationId: id,

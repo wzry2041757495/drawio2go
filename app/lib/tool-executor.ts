@@ -8,12 +8,17 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { ToolCallRequest } from "@/app/types/socket-protocol";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("Tool Executor");
 
 /**
  * 通过 Socket.IO 在客户端执行工具
  *
  * @param toolName - 工具名称
  * @param input - 工具输入参数
+ * @param projectUuid - 所属项目 ID
+ * @param conversationId - 当前会话 ID
  * @param timeout - 超时时间（毫秒），默认 30000ms (30秒)
  * @returns Promise<unknown> - 工具执行结果
  *
@@ -22,12 +27,15 @@ import type { ToolCallRequest } from "@/app/types/socket-protocol";
 export async function executeToolOnClient(
   toolName: string,
   input: Record<string, unknown>,
+  projectUuid: string,
+  conversationId: string,
   timeout: number = 60000,
 ): Promise<unknown> {
   // 默认超时增加到 60 秒，以支持版本创建等耗时操作
   // 获取全局 Socket.IO 实例
   const io = global.io;
   const pendingRequests = global.pendingRequests;
+  const emitToolExecute = global.emitToolExecute;
 
   if (!pendingRequests) {
     throw new Error("pendingRequests 未初始化");
@@ -35,6 +43,13 @@ export async function executeToolOnClient(
 
   if (!io) {
     throw new Error("Socket.IO 服务器未初始化");
+  }
+
+  const normalizedProjectUuid = projectUuid.trim();
+  const normalizedConversationId = conversationId.trim();
+
+  if (!normalizedProjectUuid || !normalizedConversationId) {
+    throw new Error("缺少项目或会话上下文，无法执行工具");
   }
 
   // 检查是否有客户端连接
@@ -72,14 +87,24 @@ export async function executeToolOnClient(
       toolName: toolName as ToolCallRequest["toolName"],
       input,
       timeout,
+      projectUuid: normalizedProjectUuid,
+      conversationId: normalizedConversationId,
     };
 
     // 广播到所有连接的客户端
-    io.emit("tool:execute", request);
+    if (typeof emitToolExecute === "function") {
+      emitToolExecute(request);
+    } else {
+      io.emit("tool:execute", request);
+    }
 
-    console.log(
-      `[Tool Executor] 已发送工具调用请求: ${toolName} (${requestId}), 连接客户端数: ${connectedClients}`,
-    );
+    logger.info("已发送工具调用请求", {
+      toolName,
+      requestId,
+      projectUuid: normalizedProjectUuid,
+      conversationId: normalizedConversationId,
+      connectedClients,
+    });
   });
 }
 

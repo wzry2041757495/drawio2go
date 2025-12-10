@@ -1,6 +1,9 @@
 "use client";
 
 import { getDomParser, getXmlSerializer } from "./dom-parser-cache";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("svg-smart-diff");
 
 interface SvgMetrics {
   minX: number;
@@ -63,7 +66,7 @@ function parseSvgRoot(
     }
     return root as SVGSVGElement;
   } catch (error) {
-    console.warn("parseSvgRoot error", error);
+    logger.warn("parseSvgRoot error", { error, label });
     warnings.push(`${label} 的 SVG 解析失败`);
     return null;
   }

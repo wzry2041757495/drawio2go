@@ -8,6 +8,25 @@ let storageManager = null;
 // 更可靠的开发模式检测：检查是否打包或者环境变量
 const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
+/**
+ * 将二进制字段统一转换为 Buffer，避免 SQLite 写入失败
+ * @param payload 包含 preview_image / preview_svg / pages_svg 的对象
+ */
+function convertBlobFields(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const normalized = { ...payload };
+  if (normalized.preview_image) {
+    normalized.preview_image = Buffer.from(normalized.preview_image);
+  }
+  if (normalized.preview_svg) {
+    normalized.preview_svg = Buffer.from(normalized.preview_svg);
+  }
+  if (normalized.pages_svg) {
+    normalized.pages_svg = Buffer.from(normalized.pages_svg);
+  }
+  return normalized;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -460,17 +479,8 @@ ipcMain.handle("storage:getXMLVersion", async (event, id, projectUuid) => {
 });
 
 ipcMain.handle("storage:createXMLVersion", async (event, version) => {
-  // 处理 preview_image: ArrayBuffer → Buffer
-  if (version.preview_image) {
-    version.preview_image = Buffer.from(version.preview_image);
-  }
-  if (version.preview_svg) {
-    version.preview_svg = Buffer.from(version.preview_svg);
-  }
-  if (version.pages_svg) {
-    version.pages_svg = Buffer.from(version.pages_svg);
-  }
-  return storageManager.createXMLVersion(version);
+  const normalized = convertBlobFields(version);
+  return storageManager.createXMLVersion(normalized);
 });
 
 ipcMain.handle(
@@ -488,16 +498,8 @@ ipcMain.handle(
 );
 
 ipcMain.handle("storage:updateXMLVersion", async (event, id, updates) => {
-  if (updates?.preview_image) {
-    updates.preview_image = Buffer.from(updates.preview_image);
-  }
-  if (updates?.preview_svg) {
-    updates.preview_svg = Buffer.from(updates.preview_svg);
-  }
-  if (updates?.pages_svg) {
-    updates.pages_svg = Buffer.from(updates.pages_svg);
-  }
-  return storageManager.updateXMLVersion(id, updates);
+  const normalizedUpdates = convertBlobFields(updates ?? {});
+  return storageManager.updateXMLVersion(id, normalizedUpdates);
 });
 
 ipcMain.handle("storage:deleteXMLVersion", async (event, id, projectUuid) => {
@@ -516,6 +518,13 @@ ipcMain.handle("storage:createConversation", async (event, conversation) => {
 ipcMain.handle("storage:updateConversation", async (event, id, updates) => {
   return storageManager.updateConversation(id, updates);
 });
+
+ipcMain.handle(
+  "storage:setConversationStreaming",
+  async (event, id, isStreaming) => {
+    return storageManager.setConversationStreaming(id, isStreaming);
+  },
+);
 
 ipcMain.handle("storage:deleteConversation", async (event, id) => {
   return storageManager.deleteConversation(id);

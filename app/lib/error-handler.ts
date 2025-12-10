@@ -4,6 +4,9 @@ import {
   type ErrorCode,
   getErrorI18nKey,
 } from "@/app/errors/error-codes";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ErrorHandler");
 
 type InterpolationParams = Record<string, unknown>;
 
@@ -62,6 +65,40 @@ function resolveI18nKeyFromCode(code: ErrorCode): string {
   }
 
   return `errors:${section}.${camelCaseFromUpper(trimmedKey)}`;
+}
+
+/**
+ * 将任意错误对象转换为可读字符串
+ * @param error - 任意类型的错误
+ * @returns 规范化的错误字符串
+ */
+export function toErrorString(error: unknown): string {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === "object") {
+    if (
+      "message" in error &&
+      typeof (error as { message?: unknown }).message === "string"
+    ) {
+      return (error as { message: string }).message;
+    }
+    if (
+      "error" in error &&
+      typeof (error as { error?: unknown }).error === "string"
+    ) {
+      return (error as { error: string }).error;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
 }
 
 /**
@@ -147,30 +184,6 @@ export function handleError(error: unknown, locale?: string): string {
   return i18n.t(UNKNOWN_I18N_KEY);
 }
 
-/**
- * 从错误对象中提取消息（用于 console.error 等场景）
- */
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof (error as { message: unknown }).message === "string"
-  ) {
-    return (error as { message: string }).message;
-  }
-
-  return String(error);
-}
-
 export interface ToastErrorOptions {
   title?: string;
   error: unknown;
@@ -216,8 +229,7 @@ export function createApiError(
  * 可选增强：错误日志记录
  */
 export function logError(error: unknown, context?: string): void {
-  const prefix = context ? `[${context}]` : "[Error]";
-  console.error(prefix, getErrorMessage(error), error);
+  logger.error(toErrorString(error), { context, error });
 }
 
 /**

@@ -58,26 +58,7 @@ export default function ConversationList({
             data-selected={isSelected}
             role="listitem"
           >
-            <div
-              className="history-card__body"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  if (selectionMode) {
-                    onToggleSelect(conv.id);
-                  } else {
-                    onOpenConversation(conv.id);
-                  }
-                }
-              }}
-              onClick={() =>
-                selectionMode
-                  ? onToggleSelect(conv.id)
-                  : onOpenConversation(conv.id)
-              }
-            >
+            <Card.Content className="history-card__content">
               {selectionMode && (
                 <Checkbox
                   aria-label={t("aria.selectConversation", { title })}
@@ -85,40 +66,65 @@ export default function ConversationList({
                   onChange={() => onToggleSelect(conv.id)}
                 />
               )}
-              <div className="history-card__meta">
-                <div className="history-card__title" title={title}>
-                  {title}
-                </div>
-                <div className="history-card__subtitle">
-                  <span>
-                    {t("conversations.lastUpdated", { time: relativeTime })}
-                  </span>
-                  <span className="history-card__dot" aria-hidden>
-                    •
-                  </span>
-                  <span>
-                    {t("conversations.createdAt", {
-                      time: formatConversationDate(
-                        conv.created_at,
-                        "date",
-                        i18n.language,
-                      ),
-                    })}
-                  </span>
+
+              <div
+                className="history-card__body"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (selectionMode) {
+                      onToggleSelect(conv.id);
+                    } else {
+                      onOpenConversation(conv.id);
+                    }
+                  }
+                }}
+                onClick={() =>
+                  selectionMode
+                    ? onToggleSelect(conv.id)
+                    : onOpenConversation(conv.id)
+                }
+              >
+                <div className="history-card__meta">
+                  <div className="history-card__title" title={title}>
+                    {title}
+                  </div>
+                  <div className="history-card__subtitle">
+                    <span>
+                      {t("conversations.lastUpdated", { time: relativeTime })}
+                    </span>
+                    <span className="history-card__dot" aria-hidden>
+                      •
+                    </span>
+                    <span>
+                      {t("conversations.createdAt", {
+                        time: formatConversationDate(
+                          conv.created_at,
+                          "date",
+                          i18n.language,
+                        ),
+                      })}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="history-card__actions">
-              <Button
-                size="sm"
-                variant="secondary"
-                isIconOnly
-                aria-label={t("aria.openPreview")}
-                onPress={() => onPreview(conv.id)}
-              >
-                <Eye size={16} />
-              </Button>
-            </div>
+
+              {!selectionMode && (
+                <div className="history-card__actions">
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    aria-label={t("aria.openPreview")}
+                    onPress={() => onPreview(conv.id)}
+                  >
+                    <Eye size={16} />
+                    {t("aria.openPreview")}
+                  </Button>
+                </div>
+              )}
+            </Card.Content>
           </Card.Root>
         );
       })}

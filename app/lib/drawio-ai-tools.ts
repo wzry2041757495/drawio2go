@@ -10,6 +10,7 @@ import type {
   DrawioEditOperation,
   ReplaceXMLResult,
 } from "@/app/types/drawio-tools";
+import type { ToolExecutionContext } from "@/app/types/socket";
 import { validateXMLFormat } from "./drawio-xml-utils";
 
 const operationSchema = z
@@ -23,7 +24,7 @@ const operationSchema = z
       "set_text_content",
     ]),
     xpath: z.string().optional(),
-    target_xpath: z.string().optional(),
+    id: z.string().optional(),
     key: z.string().optional(),
     value: z.string().optional(),
     new_xml: z.string().optional(),
@@ -33,11 +34,13 @@ const operationSchema = z
     allow_no_match: z.boolean().optional(),
   })
   .superRefine((operation, ctx) => {
-    const ensureNonEmpty = (
+    const ensureNonEmptyIfProvided = (
       value: string | undefined,
       path: (string | number)[],
       message: string,
     ) => {
+      if (value === undefined) return;
+
       if (typeof value !== "string" || value.trim() === "") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -47,10 +50,31 @@ const operationSchema = z
       }
     };
 
+    const hasXpath =
+      typeof operation.xpath === "string" && operation.xpath.trim() !== "";
+    const hasId =
+      typeof operation.id === "string" && operation.id.trim() !== "";
+
+    if (!hasXpath && !hasId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "xpath 或 id 至少需要提供一个定位方式",
+      });
+    }
+
+    ensureNonEmptyIfProvided(operation.xpath, ["xpath"], "xpath 不能为空");
+    ensureNonEmptyIfProvided(operation.id, ["id"], "id 不能为空");
+
     switch (operation.type) {
       case "set_attribute": {
-        ensureNonEmpty(operation.xpath, ["xpath"], "xpath 不能为空");
-        ensureNonEmpty(operation.key, ["key"], "key 不能为空");
+        if (operation.key === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["key"],
+            message: "key 不能为空",
+          });
+        }
+        ensureNonEmptyIfProvided(operation.key, ["key"], "key 不能为空");
         if (typeof operation.value !== "string") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -61,30 +85,50 @@ const operationSchema = z
         break;
       }
       case "remove_attribute": {
-        ensureNonEmpty(operation.xpath, ["xpath"], "xpath 不能为空");
-        ensureNonEmpty(operation.key, ["key"], "key 不能为空");
+        if (operation.key === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["key"],
+            message: "key 不能为空",
+          });
+        }
+        ensureNonEmptyIfProvided(operation.key, ["key"], "key 不能为空");
         break;
       }
       case "insert_element": {
-        ensureNonEmpty(
-          operation.target_xpath,
-          ["target_xpath"],
-          "target_xpath 不能为空",
+        if (operation.new_xml === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["new_xml"],
+            message: "new_xml 不能为空",
+          });
+        }
+        ensureNonEmptyIfProvided(
+          operation.new_xml,
+          ["new_xml"],
+          "new_xml 不能为空",
         );
-        ensureNonEmpty(operation.new_xml, ["new_xml"], "new_xml 不能为空");
         break;
       }
       case "remove_element": {
-        ensureNonEmpty(operation.xpath, ["xpath"], "xpath 不能为空");
         break;
       }
       case "replace_element": {
-        ensureNonEmpty(operation.xpath, ["xpath"], "xpath 不能为空");
-        ensureNonEmpty(operation.new_xml, ["new_xml"], "new_xml 不能为空");
+        if (operation.new_xml === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["new_xml"],
+            message: "new_xml 不能为空",
+          });
+        }
+        ensureNonEmptyIfProvided(
+          operation.new_xml,
+          ["new_xml"],
+          "new_xml 不能为空",
+        );
         break;
       }
       case "set_text_content": {
-        ensureNonEmpty(operation.xpath, ["xpath"], "xpath 不能为空");
         if (typeof operation.value !== "string") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -99,56 +143,108 @@ const operationSchema = z
     }
   });
 
-export const drawioReadTool = tool({
-  description:
-    "使用 XPath 精确读取 DrawIO XML 内容。默认返回根节点，可传入 xpath 参数精确查询元素、属性或文本，结果会包含 matched_xpath 以便后续调用。",
-  inputSchema: z
-    .object({
-      xpath: z.string().optional(),
-    })
-    .optional(),
-  execute: async (input) => {
-    const xpath = input?.xpath?.trim();
-    return await executeDrawioRead(xpath);
-  },
-});
+function requireContext(
+  context: ToolExecutionContext | undefined,
+): ToolExecutionContext {
+  const projectUuid = context?.projectUuid?.trim();
+  const conversationId = context?.conversationId?.trim();
 
-export const drawioEditBatchTool = tool({
-  description:
-    "基于 XPath 的原子化批量编辑工具。所有操作要么全部成功，要么在任意一步失败时回滚并返回错误。",
-  inputSchema: z.object({
-    operations: z.array(operationSchema).min(1, "operations 至少包含一项操作"),
-  }),
-  execute: async ({ operations }) => {
-    return await executeDrawioEditBatch({
-      operations: operations as DrawioEditOperation[],
-    });
-  },
-});
+  if (!projectUuid || !conversationId) {
+    throw new Error("无法获取项目上下文");
+  }
 
-export const drawioOverwriteTool = tool({
-  description:
-    "完整覆写 DrawIO XML 内容。此操作会替换整个图表，用于模板替换等场景。XML 格式会被强制验证。",
-  inputSchema: z.object({
-    drawio_xml: z.string().min(1, "drawio_xml 不能为空"),
-  }),
-  execute: async ({ drawio_xml }) => {
-    const validation = validateXMLFormat(drawio_xml);
-    if (!validation.valid) {
-      throw new Error(validation.error || "XML 验证失败");
-    }
+  return { projectUuid, conversationId };
+}
 
-    // 调用前端工具覆写 XML
-    return (await executeToolOnClient(
-      "replace_drawio_xml",
-      { drawio_xml, _originalTool: "drawio_overwrite" },
-      60000, // 60 秒超时，支持自动版本创建
-    )) as ReplaceXMLResult;
-  },
-});
+function createDrawioReadTool(getContext: () => ToolExecutionContext) {
+  return tool({
+    description:
+      "读取 DrawIO 图表内容。支持三种方式：\n1. ls 模式（默认）：列出所有 mxCell，可用 filter 筛选 vertices（形状）或 edges（连线）\n2. xpath：XPath 精确查询，返回匹配的节点详细信息\n3. id：按 mxCell id 查询（支持单个或数组），快捷定位特定元素",
+    inputSchema: z
+      .object({
+        xpath: z.string().optional(),
+        id: z.union([z.string(), z.array(z.string())]).optional(),
+        filter: z.enum(["all", "vertices", "edges"]).optional(),
+      })
+      .superRefine((data, ctx) => {
+        if (data.xpath && data.id) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "xpath 和 id 不能同时提供，请仅使用其中一个定位方式",
+          });
+        }
 
-export const drawioTools = {
-  drawio_read: drawioReadTool,
-  drawio_edit_batch: drawioEditBatchTool,
-  drawio_overwrite: drawioOverwriteTool,
-};
+        if (data.filter && (data.xpath || data.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "filter 参数仅在 ls 模式（未提供 xpath 或 id）时生效",
+          });
+        }
+      })
+      .optional(),
+    execute: async (input) => {
+      const context = getContext();
+      const xpath = input?.xpath?.trim();
+      const id = input?.id;
+      const filter = input?.filter ?? "all";
+      return await executeDrawioRead({ xpath, id, filter }, context);
+    },
+  });
+}
+
+function createDrawioEditBatchTool(getContext: () => ToolExecutionContext) {
+  return tool({
+    description:
+      "批量编辑 DrawIO 图表（原子操作：全部成功或全部回滚）。\n\n定位方式（二选一，同时提供时优先使用 id）：\n- id: 直接指定 mxCell id（转换为 //mxCell[@id='xxx']）\n- xpath: XPath 表达式\n\n操作类型：\n- set_attribute: 设置属性\n- remove_attribute: 移除属性\n- insert_element: 插入元素（使用 xpath/id 定位目标父节点）\n- remove_element: 删除元素\n- replace_element: 替换元素\n- set_text_content: 设置文本内容",
+    inputSchema: z.object({
+      operations: z
+        .array(operationSchema)
+        .min(1, "operations 至少包含一项操作"),
+    }),
+    execute: async ({ operations }) => {
+      const context = getContext();
+      return await executeDrawioEditBatch(
+        operations as DrawioEditOperation[],
+        context,
+      );
+    },
+  });
+}
+
+function createDrawioOverwriteTool(getContext: () => ToolExecutionContext) {
+  return tool({
+    description:
+      "完整覆写 DrawIO XML 内容。此操作会替换整个图表，用于模板替换等场景。XML 格式会被强制验证。",
+    inputSchema: z.object({
+      drawio_xml: z.string().min(1, "drawio_xml 不能为空"),
+    }),
+    execute: async ({ drawio_xml }) => {
+      const context = getContext();
+      const validation = validateXMLFormat(drawio_xml);
+      if (!validation.valid) {
+        throw new Error(validation.error || "XML 验证失败");
+      }
+
+      // 调用前端工具覆写 XML
+      return (await executeToolOnClient(
+        "replace_drawio_xml",
+        { drawio_xml, _originalTool: "drawio_overwrite" },
+        context.projectUuid,
+        context.conversationId,
+        60000, // 60 秒超时，支持自动版本创建
+      )) as ReplaceXMLResult;
+    },
+  });
+}
+
+export function createDrawioTools(context: ToolExecutionContext) {
+  const getContext = () => requireContext(context);
+
+  return {
+    drawio_read: createDrawioReadTool(getContext),
+    drawio_edit_batch: createDrawioEditBatchTool(getContext),
+    drawio_overwrite: createDrawioOverwriteTool(getContext),
+  };
+}
+
+export type DrawioTools = ReturnType<typeof createDrawioTools>;
