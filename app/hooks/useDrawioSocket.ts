@@ -388,7 +388,10 @@ export function useDrawioSocket(
       }
 
       try {
-        if (request.toolName === REPLACE_DRAWIO_XML || request.toolName === EXPORT_DRAWIO) {
+        if (
+          request.toolName === REPLACE_DRAWIO_XML ||
+          request.toolName === EXPORT_DRAWIO
+        ) {
           await handleAutoVersionSnapshot(
             request,
             (request.description && request.description.trim()) ||

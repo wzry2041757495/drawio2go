@@ -16,7 +16,9 @@ export const operationSchema = z
         "replace_element",
         "set_text_content",
       ])
-      .describe("批量编辑的操作类型：设置/移除属性、插入/删除/替换元素或设置文本内容"),
+      .describe(
+        "批量编辑的操作类型：设置/移除属性、插入/删除/替换元素或设置文本内容",
+      ),
     xpath: z
       .string()
       .optional()
@@ -68,7 +70,8 @@ export const operationSchema = z
 
     const hasXpath =
       typeof operation.xpath === "string" && operation.xpath.trim() !== "";
-    const hasId = typeof operation.id === "string" && operation.id.trim() !== "";
+    const hasId =
+      typeof operation.id === "string" && operation.id.trim() !== "";
 
     if (!hasXpath && !hasId) {
       ctx.addIssue({
@@ -220,13 +223,9 @@ export type DrawioReadInput = z.infer<typeof drawioReadInputSchema>;
 /**
  * 批量编辑输入类型（operations 数组包装），兼容历史命名 DrawioEditBatchRequest。
  */
-export type DrawioEditBatchRequest = z.infer<
-  typeof drawioEditBatchInputSchema
->;
+export type DrawioEditBatchRequest = z.infer<typeof drawioEditBatchInputSchema>;
 export type DrawioEditBatchInput = DrawioEditBatchRequest;
 /**
  * 覆写 XML 的输入类型。
  */
-export type DrawioOverwriteInput = z.infer<
-  typeof drawioOverwriteInputSchema
->;
+export type DrawioOverwriteInput = z.infer<typeof drawioOverwriteInputSchema>;

@@ -13,9 +13,9 @@ import type { ToolCallRequest as BaseToolCallRequest } from "./socket";
 export interface ToolCallRequest extends BaseToolCallRequest {
   toolName: ClientToolName;
   timeout: number;
- /**
-  * AI 侧传入的操作描述，供自动版本创建时生成版本描述使用
-  */
+  /**
+   * AI 侧传入的操作描述，供自动版本创建时生成版本描述使用
+   */
   description?: string;
 }
 
