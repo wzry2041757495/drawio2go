@@ -1,4 +1,11 @@
-import type { UIMessage } from "ai";
+import type { UIDataTypes, UIMessage, UIMessagePart, UITools } from "ai";
+
+declare module "ai" {
+  interface ReasoningOutput {
+    state?: "streaming" | "complete" | "done";
+    durationMs?: number; // 推理耗时（毫秒）
+  }
+}
 
 export type ProviderType =
   | "openai-reasoning"
@@ -129,7 +136,14 @@ export interface MessageMetadata {
   disconnectReason?: string;
 }
 
-export type ChatUIMessage = UIMessage<MessageMetadata>;
+export type ChatUIPart = UIMessagePart<UIDataTypes, UITools> & {
+  durationMs?: number;
+  state?: string;
+};
+
+export type ChatUIMessage = Omit<UIMessage<MessageMetadata>, "parts"> & {
+  parts: ChatUIPart[];
+};
 
 // 会话管理相关类型（使用 UIMessage 从 @ai-sdk/react）
 export interface ChatSession {

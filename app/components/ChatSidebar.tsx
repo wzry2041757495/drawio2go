@@ -141,6 +141,7 @@ export default function ChatSidebar({
   const forceStopReasonRef = useRef<"sidebar" | "history" | null>(null);
   const wasOfflineRef = useRef(false);
   const previousOnlineStatusRef = useRef<boolean | null>(null);
+  const reasoningTimersRef = useRef<Map<string, number>>(new Map());
 
   // ========== 派生状态 ==========
   const fallbackModelName = useMemo(
@@ -389,6 +390,76 @@ export default function ChatSidebar({
     () => messages.map(ensureMessageMetadata),
     [messages, ensureMessageMetadata],
   );
+
+  useEffect(() => {
+    const activeKeys = new Set<string>();
+
+    messages.forEach((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.parts)) return;
+
+      msg.parts.forEach((part, index) => {
+        if (part.type !== "reasoning") return;
+
+        const key = `${msg.id}-${index}`;
+        activeKeys.add(key);
+
+        const state = (part as { state?: string }).state;
+        const durationMs = (part as { durationMs?: number }).durationMs;
+
+        if (state === "streaming" && !reasoningTimersRef.current.has(key)) {
+          reasoningTimersRef.current.set(key, Date.now());
+        }
+
+        if (state === "complete") {
+          if (
+            durationMs == null &&
+            reasoningTimersRef.current.has(key) &&
+            typeof reasoningTimersRef.current.get(key) === "number"
+          ) {
+            const startTime = reasoningTimersRef.current.get(key)!;
+            const computedDuration = Math.max(0, Date.now() - startTime);
+
+            setMessages((prev) => {
+              const messageIndex = prev.findIndex((item) => item.id === msg.id);
+              if (messageIndex === -1) return prev;
+
+              const targetMessage = prev[messageIndex];
+              const nextParts = Array.isArray(targetMessage.parts)
+                ? [...targetMessage.parts]
+                : [];
+
+              if (
+                nextParts[index]?.type !== "reasoning" ||
+                (nextParts[index] as { durationMs?: number }).durationMs != null
+              ) {
+                return prev;
+              }
+
+              nextParts[index] = {
+                ...nextParts[index],
+                durationMs: computedDuration,
+              };
+
+              const nextMessages = [...prev];
+              nextMessages[messageIndex] = {
+                ...targetMessage,
+                parts: nextParts,
+              };
+              return nextMessages;
+            });
+          }
+
+          reasoningTimersRef.current.delete(key);
+        }
+      });
+    });
+
+    reasoningTimersRef.current.forEach((_value, key) => {
+      if (!activeKeys.has(key)) {
+        reasoningTimersRef.current.delete(key);
+      }
+    });
+  }, [messages, setMessages]);
 
   const lastMessageIsUser = useMemo(() => {
     if (!displayMessages || displayMessages.length === 0) return false;

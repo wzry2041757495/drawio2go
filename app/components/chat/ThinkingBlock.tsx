@@ -7,6 +7,7 @@ import { useAppTranslation } from "@/app/i18n/hooks";
 interface ThinkingBlockProps {
   reasoning: string;
   isStreaming: boolean;
+  durationMs?: number;
   expanded: boolean;
   onToggle: () => void;
 }
@@ -14,6 +15,7 @@ interface ThinkingBlockProps {
 export default function ThinkingBlock({
   reasoning,
   isStreaming,
+  durationMs,
   expanded,
   onToggle,
 }: ThinkingBlockProps) {
@@ -50,8 +52,13 @@ export default function ThinkingBlock({
     [],
   );
 
-  const formattedElapsed = elapsedSeconds.toFixed(1);
-  const showTimer = isStreaming || elapsedSeconds > 0;
+  const persistedSeconds =
+    !isStreaming && typeof durationMs === "number"
+      ? Math.max(0, durationMs / 1000)
+      : null;
+  const displaySeconds = persistedSeconds ?? Math.max(0, elapsedSeconds ?? 0);
+  const formattedElapsed = displaySeconds.toFixed(1);
+  const showTimer = isStreaming || displaySeconds > 0;
 
   return (
     <div

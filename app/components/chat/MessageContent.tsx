@@ -44,6 +44,7 @@ export default function MessageContent({
               key={`${message.id}-${index}`}
               reasoning={part.text ?? ""}
               isStreaming={isReasoningStreaming}
+              durationMs={part.durationMs}
               expanded={expandedThinkingBlocks[message.id] ?? false}
               onToggle={() => onThinkingBlockToggle(message.id)}
             />
