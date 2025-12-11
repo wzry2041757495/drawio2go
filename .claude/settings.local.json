@@ -84,7 +84,8 @@
       "WebFetch(domain:api-docs.deepseek.com)",
       "Bash(grep:*)",
       "Bash(awk:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "WebFetch(domain:sdk.vercel.ai)"
     ],
     "deny": [],
     "ask": []
