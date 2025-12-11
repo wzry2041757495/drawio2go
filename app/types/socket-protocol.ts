@@ -44,4 +44,6 @@ export interface ServerToClientEvents {
  */
 export interface ClientToServerEvents {
   "tool:result": (result: ToolCallResult) => void;
+  join_project: (projectUuid: string) => void;
+  leave_project: (projectUuid: string) => void;
 }

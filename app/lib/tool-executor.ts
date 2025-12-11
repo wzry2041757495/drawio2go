@@ -55,9 +55,7 @@ export async function executeToolOnClient(
   // 检查是否有客户端连接
   const connectedClients = io.sockets.sockets.size;
   if (connectedClients === 0) {
-    throw new Error(
-      "没有客户端连接，无法执行工具。请确保前端已连接到 Socket.IO 服务器。",
-    );
+    throw new Error("目标项目没有客户端在线");
   }
 
   const requestId = uuidv4();
@@ -91,11 +89,32 @@ export async function executeToolOnClient(
       conversationId: normalizedConversationId,
     };
 
-    // 广播到所有连接的客户端
-    if (typeof emitToolExecute === "function") {
-      emitToolExecute(request);
-    } else {
-      io.emit("tool:execute", request);
+    // 按项目房间投递
+    try {
+      if (typeof emitToolExecute === "function") {
+        emitToolExecute(request);
+      } else {
+        // 兜底：如果缺失全局封装，直接使用房间广播
+        const roomSize = io.sockets.adapter.rooms.get(
+          normalizedProjectUuid,
+        )?.size;
+
+        if (!roomSize || roomSize === 0) {
+          pendingRequests.delete(requestId);
+          clearTimeout(timeoutId);
+          reject(new Error("目标项目没有客户端在线"));
+          return;
+        }
+
+        io.to(normalizedProjectUuid).emit("tool:execute", request);
+      }
+    } catch (error) {
+      pendingRequests.delete(requestId);
+      clearTimeout(timeoutId);
+      const message =
+        error instanceof Error ? error.message : String(error ?? "未知错误");
+      reject(new Error(message));
+      return;
     }
 
     logger.info("已发送工具调用请求", {

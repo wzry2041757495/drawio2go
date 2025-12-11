@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import { io, Socket } from "socket.io-client";
@@ -63,6 +63,42 @@ export function useDrawioSocket(
   const latestMainVersionRef = useRef<string | null>(null);
   const latestSubVersionRef = useRef<string | null>(null);
   const isCreatingSnapshotRef = useRef(false);
+  const joinedProjectRef = useRef<string | null>(null);
+
+  const syncProjectRoom = useCallback((projectUuid: string | null) => {
+    const previousProject = joinedProjectRef.current;
+    const socketInstance = socketRef.current;
+
+    if (!socketInstance || socketInstance.disconnected) {
+      return;
+    }
+
+    if (projectUuid && projectUuid !== previousProject) {
+      if (previousProject) {
+        socketInstance.emit("leave_project", previousProject);
+        logger.info("已离开项目房间", {
+          socketId: socketInstance.id,
+          projectUuid: previousProject,
+        });
+      }
+
+      socketInstance.emit("join_project", projectUuid);
+      joinedProjectRef.current = projectUuid;
+      logger.info("已加入项目房间", {
+        socketId: socketInstance.id,
+        projectUuid,
+      });
+    }
+
+    if (!projectUuid && previousProject) {
+      socketInstance.emit("leave_project", previousProject);
+      joinedProjectRef.current = null;
+      logger.info("当前项目为空，已离开先前房间", {
+        socketId: socketInstance.id,
+        projectUuid: previousProject,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     currentProjectRef.current = currentProject;
@@ -268,6 +304,20 @@ export function useDrawioSocket(
           previousStatus,
         });
       }
+
+      const projectUuid = currentProjectRef.current?.uuid;
+      if (projectUuid) {
+        socket.emit("join_project", projectUuid);
+        joinedProjectRef.current = projectUuid;
+        logger.info("已加入项目房间", {
+          socketId: socket.id,
+          projectUuid,
+        });
+      } else {
+        logger.warn("连接成功但当前没有项目，等待项目就绪后加入房间", {
+          socketId: socket.id,
+        });
+      }
     });
 
     socket.on("disconnect", (reason: string) => {
@@ -422,12 +472,25 @@ export function useDrawioSocket(
 
     // 清理函数
     return () => {
+      const projectUuid = joinedProjectRef.current;
+      if (projectUuid) {
+        socket.emit("leave_project", projectUuid);
+        logger.info("Socket 客户端清理，离开项目房间", {
+          socketId: socket.id,
+          projectUuid,
+        });
+      }
+
       logger.info("Socket 客户端清理，断开连接");
       applyConnectionStatus("disconnecting");
       socket.disconnect();
       applyConnectionStatus("disconnected");
     };
   }, [createHistoricalVersion, getAllXMLVersions, getSetting, editorRef]);
+
+  useEffect(() => {
+    syncProjectRoom(currentProject?.uuid ?? null);
+  }, [currentProject, syncProjectRoom]);
 
   return { isConnected: connectionStatus === "connected", connectionStatus };
 }

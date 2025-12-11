@@ -38,20 +38,106 @@ app.prepare().then(() => {
   // 存储待处理的工具调用请求
   // key: requestId, value: { resolve, reject }
   const pendingRequests = new Map();
+
+  // 项目房间成员映射
+  // projectUuid -> Set<socketId>
+  const projectMembers = new Map();
+  // socketId -> Set<projectUuid>
+  const socketJoinedProjects = new Map();
+
+  const getProjectMemberCount = (projectUuid) =>
+    projectMembers.get(projectUuid)?.size ?? 0;
+
   const emitToolExecute = (request) => {
     const targetProject = request?.projectUuid || "(unknown-project)";
     const targetConversation =
       request?.conversationId || "(unknown-conversation)";
 
+    const activeMembers = getProjectMemberCount(targetProject);
+
+    if (!targetProject || targetProject === "(unknown-project)") {
+      throw new Error("缺少 projectUuid，无法投递工具请求");
+    }
+
+    if (activeMembers === 0) {
+      throw new Error(`目标项目没有客户端在线: ${targetProject}`);
+    }
+
     console.log(
-      `[Socket.IO] 广播工具请求: ${request?.toolName ?? "unknown"} -> project=${targetProject}, conversation=${targetConversation}, requestId=${request?.requestId ?? "n/a"}`,
+      `[Socket.IO] 向项目房间投递工具请求: ${request?.toolName ?? "unknown"} -> project=${targetProject}, conversation=${targetConversation}, requestId=${request?.requestId ?? "n/a"}, 在线客户端=${activeMembers}`,
     );
 
-    io.emit("tool:execute", request);
+    io.to(targetProject).emit("tool:execute", request);
   };
 
   io.on("connection", (socket) => {
     console.log("[Socket.IO] 客户端已连接:", socket.id);
+
+    const trackJoin = (projectUuid) => {
+      if (!projectUuid) return;
+
+      if (!projectMembers.has(projectUuid)) {
+        projectMembers.set(projectUuid, new Set());
+      }
+      if (!socketJoinedProjects.has(socket.id)) {
+        socketJoinedProjects.set(socket.id, new Set());
+      }
+
+      projectMembers.get(projectUuid).add(socket.id);
+      socketJoinedProjects.get(socket.id).add(projectUuid);
+
+      const memberCount = getProjectMemberCount(projectUuid);
+      console.log(
+        `[Socket.IO] socket ${socket.id} 已加入项目房间 ${projectUuid}，当前房间在线: ${memberCount}`,
+      );
+    };
+
+    const trackLeave = (projectUuid) => {
+      if (!projectUuid) return;
+
+      const members = projectMembers.get(projectUuid);
+      if (members) {
+        members.delete(socket.id);
+        if (members.size === 0) {
+          projectMembers.delete(projectUuid);
+        }
+      }
+
+      const joined = socketJoinedProjects.get(socket.id);
+      if (joined) {
+        joined.delete(projectUuid);
+        if (joined.size === 0) {
+          socketJoinedProjects.delete(socket.id);
+        }
+      }
+
+      const memberCount = getProjectMemberCount(projectUuid);
+      console.log(
+        `[Socket.IO] socket ${socket.id} 已离开项目房间 ${projectUuid}，当前房间在线: ${memberCount}`,
+      );
+    };
+
+    // 监听项目房间加入/离开
+    socket.on("join_project", (projectUuid) => {
+      const trimmed = typeof projectUuid === "string" ? projectUuid.trim() : "";
+      if (!trimmed) {
+        console.warn(
+          `[Socket.IO] 收到无效的 join_project 请求，socket=${socket.id}`,
+        );
+        return;
+      }
+
+      socket.join(trimmed);
+      trackJoin(trimmed);
+    });
+
+    socket.on("leave_project", (projectUuid) => {
+      const trimmed = typeof projectUuid === "string" ? projectUuid.trim() : "";
+      if (!trimmed) return;
+
+      socket.leave(trimmed);
+      trackLeave(trimmed);
+    });
 
     // 监听工具执行结果
     socket.on("tool:result", (data) => {
@@ -88,6 +174,11 @@ app.prepare().then(() => {
     });
 
     socket.on("disconnect", () => {
+      const joined = Array.from(socketJoinedProjects.get(socket.id) ?? []);
+      joined.forEach((projectUuid) => {
+        trackLeave(projectUuid);
+      });
+
       console.log("[Socket.IO] 客户端已断开:", socket.id);
     });
 
