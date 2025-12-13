@@ -65,6 +65,10 @@ electron/
 - `readFile(filePath)`: 读取文件
 - `enableSelectionWatcher()`: 启用 DrawIO 选区监听
 
+**文件系统 API (`window.electronFS`)**:
+
+- `readFile(filePath)`: 读取 userData 目录下的二进制文件（返回 ArrayBuffer，主要用于附件 `file_path`）
+
 **存储 API (`window.electronStorage`)**:
 
 - `initialize()`: 初始化存储

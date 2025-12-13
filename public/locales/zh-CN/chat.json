@@ -32,6 +32,9 @@
     "defaultVersion": "默认版本",
     "initialVersion": "初始版本",
     "defaultConversation": "新对话",
+    "conversationNotReady": "对话尚未就绪，请稍后重试。",
+    "visionNotSupported": "当前模型不支持图片输入（vision），请切换到支持视觉的模型后再发送。",
+    "imagePlaceholder": "图片",
     "roles": {
       "user": "用户",
       "assistant": "助手",

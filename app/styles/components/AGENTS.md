@@ -33,6 +33,7 @@
 ```
 app/styles/components/
 ├── chat.css                 # 聊天侧边栏（消息、输入区）
+├── image.css                # 图片展示组件（消息内 ImageContent / 全屏 ImagePreview）
 ├── sessions.css             # 会话管理（标题栏、菜单）
 ├── toast.css                # Toast 通知系统
 ├── modal.css                # 弹窗样式（模态框）
@@ -44,7 +45,7 @@ app/styles/components/
 └── history-view.css         # 历史记录视图（列表、预览）
 ```
 
-**文件规模**: 共10个CSS模块，总计约2800行代码
+**文件规模**: 共11个CSS模块，总计约2800行代码
 
 ---
 

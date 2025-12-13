@@ -92,6 +92,33 @@ const TOOL_PART_TYPES = new Set([
   "tool-invocation",
 ]);
 
+function stripRuntimeImageFields(
+  part: ChatUIMessage["parts"][number],
+): ChatUIMessage["parts"][number] {
+  if (typeof part !== "object" || part === null) return part;
+  const record = part as Record<string, unknown>;
+  if (record.type !== "image") return part;
+
+  return {
+    type: "image",
+    attachmentId: record.attachmentId as string,
+    mimeType: record.mimeType as string,
+    width:
+      typeof record.width === "number" ? (record.width as number) : undefined,
+    height:
+      typeof record.height === "number" ? (record.height as number) : undefined,
+    fileName:
+      typeof record.fileName === "string"
+        ? (record.fileName as string)
+        : undefined,
+    alt: typeof record.alt === "string" ? (record.alt as string) : undefined,
+    purpose:
+      typeof record.purpose === "string"
+        ? (record.purpose as string)
+        : undefined,
+  } as ChatUIMessage["parts"][number];
+}
+
 const sanitizeSerializableValue = (
   value: unknown,
   seen: WeakSet<object> = new WeakSet(),
@@ -555,7 +582,7 @@ export function convertUIMessageToCreateInput(
     if (isToolRelatedPart(part)) {
       return buildCanonicalToolPart(part, { defaultType: "dynamic-tool" });
     }
-    return part;
+    return stripRuntimeImageFields(part);
   });
 
   const parts_structure = safeJsonStringify(normalizedParts);
@@ -584,7 +611,7 @@ export function fingerprintMessage(message: ChatUIMessage): string {
   return JSON.stringify({
     id: message.id,
     role: message.role,
-    parts: message.parts,
+    parts: message.parts.map(stripRuntimeImageFields),
     metadata: restMetadata,
   });
 }

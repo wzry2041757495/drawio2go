@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld("electron", {
   enableSelectionWatcher: () => ipcRenderer.invoke("enable-selection-watcher"),
 });
 
+// 暴露安全的二进制文件读取 API（主要用于附件）
+// 约束：主进程会把路径限制在 userData 目录下，避免任意文件读取
+contextBridge.exposeInMainWorld("electronFS", {
+  readFile: (filePath) => ipcRenderer.invoke("fs:readFile", filePath),
+});
+
 // 暴露存储 API 到渲染进程
 contextBridge.exposeInMainWorld("electronStorage", {
   // 初始化

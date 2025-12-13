@@ -12,6 +12,7 @@ export { usePanZoomStage } from "./usePanZoomStage";
 export { useChatSessionsController } from "./useChatSessionsController";
 export { useLLMConfig } from "./useLLMConfig";
 export { useOperationToast } from "./useOperationToast";
+export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
 
 // Other Hooks - 其他 Hooks
 export { useDrawioSocket } from "./useDrawioSocket";

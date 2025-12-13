@@ -86,6 +86,18 @@ declare global {
     };
 
     /**
+     * Electron 文件系统 IPC 接口（二进制）
+     * 仅在 Electron 环境下可用
+     */
+    electronFS?: {
+      /**
+       * 读取 userData 目录下的二进制文件（返回 ArrayBuffer）
+       * 主要用于 attachments.file_path（相对路径）
+       */
+      readFile: (filePath: string) => Promise<ArrayBuffer>;
+    };
+
+    /**
      * Electron 存储 IPC 接口
      * 仅在 Electron 环境下可用
      */

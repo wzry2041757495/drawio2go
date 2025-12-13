@@ -187,6 +187,32 @@
 - `showNotice(message, status)` — status: success/warning/danger
 - `extractErrorMessage(error)` — 从 Error/字符串/对象中抽取 message
 
+### 16. useAttachmentObjectUrl _(新增，2025-12-13)_
+
+**附件 Object URL 生命周期 Hook** - 用于 Milestone 5 图片展示的懒加载与缓存管理。
+
+- **输入**: `attachmentId`（可为空），`options.enabled` 控制是否加载
+- **输出**: `objectUrl` / `isLoading` / `error` / `retry`
+- **特性**:
+  - Promise 去重：同一 `attachmentId` 并发请求共享同一个读取 Promise
+  - 引用计数：多个组件引用同一图片时复用 Object URL，最后一个卸载后延迟 30 秒 `revoke`
+  - LRU 缓存：最多缓存 50 张图片，超出时淘汰最久未使用且未被引用的条目
+  - 跨端读取：Web 端从 IndexedDB Blob 生成 URL；Electron 端通过 `file_path` + `window.electronFS.readFile()` 读取二进制生成 URL
+
+### 17. useIntersection _(新增，2025-12-13)_
+
+**视口交叉观察 Hook** - 为图片/重资源组件提供轻量懒加载触发器（不引入第三方依赖）。
+
+- **输入**: `options`（`root`/`rootMargin`/`threshold`/`disabled`）
+- **输出**: `{ ref, isInView, hasEverBeenInView }`
+  - `ref`: 绑定到需要观察的 DOM 元素
+  - `isInView`: 当前是否在视口（或 root 容器）中
+  - `hasEverBeenInView`: 一旦进入过视口即永久为 `true`，便于“首次进入触发加载”的场景
+- **特性**:
+  - `disabled=true` 时视为始终可见（用于测试或强制加载）
+  - 缺少 `IntersectionObserver` 的环境自动回退为可见
+  - 清理阶段 `disconnect` observer，避免泄漏
+
 ## 统一导出
 
 所有 Hooks 通过 `app/hooks/index.ts` 统一导出：
@@ -204,6 +230,7 @@ export { useNetworkStatus } from "./useNetworkStatus";
 export { useDrawioEditor } from "./useDrawioEditor";
 export { useVersionPages } from "./useVersionPages";
 export { usePanZoomStage } from "./usePanZoomStage";
+export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
 ```
 
 ## 设计原则

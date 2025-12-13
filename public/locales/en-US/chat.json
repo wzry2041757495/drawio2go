@@ -35,6 +35,9 @@
     "defaultVersion": "Default version",
     "initialVersion": "Initial version",
     "defaultConversation": "New conversation",
+    "conversationNotReady": "Conversation is not ready yet. Please try again shortly.",
+    "visionNotSupported": "The current model does not support image input (vision). Please switch to a vision-capable model and try again.",
+    "imagePlaceholder": "Image",
     "roles": {
       "user": "User",
       "assistant": "Assistant",

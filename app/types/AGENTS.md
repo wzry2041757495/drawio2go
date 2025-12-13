@@ -42,7 +42,7 @@ Socket.IO 通讯协议的类型定义。
 
 - 全局 Socket.IO 服务器实例类型（`io`）
 - 待处理工具调用请求 Map（`pendingRequests`）
-- 扩展的 Window 对象属性（`electron` 和 `electronStorage` API）
+- 扩展的 Window 对象属性（`electron`、`electronStorage`、`electronFS` API）
 - `declare module 'xpath'`：为第三方库补充最小化声明
 - `declare module 'pako'`：压缩库类型声明
 

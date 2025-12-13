@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Alert } from "@heroui/react";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   useChatLock,
   useNetworkStatus,
@@ -20,11 +20,20 @@ import {
 } from "@/app/hooks";
 import { useAlertDialog } from "@/app/components/alert";
 import { useI18n } from "@/app/i18n/hooks";
-import { DEFAULT_PROJECT_UUID } from "@/app/lib/storage";
+import { DEFAULT_PROJECT_UUID, getStorage } from "@/app/lib/storage";
 import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
 import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
-import { fingerprintMessage } from "@/app/lib/chat-session-service";
+import {
+  convertUIMessageToCreateInput,
+  fingerprintMessage,
+} from "@/app/lib/chat-session-service";
 import { generateUUID } from "@/app/lib/utils";
+import { useImageAttachments } from "@/hooks/useImageAttachments";
+import {
+  convertAttachmentItemToImagePart,
+  fileToDataUrl,
+  uploadImageAttachment,
+} from "@/lib/image-message-utils";
 
 import ChatHistoryView from "./chat/ChatHistoryView";
 import ChatShell from "./chat/ChatShell";
@@ -65,6 +74,7 @@ export default function ChatSidebar({
     Record<string, boolean>
   >({});
   const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
+  const imageAttachments = useImageAttachments();
 
   // ========== Hook 聚合 ==========
   const { t, i18n } = useI18n();
@@ -133,6 +143,10 @@ export default function ChatSidebar({
 
   // ========== 引用 ==========
   const sendingSessionIdRef = useRef<string | null>(null);
+  const imageDataUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const imageDataUrlPendingRef = useRef<Map<string, Promise<string | null>>>(
+    new Map(),
+  );
   const alertOwnerRef = useRef<
     "socket" | "single-delete" | "batch-delete" | null
   >(null);
@@ -230,7 +244,6 @@ export default function ChatSidebar({
     createConversation,
     ensureMessagesForConversation,
     resolveConversationId,
-    startTempConversation,
     removeConversationsFromState,
     handleAbnormalExitIfNeeded,
     markConversationAsStreaming,
@@ -325,6 +338,176 @@ export default function ChatSidebar({
   }, [chatService, resolveConversationId, setActiveConversationId]);
 
   // ========== useChat 集成 ==========
+  const chatTransport = useMemo(() => {
+    return new DefaultChatTransport<UseChatMessage>({
+      prepareSendMessagesRequest: async (options) => {
+        const maybeHasImageParts = (msg: unknown): boolean => {
+          if (!msg || typeof msg !== "object") return false;
+          const parts = (msg as { parts?: unknown }).parts;
+          if (!Array.isArray(parts)) return false;
+          return parts.some(
+            (part) =>
+              typeof part === "object" &&
+              part !== null &&
+              (part as { type?: unknown }).type === "image",
+          );
+        };
+
+        const getOrCreateDataUrl = async (
+          attachmentId: string,
+        ): Promise<string | null> => {
+          const cached = imageDataUrlCacheRef.current.get(attachmentId);
+          if (cached) return cached;
+
+          const pending = imageDataUrlPendingRef.current.get(attachmentId);
+          if (pending) return await pending;
+
+          const request = (async () => {
+            try {
+              const storage = await getStorage();
+              const attachment = await storage.getAttachment(attachmentId);
+              if (!attachment) return null;
+
+              const mimeType =
+                attachment.mime_type || "application/octet-stream";
+              const blobData = attachment.blob_data as unknown;
+
+              if (blobData instanceof Blob) {
+                const dataUrl = await fileToDataUrl(blobData);
+                imageDataUrlCacheRef.current.set(attachmentId, dataUrl);
+                return dataUrl;
+              }
+
+              if (attachment.file_path && window.electronFS?.readFile) {
+                const buffer = await window.electronFS.readFile(
+                  attachment.file_path,
+                );
+                const blob = new Blob([buffer], { type: mimeType });
+                const dataUrl = await fileToDataUrl(blob);
+                imageDataUrlCacheRef.current.set(attachmentId, dataUrl);
+                return dataUrl;
+              }
+            } catch (error) {
+              logger.warn("[ChatSidebar] 读取附件 dataUrl 失败，已跳过", {
+                attachmentId,
+                error,
+              });
+            }
+
+            return null;
+          })();
+
+          imageDataUrlPendingRef.current.set(attachmentId, request);
+          request.finally(() => {
+            if (imageDataUrlPendingRef.current.get(attachmentId) === request) {
+              imageDataUrlPendingRef.current.delete(attachmentId);
+            }
+          });
+
+          return await request;
+        };
+
+        const fillDataUrlIfMissing = async (part: unknown) => {
+          if (!part || typeof part !== "object") return part;
+          const record = part as Record<string, unknown>;
+          if (record.type !== "image") return part;
+          if (typeof record.dataUrl === "string" && record.dataUrl.trim()) {
+            return part;
+          }
+
+          const attachmentId =
+            typeof record.attachmentId === "string" ? record.attachmentId : "";
+          if (!attachmentId) {
+            return part;
+          }
+
+          const dataUrl = await getOrCreateDataUrl(attachmentId);
+          if (!dataUrl) return part;
+
+          return { ...record, dataUrl };
+        };
+
+        const concurrency = 5;
+        const runWithConcurrency = async <T, R>(
+          items: readonly T[],
+          limit: number,
+          fn: (item: T) => Promise<R>,
+        ): Promise<R[]> => {
+          const results: R[] = new Array(items.length) as R[];
+          let cursor = 0;
+
+          const workers = new Array(Math.min(limit, items.length))
+            .fill(0)
+            .map(async () => {
+              while (cursor < items.length) {
+                const index = cursor;
+                cursor += 1;
+                results[index] = await fn(items[index]);
+              }
+            });
+
+          await Promise.all(workers);
+          return results;
+        };
+
+        const missingAttachmentIds = new Set<string>();
+        for (const msg of options.messages) {
+          const parts = (msg as { parts?: unknown }).parts;
+          if (!Array.isArray(parts)) continue;
+          for (const part of parts) {
+            if (
+              typeof part === "object" &&
+              part !== null &&
+              (part as { type?: unknown }).type === "image"
+            ) {
+              const record = part as Record<string, unknown>;
+              const hasDataUrl =
+                typeof record.dataUrl === "string" && record.dataUrl.trim();
+              if (hasDataUrl) continue;
+              const attachmentId =
+                typeof record.attachmentId === "string"
+                  ? record.attachmentId
+                  : "";
+              if (attachmentId) missingAttachmentIds.add(attachmentId);
+            }
+          }
+        }
+
+        const uniqueMissing = Array.from(missingAttachmentIds);
+        if (uniqueMissing.length > 0) {
+          await runWithConcurrency(
+            uniqueMissing,
+            concurrency,
+            getOrCreateDataUrl,
+          );
+        }
+
+        const nextMessages = await Promise.all(
+          options.messages.map(async (msg) => {
+            if (!maybeHasImageParts(msg)) return msg;
+            const parts = (msg as { parts?: unknown }).parts;
+            if (!Array.isArray(parts)) return msg;
+
+            const nextParts = await Promise.all(
+              parts.map(fillDataUrlIfMissing),
+            );
+            return {
+              ...msg,
+              parts: nextParts,
+            } as unknown as UseChatMessage;
+          }),
+        );
+
+        return {
+          body: {
+            ...(options.body ?? {}),
+            messages: nextMessages,
+          },
+        };
+      },
+    });
+  }, []);
+
   const {
     messages,
     setMessages,
@@ -335,6 +518,7 @@ export default function ChatSidebar({
   } = useChat<UseChatMessage>({
     id: activeConversationId || "default",
     messages: initialMessages as unknown as UseChatMessage[],
+    transport: chatTransport,
     onFinish: async ({ messages: finishedMessages }) => {
       const targetSessionId = sendingSessionIdRef.current;
 
@@ -1010,8 +1194,34 @@ export default function ChatSidebar({
 
   const submitMessage = async () => {
     const trimmedInput = input.trim();
+    const readyAttachments = imageAttachments.attachments.filter(
+      (item) => item.status === "ready",
+    );
+    const hasReadyAttachments = readyAttachments.length > 0;
+    const hasHistoryImages = displayMessages.some((message) =>
+      message.parts?.some((part) => part.type === "image"),
+    );
 
-    if (!trimmedInput || !llmConfig || configLoading || isChatStreaming) {
+    if (
+      (!trimmedInput && !hasReadyAttachments) ||
+      !llmConfig ||
+      configLoading ||
+      isChatStreaming
+    ) {
+      return;
+    }
+
+    if (
+      (hasReadyAttachments || hasHistoryImages) &&
+      !llmConfig.capabilities?.supportsVision
+    ) {
+      showNotice(
+        t(
+          "chat:messages.visionNotSupported",
+          "当前模型不支持图片输入（vision），请切换到支持视觉的模型后再发送。",
+        ),
+        "warning",
+      );
       return;
     }
 
@@ -1047,27 +1257,81 @@ export default function ChatSidebar({
       return;
     }
 
-    let targetSessionId = activeConversationId;
-
-    // 如果没有活动会话，立即启动异步创建（不阻塞消息发送）
+    const targetSessionId = activeConversationId;
     if (!targetSessionId) {
-      logger.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
-      const tempConversationId = startTempConversation(
-        t("chat:messages.defaultConversation"),
+      showNotice(
+        t("chat:messages.conversationNotReady", "对话尚未就绪，请稍后重试。"),
+        "warning",
       );
-      setActiveConversationId(tempConversationId);
-      targetSessionId = tempConversationId;
+      return;
     }
 
     sendingSessionIdRef.current = targetSessionId;
     logger.debug("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
 
+    const messageId = generateUUID("msg");
+    const createdAt = Date.now();
+
+    const imageParts = hasReadyAttachments
+      ? await Promise.all(
+          readyAttachments.map((item) =>
+            convertAttachmentItemToImagePart(item, item.id),
+          ),
+        )
+      : [];
+
+    const parts: ChatUIMessage["parts"] = [
+      ...(trimmedInput
+        ? [
+            {
+              type: "text",
+              text: trimmedInput,
+            } as const,
+          ]
+        : []),
+      ...imageParts,
+    ];
+
+    const userMessage: ChatUIMessage = {
+      id: messageId,
+      role: "user",
+      parts,
+      metadata: {
+        createdAt,
+        modelName: llmConfig.modelName,
+      },
+    };
+
     setInput("");
 
     let lockTransferredToStream = false;
+    let storageForRollback: Awaited<ReturnType<typeof getStorage>> | null =
+      null;
     try {
+      const storage = await getStorage();
+      storageForRollback = storage;
+      await storage.createMessage(
+        convertUIMessageToCreateInput(userMessage, targetSessionId),
+      );
+
+      if (hasReadyAttachments) {
+        await Promise.all(
+          readyAttachments.map((item) =>
+            uploadImageAttachment({
+              storage,
+              attachmentId: item.id,
+              conversationId: targetSessionId,
+              messageId,
+              file: item.file,
+              width: item.width,
+              height: item.height,
+            }),
+          ),
+        );
+      }
+
       await sendMessage(
-        { text: trimmedInput },
+        { ...(userMessage as unknown as UseChatMessage), messageId },
         {
           body: {
             llmConfig,
@@ -1077,11 +1341,29 @@ export default function ChatSidebar({
         },
       );
       lockTransferredToStream = true;
+      if (hasReadyAttachments) {
+        imageAttachments.clearAll();
+      }
       void updateStreamingFlag(targetSessionId, true);
     } catch (error) {
       logger.error("[ChatSidebar] 发送消息失败:", error);
       sendingSessionIdRef.current = null;
+      if (storageForRollback) {
+        try {
+          await storageForRollback.deleteMessage(messageId);
+        } catch (deleteError) {
+          logger.warn("[ChatSidebar] 回滚失败：删除消息失败", {
+            messageId,
+            error: deleteError,
+          });
+        }
+      }
+      setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
       setInput(trimmedInput);
+      pushErrorToast(
+        extractErrorMessage(error) ?? t("toasts.unknownError"),
+        t("toasts.chatRequestFailed"),
+      );
     } finally {
       if (!lockTransferredToStream) {
         releaseLock();
@@ -1600,6 +1882,7 @@ export default function ChatSidebar({
             onNewChat={handleNewChat}
             onHistory={handleHistory}
             onRetry={handleRetry}
+            imageAttachments={imageAttachments}
             modelSelectorProps={{
               providers,
               models,

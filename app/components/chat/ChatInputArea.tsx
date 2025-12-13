@@ -87,9 +87,12 @@ export default function ChatInputArea({
     attachments: attachmentItems,
     addFiles,
     removeAttachment,
-    clearAll,
     hasAttachments,
   } = attachments;
+  const hasReadyAttachments = attachmentItems.some(
+    (item) => item.status === "ready",
+  );
+  const canSend = Boolean(input.trim()) || hasReadyAttachments;
   const isInputDisabled =
     configLoading ||
     !llmConfig ||
@@ -97,7 +100,7 @@ export default function ChatInputArea({
     !isOnline ||
     !isSocketConnected;
   const isSendDisabled =
-    !input.trim() ||
+    !canSend ||
     isChatStreaming ||
     configLoading ||
     !llmConfig ||
@@ -177,19 +180,6 @@ export default function ChatInputArea({
     [handleAddImages, isInputDisabled],
   );
 
-  const handleSubmitWrapper = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      try {
-        await onSubmit(event);
-      } finally {
-        if (hasAttachments) {
-          clearAll();
-        }
-      }
-    },
-    [clearAll, hasAttachments, onSubmit],
-  );
-
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -202,9 +192,7 @@ export default function ChatInputArea({
           value: event.currentTarget.form,
           enumerable: true,
         });
-        void handleSubmitWrapper(
-          formEvent as unknown as FormEvent<HTMLFormElement>,
-        );
+        void onSubmit(formEvent as unknown as FormEvent<HTMLFormElement>);
       }
     }
   };
@@ -246,10 +234,7 @@ export default function ChatInputArea({
       ref={textareaContainerRef}
       {...rootProps}
     >
-      <form
-        onSubmit={handleSubmitWrapper}
-        className="chat-input-container gap-2"
-      >
+      <form onSubmit={onSubmit} className="chat-input-container gap-2">
         {hasAttachments ? (
           <ImagePreviewBar
             attachments={attachmentItems}

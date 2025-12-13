@@ -1,6 +1,7 @@
 import {
   convertMessageToUIMessage,
   convertUIMessageToCreateInput,
+  fingerprintMessage,
 } from "@/app/lib/chat-session-service";
 import type { Message } from "@/app/lib/storage";
 import type { ChatUIMessage } from "@/app/types/chat";
@@ -68,6 +69,49 @@ describe("convertUIMessageToCreateInput", () => {
 
     const created = convertUIMessageToCreateInput(uiMsg, "conv-empty");
     expect(JSON.parse(created.parts_structure)).toEqual([]);
+  });
+
+  it("图片 part 持久化时剥离运行时字段（dataUrl/objectUrl/blob）", () => {
+    const uiMsg: ChatUIMessage = {
+      id: "msg-image",
+      role: "user",
+      parts: [
+        {
+          type: "image",
+          attachmentId: "att-1",
+          mimeType: "image/png",
+          width: 100,
+          height: 80,
+          fileName: "a.png",
+          alt: "a",
+          purpose: "vision",
+          dataUrl: "data:image/png;base64,AAAA",
+          objectUrl: "blob:mock",
+          blob: new Blob(["x"], { type: "image/png" }),
+        },
+      ],
+      metadata: baseMeta,
+    };
+
+    const created = convertUIMessageToCreateInput(uiMsg, "conv-image");
+    const parsed = JSON.parse(created.parts_structure) as Array<
+      Record<string, unknown>
+    >;
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({
+      type: "image",
+      attachmentId: "att-1",
+      mimeType: "image/png",
+      width: 100,
+      height: 80,
+      fileName: "a.png",
+      alt: "a",
+      purpose: "vision",
+    });
+    expect("dataUrl" in parsed[0]).toBe(false);
+    expect("objectUrl" in parsed[0]).toBe(false);
+    expect("blob" in parsed[0]).toBe(false);
   });
 });
 
@@ -210,5 +254,41 @@ describe("往返序列化/反序列化", () => {
     ]);
     expect(roundtrip.metadata).toBeDefined();
     expect(roundtrip.metadata!.modelName).toBe(uiMsg.metadata?.modelName);
+  });
+});
+
+describe("fingerprintMessage", () => {
+  it("忽略 ImagePart 的运行时字段（dataUrl/objectUrl/blob）", () => {
+    const base: ChatUIMessage = {
+      id: "fp-image-1",
+      role: "user",
+      parts: [
+        {
+          type: "image",
+          attachmentId: "att-1",
+          mimeType: "image/png",
+          width: 1,
+          height: 2,
+          fileName: "a.png",
+          alt: "a",
+          purpose: "vision",
+        },
+      ],
+      metadata: baseMeta,
+    };
+
+    const withRuntime: ChatUIMessage = {
+      ...base,
+      parts: [
+        {
+          ...(base.parts[0] as Record<string, unknown>),
+          dataUrl: "data:image/png;base64,BBBB",
+          objectUrl: "blob:mock",
+          blob: new Blob(["y"], { type: "image/png" }),
+        } as unknown as ChatUIMessage["parts"][number],
+      ],
+    };
+
+    expect(fingerprintMessage(base)).toBe(fingerprintMessage(withRuntime));
   });
 });

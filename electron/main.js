@@ -27,6 +27,18 @@ function convertBlobFields(payload) {
   return normalized;
 }
 
+function resolveUserDataPathSafe(relativePath) {
+  const userDataPath = app.getPath("userData");
+  const base = path.resolve(userDataPath);
+  const baseWithSep = base.endsWith(path.sep) ? base : `${base}${path.sep}`;
+
+  const target = path.resolve(base, relativePath);
+  if (!target.startsWith(baseWithSep)) {
+    throw new Error("非法文件路径：仅允许访问 userData 目录下的文件");
+  }
+  return target;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -267,6 +279,25 @@ ipcMain.handle("read-file", async (event, filePath) => {
     return data;
   } catch (error) {
     console.error("读取文件错误:", error);
+    throw error;
+  }
+});
+
+// IPC 处理：读取 userData 目录下的二进制文件（用于附件 file_path → ArrayBuffer）
+ipcMain.handle("fs:readFile", async (_event, relativePath) => {
+  try {
+    if (typeof relativePath !== "string" || !relativePath.trim()) {
+      throw new Error("无效的文件路径");
+    }
+
+    const absPath = resolveUserDataPathSafe(relativePath);
+    const data = fs.readFileSync(absPath);
+    return data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength,
+    );
+  } catch (error) {
+    console.error("读取二进制文件错误:", error);
     throw error;
   }
 });

@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import ThinkingBlock from "./ThinkingBlock";
 import ToolCallCard from "./ToolCallCard";
+import ImageContent from "./ImageContent";
 import { TypingIndicator } from "./TypingIndicator";
 import { markdownComponents } from "./constants/markdownComponents";
 import { getToolExpansionKey } from "./utils/toolUtils";
@@ -73,6 +74,18 @@ export default function MessageContent({
               </div>
               {shouldShowTypingIndicator && <TypingIndicator />}
             </div>
+          );
+        }
+
+        // 图片内容（仅用户附件）
+        if (part.type === "image") {
+          return (
+            <ImageContent
+              key={`${message.id}-${index}`}
+              part={part}
+              messageId={message.id}
+              isUserMessage={message.role === "user"}
+            />
           );
         }
 
