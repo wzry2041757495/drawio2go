@@ -54,6 +54,40 @@ export const DEFAULT_MODEL_CAPABILITIES: Readonly<
     supportsThinking: false,
     supportsVision: false,
   }),
+
+  // Claude（Anthropic）系列
+  "claude-sonnet-4": Object.freeze({
+    supportsThinking: false,
+    supportsVision: true,
+  }),
+  "claude-sonnet-4-5": Object.freeze({
+    supportsThinking: false,
+    supportsVision: true,
+  }),
+  "claude-opus-4": Object.freeze({
+    supportsThinking: true,
+    supportsVision: true,
+  }),
+  "claude-opus-4-5": Object.freeze({
+    supportsThinking: true,
+    supportsVision: true,
+  }),
+  "claude-3-5-sonnet": Object.freeze({
+    supportsThinking: false,
+    supportsVision: true,
+  }),
+  "claude-3-5-haiku": Object.freeze({
+    supportsThinking: false,
+    supportsVision: true,
+  }),
+  "claude-3-5-haiku-latest": Object.freeze({
+    supportsThinking: false,
+    supportsVision: true,
+  }),
+  "claude-3-opus": Object.freeze({
+    supportsThinking: true,
+    supportsVision: true,
+  }),
 });
 
 /**

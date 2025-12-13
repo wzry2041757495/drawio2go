@@ -32,7 +32,7 @@ import {
   type CreateProviderInput,
   useStorageSettings,
 } from "@/app/hooks/useStorageSettings";
-import { normalizeApiUrl } from "@/app/lib/config-utils";
+import { normalizeProviderApiUrl } from "@/app/lib/config-utils";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
 import { useToast } from "@/app/components/toast";
 import type { ProviderConfig, ProviderType } from "@/app/types/chat";
@@ -165,7 +165,7 @@ export function ProviderEditDialog({
       const payload: CreateProviderInput = {
         displayName: formData.displayName.trim(),
         providerType: formData.providerType,
-        apiUrl: normalizeApiUrl(formData.apiUrl),
+        apiUrl: normalizeProviderApiUrl(formData.providerType, formData.apiUrl),
         apiKey: formData.apiKey,
       };
 
@@ -229,10 +229,13 @@ export function ProviderEditDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiUrl: normalizeApiUrl(formData.apiUrl),
+          apiUrl: normalizeProviderApiUrl(formData.providerType, formData.apiUrl),
           apiKey: formData.apiKey,
           providerType: formData.providerType,
-          modelName: "gpt-3.5-turbo",
+          modelName:
+            formData.providerType === "anthropic"
+              ? "claude-3-5-haiku-latest"
+              : "gpt-3.5-turbo",
           temperature: 0.3,
         }),
       });
@@ -323,6 +326,12 @@ export function ProviderEditDialog({
                         OpenAI Compatible
                         <Description>
                           {t("models.form.type.options.openaiCompatible")}
+                        </Description>
+                      </ListBox.Item>
+                      <ListBox.Item id="anthropic">
+                        Anthropic
+                        <Description>
+                          {t("models.form.type.options.anthropic")}
                         </Description>
                       </ListBox.Item>
                       <ListBox.Item id="deepseek-native">

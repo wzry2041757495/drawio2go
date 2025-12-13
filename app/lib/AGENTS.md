@@ -239,7 +239,7 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 - **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`
 - **LLM 存储键**: `settings.llm.providers`, `settings.llm.models`, `settings.llm.agent`, `settings.llm.activeModel`
 - **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS` / `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`
-- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `initializeDefaultLLMConfig()`
+- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `normalizeAnthropicApiUrl()` / `normalizeProviderApiUrl()` / `initializeDefaultLLMConfig()`
 - **用途**: 验证 provider 合法性，规范化 API URL，初始化存储中的默认 LLM 配置
 
 ## 其他工具函数

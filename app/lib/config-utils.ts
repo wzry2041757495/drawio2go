@@ -36,12 +36,14 @@ export const DEFAULT_SYSTEM_PROMPT = `你是一个专业的 DrawIO XML 绘制助
 确保输出的 XML 始终可以被 DrawIO 正确解析与渲染，并在回复中解释你的思考过程与操作理由。`;
 
 export const DEFAULT_API_URL = "https://api.deepseek.com/v1";
+export const DEFAULT_ANTHROPIC_API_URL = "https://api.anthropic.com";
 
 export function isProviderType(value: unknown): value is ProviderType {
   return (
     value === "openai-reasoning" ||
     value === "openai-compatible" ||
-    value === "deepseek-native"
+    value === "deepseek-native" ||
+    value === "anthropic"
   );
 }
 
@@ -70,6 +72,53 @@ export const normalizeApiUrl = (
   }
 
   return `${withoutTrailingSlash}/v1`;
+};
+
+/**
+ * Anthropic API 的 baseURL 规范化
+ * - 移除尾部斜杠
+ * - 不自动补 /v1（@ai-sdk/anthropic 以 baseURL 为根路径）
+ * - 若 host 为 api.anthropic.com 且路径为 /v1，则自动去掉 /v1（避免重复 /v1）
+ */
+export const normalizeAnthropicApiUrl = (
+  value?: string,
+  fallback: string = DEFAULT_ANTHROPIC_API_URL,
+): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+
+  try {
+    const parsed = new URL(withoutTrailingSlash);
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+
+    if (parsed.hostname === "api.anthropic.com" && normalizedPath === "/v1") {
+      parsed.pathname = "";
+      return parsed.toString().replace(/\/+$/, "");
+    }
+  } catch {
+    // ignore invalid url, caller may validate separately
+  }
+
+  return withoutTrailingSlash;
+};
+
+export const normalizeProviderApiUrl = (
+  providerType: ProviderType,
+  value?: string,
+  fallback: string = DEFAULT_API_URL,
+): string => {
+  if (providerType === "anthropic") {
+    return normalizeAnthropicApiUrl(value);
+  }
+  return normalizeApiUrl(value, fallback);
 };
 
 export const STORAGE_KEY_LLM_PROVIDERS = "settings.llm.providers";
@@ -182,14 +231,27 @@ export function normalizeLLMConfig(
 ): RuntimeLLMConfig {
   const safeConfig = config ?? {};
 
+  const providerType = isProviderType(safeConfig.providerType)
+    ? safeConfig.providerType
+    : DEFAULT_LLM_CONFIG.providerType;
+
+  const apiUrl =
+    typeof safeConfig.apiUrl === "string"
+      ? normalizeProviderApiUrl(
+          providerType,
+          safeConfig.apiUrl,
+          DEFAULT_LLM_CONFIG.apiUrl,
+        )
+      : normalizeProviderApiUrl(
+          providerType,
+          undefined,
+          DEFAULT_LLM_CONFIG.apiUrl,
+        );
+
   const modelName =
     typeof safeConfig.modelName === "string" && safeConfig.modelName.trim()
       ? safeConfig.modelName.trim()
       : DEFAULT_LLM_CONFIG.modelName;
-
-  const providerType = isProviderType(safeConfig.providerType)
-    ? safeConfig.providerType
-    : DEFAULT_LLM_CONFIG.providerType;
 
   const capabilities =
     safeConfig.capabilities ?? getDefaultCapabilities(modelName);
@@ -208,10 +270,7 @@ export function normalizeLLMConfig(
   const customConfig = normalizeCustomConfig(safeConfig.customConfig);
 
   return {
-    apiUrl: normalizeApiUrl(
-      safeConfig.apiUrl ?? DEFAULT_LLM_CONFIG.apiUrl,
-      DEFAULT_LLM_CONFIG.apiUrl,
-    ),
+    apiUrl,
     apiKey:
       typeof safeConfig.apiKey === "string"
         ? safeConfig.apiKey

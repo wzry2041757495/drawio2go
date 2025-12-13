@@ -156,7 +156,7 @@ settings.llm.apiUrl.placeholder
 settings.llm.apiUrl.description
 settings.llm.provider.label
 settings.llm.provider.description
-settings.llm.providers.[type].label        // openai-compatible, deepseek, openai-reasoning
+settings.llm.providers.[type].label        // openai-compatible, anthropic, deepseek-native, openai-reasoning
 settings.llm.providers.[type].description
 settings.llm.apiKey.label
 settings.llm.apiKey.placeholder
@@ -346,7 +346,8 @@ interface ProviderOption {
 
 const PROVIDER_OPTIONS: ProviderType[] = [
   "openai-compatible",
-  "deepseek",
+  "anthropic",
+  "deepseek-native",
   "openai-reasoning",
 ];
 
@@ -364,7 +365,8 @@ const getProviderOptions = (t: TFunction): ProviderOption[] => {
 type ProviderType =
   | "openai-reasoning"
   | "openai-compatible"
-  | "deepseek-native";
+  | "deepseek-native"
+  | "anthropic";
 
 interface ProviderConfig {
   id: string;

@@ -20,6 +20,7 @@ import {
 import { createOpenAI } from "@ai-sdk/openai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { NextRequest, NextResponse } from "next/server";
 import type { ImagePart } from "@/app/types/chat";
 
@@ -354,6 +355,12 @@ export async function POST(req: NextRequest) {
       });
       // deepseekProvider 直接返回模型调用函数（无需 .chat）
       model = deepseekProvider(normalizedConfig.modelName);
+    } else if (normalizedConfig.providerType === "anthropic") {
+      const anthropicProvider = createAnthropic({
+        baseURL: normalizedConfig.apiUrl || "https://api.anthropic.com",
+        apiKey: normalizedConfig.apiKey || "",
+      });
+      model = anthropicProvider(normalizedConfig.modelName);
     } else {
       // OpenAI Compatible：使用 @ai-sdk/openai-compatible
       const compatibleProvider = createOpenAICompatible({

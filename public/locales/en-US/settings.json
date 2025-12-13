@@ -54,6 +54,14 @@
         "label": "OpenAI Compatible",
         "description": "Works with most OpenAI-compatible services"
       },
+      "anthropic": {
+        "label": "Anthropic / Claude",
+        "description": "Official Anthropic API for Claude models (vision supported)"
+      },
+      "deepseek-native": {
+        "label": "DeepSeek",
+        "description": "Official DeepSeek API with chat and reasoning models"
+      },
       "deepseek": {
         "label": "DeepSeek",
         "description": "Official DeepSeek API with chat and reasoning models"
@@ -125,6 +133,7 @@
         "description": "Select the type of provider",
         "options": {
           "openaiCompatible": "Standard OpenAI-compatible API",
+          "anthropic": "Official Anthropic Claude API",
           "deepseekNative": "DeepSeek native API with reasoning support",
           "openaiReasoning": "OpenAI reasoning models (o1, o3)"
         }

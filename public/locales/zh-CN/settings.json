@@ -54,6 +54,14 @@
         "label": "OpenAI 兼容",
         "description": "适用于大多数兼容 OpenAI API 的服务"
       },
+      "anthropic": {
+        "label": "Anthropic / Claude",
+        "description": "Anthropic 官方 API，Claude 系列模型（普遍支持视觉）"
+      },
+      "deepseek-native": {
+        "label": "DeepSeek",
+        "description": "官方 DeepSeek API，支持聊天与推理模型"
+      },
       "deepseek": {
         "label": "DeepSeek",
         "description": "官方 DeepSeek API，支持聊天与推理模型"
@@ -125,6 +133,7 @@
         "description": "选择供应商类型",
         "options": {
           "openaiCompatible": "标准 OpenAI 兼容 API",
+          "anthropic": "Anthropic 官方 Claude API",
           "deepseekNative": "DeepSeek 原生 API（含推理）",
           "openaiReasoning": "OpenAI 推理模型（o1/o3）"
         }

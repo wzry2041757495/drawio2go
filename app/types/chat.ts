@@ -10,7 +10,8 @@ declare module "ai" {
 export type ProviderType =
   | "openai-reasoning"
   | "openai-compatible"
-  | "deepseek-native";
+  | "deepseek-native"
+  | "anthropic";
 
 // JSON 可序列化的递归值类型
 export type JsonValue =
