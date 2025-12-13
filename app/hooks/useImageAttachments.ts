@@ -79,78 +79,80 @@ export function useImageAttachments() {
     setAttachments([]);
   }, []);
 
-  const addFiles = useCallback(async (files: File[]): Promise<AttachmentItem[]> => {
-    if (!Array.isArray(files) || files.length === 0) return [];
+  const addFiles = useCallback(
+    async (files: File[]): Promise<AttachmentItem[]> => {
+      if (!Array.isArray(files) || files.length === 0) return [];
 
-    const currentCount = attachmentsRef.current.length;
-    const remainingSlots = MAX_IMAGES_PER_MESSAGE - currentCount;
-    if (remainingSlots <= 0) {
-      throw new Error(`最多只能上传 ${MAX_IMAGES_PER_MESSAGE} 张图片`);
-    }
+      const currentCount = attachmentsRef.current.length;
+      const remainingSlots = MAX_IMAGES_PER_MESSAGE - currentCount;
+      if (remainingSlots <= 0) {
+        throw new Error(`最多只能上传 ${MAX_IMAGES_PER_MESSAGE} 张图片`);
+      }
 
-    const batch = files.slice(0, remainingSlots);
-    const hasOverflow = files.length > remainingSlots;
+      const batch = files.slice(0, remainingSlots);
+      const hasOverflow = files.length > remainingSlots;
 
-    const nextItems = await Promise.all(
-      batch.map(async (file): Promise<AttachmentItem> => {
-        const id = generateUUID("attachment");
-        const mimeType = normalizeMimeType(file.type);
+      const nextItems = await Promise.all(
+        batch.map(async (file): Promise<AttachmentItem> => {
+          const id = generateUUID("attachment");
+          const mimeType = normalizeMimeType(file.type);
 
-        const makeErrorItem = (message: string): AttachmentItem => ({
-          id,
-          file,
-          previewUrl: "",
-          status: "error",
-          error: message,
-        });
-
-        if (!isAllowedImageMimeType(mimeType)) {
-          return makeErrorItem("不支持的图片格式");
-        }
-
-        if (file.size > MAX_IMAGE_SIZE_BYTES) {
-          return makeErrorItem(`图片大小超过限制 (最大 ${MAX_IMAGE_SIZE_MB}MB)`);
-        }
-
-        const previewUrl = URL.createObjectURL(file);
-        objectUrlsRef.current.set(id, previewUrl);
-
-        try {
-          await validateImage(file, mimeType);
-          const { width, height } = await getImageDimensions(file);
-
-          return {
+          const makeErrorItem = (message: string): AttachmentItem => ({
             id,
             file,
-            previewUrl,
-            status: "ready",
-            width,
-            height,
-          };
-        } catch (error) {
-          return {
-            id,
-            file,
-            previewUrl,
+            previewUrl: "",
             status: "error",
-            error: extractErrorMessage(error),
-          };
-        }
-      }),
-    );
+            error: message,
+          });
 
-    setAttachments((prev) => [...prev, ...nextItems]);
+          if (!isAllowedImageMimeType(mimeType)) {
+            return makeErrorItem("不支持的图片格式");
+          }
 
-    if (hasOverflow) {
-      throw new Error(`最多只能上传 ${MAX_IMAGES_PER_MESSAGE} 张图片`);
-    }
-    return nextItems;
-  }, []);
+          if (file.size > MAX_IMAGE_SIZE_BYTES) {
+            return makeErrorItem(
+              `图片大小超过限制 (最大 ${MAX_IMAGE_SIZE_MB}MB)`,
+            );
+          }
 
-  const hasAttachments = useMemo(
-    () => attachments.length > 0,
-    [attachments],
+          const previewUrl = URL.createObjectURL(file);
+          objectUrlsRef.current.set(id, previewUrl);
+
+          try {
+            await validateImage(file, mimeType);
+            const { width, height } = await getImageDimensions(file);
+
+            return {
+              id,
+              file,
+              previewUrl,
+              status: "ready",
+              width,
+              height,
+            };
+          } catch (error) {
+            return {
+              id,
+              file,
+              previewUrl,
+              status: "error",
+              error: extractErrorMessage(error),
+            };
+          }
+        }),
+      );
+
+      setAttachments((prev) => [...prev, ...nextItems]);
+
+      if (hasOverflow) {
+        throw new Error(`最多只能上传 ${MAX_IMAGES_PER_MESSAGE} 张图片`);
+      }
+      return nextItems;
+    },
+    [],
   );
+
+  const hasAttachments = useMemo(() => attachments.length > 0, [attachments]);
 
   return {
     attachments,

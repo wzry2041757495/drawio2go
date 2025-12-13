@@ -157,9 +157,10 @@ export function convertImagePartsToFileUIParts(
  * @param imageParts - 图片 parts（来自 UIMessage.parts）
  * @returns 校验结果
  */
-export function validateImageParts(
-  imageParts: ImagePart[],
-): { valid: boolean; error?: string } {
+export function validateImageParts(imageParts: ImagePart[]): {
+  valid: boolean;
+  error?: string;
+} {
   if (!Array.isArray(imageParts) || imageParts.length === 0) {
     return { valid: true };
   }
@@ -279,4 +280,3 @@ export function checkVisionSupport(
 
   return { shouldReject: false };
 }
-

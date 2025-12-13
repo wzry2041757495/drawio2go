@@ -348,11 +348,11 @@ export default function ChatSidebar({
           targetSessionId,
           finishedMessages as unknown as ChatUIMessage[],
           {
-          forceTitleUpdate: true,
-          resolveConversationId,
-          onConversationResolved: (resolvedId) => {
-            setActiveConversationId(resolvedId);
-          },
+            forceTitleUpdate: true,
+            resolveConversationId,
+            onConversationResolved: (resolvedId) => {
+              setActiveConversationId(resolvedId);
+            },
           },
         );
       } catch (error) {
