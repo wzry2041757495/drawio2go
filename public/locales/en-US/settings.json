@@ -153,6 +153,7 @@
         "minLength": "API Key must be at least {min} characters"
       },
       "testConnection": "Test Connection",
+      "testModel": "Test Model",
       "modelName": {
         "label": "Model Name",
         "placeholder": "e.g., gpt-4o",
@@ -196,9 +197,11 @@
       }
     },
     "test": {
-      "success": "Connection successful",
-      "error": "Connection failed",
-      "networkError": "Network error. Please check your URL."
+      "success": "Test succeeded (response: {response})",
+      "error": "Test failed. Please check your configuration.",
+      "networkError": "Network error. Please check your configuration.",
+      "missingModelName": "Please enter a model name first.",
+      "missingProvider": "Provider configuration not found. Please save the provider first."
     },
     "save": {
       "createSuccess": "Provider \"{name}\" created",

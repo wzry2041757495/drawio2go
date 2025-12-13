@@ -20,7 +20,6 @@ import {
   Surface,
   TextField,
 } from "@heroui/react";
-import { Zap } from "lucide-react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
@@ -74,11 +73,6 @@ export function ProviderEditDialog({
     apiKey?: string;
   }>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
 
   const isFormValid = useMemo(
     () =>
@@ -100,9 +94,7 @@ export function ProviderEditDialog({
       setFormData(defaultForm);
     }
     setErrors({});
-    setTestResult(null);
     setIsSaving(false);
-    setIsTesting(false);
   }, [provider]);
 
   useEffect(() => {
@@ -219,49 +211,6 @@ export function ProviderEditDialog({
     },
     [handleSave],
   );
-
-  const handleTestConnection = useCallback(async () => {
-    setIsTesting(true);
-    setTestResult(null);
-
-    try {
-      const response = await fetch("/api/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiUrl: normalizeProviderApiUrl(formData.providerType, formData.apiUrl),
-          apiKey: formData.apiKey,
-          providerType: formData.providerType,
-          modelName:
-            formData.providerType === "anthropic"
-              ? "claude-3-5-haiku-latest"
-              : "gpt-3.5-turbo",
-          temperature: 0.3,
-        }),
-      });
-
-      const result = await response.json();
-      if (response.ok && result?.success) {
-        setTestResult({
-          success: true,
-          message: t("models.test.success"),
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: result?.message ?? t("models.test.error"),
-        });
-      }
-    } catch (error) {
-      logger.error("[ProviderEditDialog] 连接测试失败", error);
-      setTestResult({
-        success: false,
-        message: t("models.test.networkError"),
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  }, [formData.apiKey, formData.apiUrl, formData.providerType, t]);
 
   return (
     <ModalOverlay
@@ -390,41 +339,6 @@ export function ProviderEditDialog({
                     <FieldError>{errors.apiKey}</FieldError>
                   ) : null}
                 </TextField>
-
-                {formData.apiUrl ? (
-                  <div className="space-y-2 rounded-xl border border-default-200 bg-content1 px-3 py-3">
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onPress={handleTestConnection}
-                        isDisabled={isTesting || !formData.apiUrl}
-                      >
-                        {isTesting ? (
-                          <Spinner size="sm" />
-                        ) : (
-                          <Zap className="h-4 w-4" />
-                        )}
-                        {t("models.form.testConnection")}
-                      </Button>
-                    </div>
-                    {testResult ? (
-                      <div
-                        className="rounded-lg px-3 py-2 text-sm"
-                        style={{
-                          background: testResult.success
-                            ? "oklch(var(--success-100))"
-                            : "oklch(var(--danger-100))",
-                          color: testResult.success
-                            ? "oklch(var(--success-700))"
-                            : "oklch(var(--danger-700))",
-                        }}
-                      >
-                        {testResult.success ? "✓" : "✗"} {testResult.message}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </form>
             </div>
 

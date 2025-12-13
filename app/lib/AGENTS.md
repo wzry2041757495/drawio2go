@@ -236,11 +236,11 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 
 ## 配置规范化工具（`config-utils.ts`）
 
-- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`
+- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`（默认空字符串，不预置任何供应商）
 - **LLM 存储键**: `settings.llm.providers`, `settings.llm.models`, `settings.llm.agent`, `settings.llm.activeModel`
-- **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS` / `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`
+- **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS`（默认空数组）/ `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`（默认 null）
 - **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `normalizeAnthropicApiUrl()` / `normalizeProviderApiUrl()` / `initializeDefaultLLMConfig()`
-- **用途**: 验证 provider 合法性，规范化 API URL，初始化存储中的默认 LLM 配置
+- **用途**: 验证 provider 合法性，规范化 API URL；`initializeDefaultLLMConfig()` 仅用于清理旧键与兼容迁移（不再写入默认 provider/model）
 
 ## 其他工具函数
 

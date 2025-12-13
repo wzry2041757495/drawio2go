@@ -8,7 +8,7 @@ import {
   useEffect,
   useRef,
 } from "react";
-import { TextArea } from "@heroui/react";
+import { Button, TextArea } from "@heroui/react";
 import { ImagePlus } from "lucide-react";
 import {
   type LLMConfig,
@@ -25,6 +25,7 @@ import {
 import { useDropzone } from "@/hooks/useDropzone";
 import ImagePreviewBar from "@/components/chat/ImagePreviewBar";
 import { toErrorString } from "@/app/lib/error-handler";
+import { dispatchSidebarNavigate } from "@/app/lib/ui-events";
 
 const MIN_BASE_TEXTAREA_HEIGHT = 60;
 
@@ -93,9 +94,13 @@ export default function ChatInputArea({
     (item) => item.status === "ready",
   );
   const canSend = Boolean(input.trim()) || hasReadyAttachments;
+  const isModelConfigMissing =
+    modelSelectorProps.providers.length === 0 ||
+    modelSelectorProps.models.length === 0;
   const isInputDisabled =
     configLoading ||
     !llmConfig ||
+    isModelConfigMissing ||
     !canSendNewMessage ||
     !isOnline ||
     !isSocketConnected;
@@ -104,6 +109,7 @@ export default function ChatInputArea({
     isChatStreaming ||
     configLoading ||
     !llmConfig ||
+    isModelConfigMissing ||
     !canSendNewMessage ||
     !isOnline ||
     !isSocketConnected;
@@ -197,6 +203,10 @@ export default function ChatInputArea({
     }
   };
 
+  const handleGoToModelSettings = () => {
+    dispatchSidebarNavigate({ tab: "settings", settingsTab: "models" });
+  };
+
   useEffect(() => {
     const textarea =
       textareaRef.current ??
@@ -253,6 +263,21 @@ export default function ChatInputArea({
           className="w-full"
           aria-label={t("aria.input")}
         />
+
+        {!configLoading && isModelConfigMissing ? (
+          <div className="chat-config-status" role="status" aria-live="polite">
+            <span className="chat-config-status__text">
+              ⚠️ {t("input.configureModelFirst")}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={handleGoToModelSettings}
+            >
+              {t("input.goToModelSettings")}
+            </Button>
+          </div>
+        ) : null}
 
         {!isSocketConnected ? (
           <div className="chat-network-status" role="status" aria-live="polite">

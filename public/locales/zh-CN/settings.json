@@ -153,6 +153,7 @@
         "minLength": "API Key 至少 {min} 个字符"
       },
       "testConnection": "测试连接",
+      "testModel": "测试模型",
       "modelName": {
         "label": "模型名称",
         "placeholder": "请输入模型名称，如 gpt-4o",
@@ -196,9 +197,11 @@
       }
     },
     "test": {
-      "success": "连接成功",
-      "error": "连接失败",
-      "networkError": "网络错误，请检查地址"
+      "success": "测试成功（返回：{response}）",
+      "error": "测试失败，请检查配置是否正确",
+      "networkError": "网络错误，请检查配置",
+      "missingModelName": "请先填写模型名称",
+      "missingProvider": "未找到对应的供应商配置，请先保存供应商"
     },
     "save": {
       "createSuccess": "供应商“{name}”已创建",

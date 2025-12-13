@@ -177,7 +177,7 @@
 
 - **返回**: `llmConfig`、`providers`、`models`、`selectedModelId/Label`、`configLoading`、`selectorLoading`
 - **操作**: `loadModelSelector()`、`handleModelChange(modelId)`
-- **特性**: 自动订阅设置变更（provider/model/activeModel），缺省回退到默认配置
+- **特性**: 自动订阅设置变更（provider/model/activeModel）；未配置 provider/model 时返回 `llmConfig=null`，由上层 UI 提示并引导用户先完成模型配置
 
 ### 15. useOperationToast _(新增，2025-12-08)_
 

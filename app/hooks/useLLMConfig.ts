@@ -8,7 +8,7 @@ import type {
   ModelConfig,
   ProviderConfig,
 } from "@/app/types/chat";
-import { DEFAULT_LLM_CONFIG, normalizeLLMConfig } from "@/app/lib/config-utils";
+import { normalizeLLMConfig } from "@/app/lib/config-utils";
 import { useStorageSettings } from "./useStorageSettings";
 import { useOperationToast } from "./useOperationToast";
 
@@ -145,18 +145,14 @@ export function useLLMConfig(): UseLLMConfigResult {
           const runtimeConfig = await getRuntimeConfig(providerId, modelId);
 
           setLlmConfig(
-            runtimeConfig
-              ? normalizeLLMConfig(runtimeConfig)
-              : { ...DEFAULT_LLM_CONFIG },
+            runtimeConfig ? normalizeLLMConfig(runtimeConfig) : null,
           );
         } else {
-          setLlmConfig({ ...DEFAULT_LLM_CONFIG });
+          setLlmConfig(null);
         }
       } catch {
-        if (currentRequestId === requestIdRef.current && isMountedRef.current) {
-          // 不中断流程，使用上一次的 llmConfig 或默认值
-          setLlmConfig((prev) => prev ?? { ...DEFAULT_LLM_CONFIG });
-        }
+        if (currentRequestId === requestIdRef.current && isMountedRef.current)
+          setLlmConfig((prev) => prev ?? null);
       } finally {
         setSelectorLoading(false);
         setConfigLoading(false);
@@ -219,11 +215,7 @@ export function useLLMConfig(): UseLLMConfigResult {
         if (currentRequestId !== requestIdRef.current || !isMountedRef.current)
           return;
 
-        setLlmConfig(
-          runtimeConfig
-            ? normalizeLLMConfig(runtimeConfig)
-            : { ...DEFAULT_LLM_CONFIG },
-        );
+        setLlmConfig(runtimeConfig ? normalizeLLMConfig(runtimeConfig) : null);
       } catch {
         // 只有最新请求的错误才显示给用户
         if (currentRequestId === requestIdRef.current && isMountedRef.current) {
@@ -254,18 +246,16 @@ export function useLLMConfig(): UseLLMConfigResult {
                   return;
 
                 setLlmConfig(
-                  rollbackConfig
-                    ? normalizeLLMConfig(rollbackConfig)
-                    : { ...DEFAULT_LLM_CONFIG },
+                  rollbackConfig ? normalizeLLMConfig(rollbackConfig) : null,
                 );
               } catch {
-                setLlmConfig((prev) => prev ?? { ...DEFAULT_LLM_CONFIG });
+                setLlmConfig((prev) => prev ?? null);
               }
             } else {
-              setLlmConfig((prev) => prev ?? { ...DEFAULT_LLM_CONFIG });
+              setLlmConfig((prev) => prev ?? null);
             }
           } else {
-            setLlmConfig((prev) => prev ?? { ...DEFAULT_LLM_CONFIG });
+            setLlmConfig((prev) => prev ?? null);
           }
         }
       } finally {

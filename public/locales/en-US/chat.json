@@ -96,6 +96,8 @@
   "input": {
     "placeholder": "Type a message...",
     "placeholderWithProject": "Ask {{project}}...",
+    "configureModelFirst": "Please configure a model first",
+    "goToModelSettings": "Open model settings",
     "send": "Send",
     "stop": "Stop",
     "newChat": "New chat",

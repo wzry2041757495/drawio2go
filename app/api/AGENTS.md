@@ -252,10 +252,11 @@ type ProviderType =
 
 ```typescript
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-  apiUrl: "https://api.deepseek.com/v1",
+  // 默认不预置任何供应商/模型，需要用户在设置中显式配置
+  apiUrl: "",
   apiKey: "",
   temperature: 0.3,
-  modelName: "deepseek-chat",
+  modelName: "",
   systemPrompt: DEFAULT_SYSTEM_PROMPT, // DrawIO 专用提示词
   providerType: "openai-compatible",
   maxToolRounds: 5,

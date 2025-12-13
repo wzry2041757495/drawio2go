@@ -21,6 +21,7 @@ import {
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { useToast } from "@/app/components/toast";
 import { createLogger } from "@/lib/logger";
+import { subscribeSidebarNavigate } from "@/app/lib/ui-events";
 
 const logger = createLogger("SettingsSidebar");
 
@@ -75,6 +76,14 @@ export default function SettingsSidebar({
 
   const [hasChanges, setHasChanges] = useState(false);
   const { push } = useToast();
+
+  useEffect(() => {
+    return subscribeSidebarNavigate((detail) => {
+      if (detail.tab === "settings" && detail.settingsTab) {
+        setActiveTab(detail.settingsTab);
+      }
+    });
+  }, []);
 
   const showToast = useCallback(
     (params: Parameters<typeof push>[0]) => {

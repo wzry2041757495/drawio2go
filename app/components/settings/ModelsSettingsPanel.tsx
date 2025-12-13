@@ -450,24 +450,24 @@ export default function ModelsSettingsPanel({
                   <Accordion.Body>
                     <div className="rounded-lg border border-default-200 bg-content1 px-3 py-2">
                       <div className="flex flex-col gap-1.5 text-sm text-foreground">
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-default-500">
                             {t("models.provider.type")}
                           </span>
                           <span className="font-medium min-w-0 break-words">
                             {provider.providerType}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-default-500">
                             {t("models.provider.apiUrl")}
                           </span>
                           <span className="font-medium min-w-0 break-all">
                             {provider.apiUrl || "—"}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-default-500">
                             {t("models.provider.apiKey")}
                           </span>
                           <span className="font-medium min-w-0 break-words">
@@ -528,7 +528,7 @@ export default function ModelsSettingsPanel({
                                 key={model.id}
                                 className="border border-default-200 bg-content1"
                               >
-                                <Card.Content className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                                <Card.Content className="flex flex-col gap-2 px-3 py-2">
                                   <div className="flex flex-col gap-1.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <ModelIcon
@@ -540,7 +540,7 @@ export default function ModelsSettingsPanel({
                                         className="text-primary"
                                       />
                                       <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="text-sm font-semibold text-foreground">
+                                        <span className="text-sm font-semibold text-foreground min-w-0 break-words">
                                           {modelDisplayName}
                                         </span>
                                         <div className="flex items-center gap-1">
@@ -612,31 +612,31 @@ export default function ModelsSettingsPanel({
                                         </div>
                                       </div>
                                     </div>
-                                    <span className="text-xs text-default-500">
+                                    <span className="text-xs text-default-500 min-w-0 break-all">
                                       {model.modelName}
                                     </span>
                                   </div>
 
-                                  <div className="flex flex-col gap-1.5 text-xs text-default-500 sm:min-w-[200px]">
-                                    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                  <div className="flex w-full min-w-0 flex-col gap-1.5 text-xs text-default-500">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-default-500">
                                         {t(
                                           "llm.temperature.label",
                                           "Temperature",
                                         )}
                                       </span>
-                                      <span className="text-default-600">
+                                      <span className="text-default-600 min-w-0 break-words">
                                         {model.temperature}
                                       </span>
                                     </div>
-                                    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-default-500">
                                         {t(
                                           "llm.maxToolRounds.label",
                                           "最大工具调用轮次",
                                         )}
                                       </span>
-                                      <span className="text-default-600">
+                                      <span className="text-default-600 min-w-0 break-words">
                                         {unlimitedRounds}
                                       </span>
                                     </div>

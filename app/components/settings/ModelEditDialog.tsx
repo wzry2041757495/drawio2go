@@ -20,7 +20,7 @@ import {
   Switch,
   TextField,
 } from "@heroui/react";
-import { Brain, Eye, Wrench } from "lucide-react";
+import { Brain, Eye, Wrench, Zap } from "lucide-react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
@@ -33,6 +33,7 @@ import {
   type UpdateModelInput,
   useStorageSettings,
 } from "@/app/hooks/useStorageSettings";
+import { normalizeProviderApiUrl } from "@/app/lib/config-utils";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
 import { useToast } from "@/app/components/toast";
 import type { ModelCapabilities, ModelConfig } from "@/app/types/chat";
@@ -82,11 +83,12 @@ export function ModelEditDialog({
 }: ModelEditDialogProps) {
   const { t } = useAppTranslation("settings");
   const { push } = useToast();
-  const { addModel, updateModel } = useStorageSettings();
+  const { addModel, updateModel, getProviders } = useStorageSettings();
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM_STATE);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
 
   const isEditMode = Boolean(modelData);
 
@@ -123,6 +125,7 @@ export function ModelEditDialog({
     setForm(buildInitialForm());
     setErrors({});
     setIsSaving(false);
+    setIsTesting(false);
   }, [buildInitialForm, isOpen]);
 
   const quickNumberState = useMemo(() => {
@@ -165,6 +168,7 @@ export function ModelEditDialog({
   const handleClose = useCallback(() => {
     setErrors({});
     setIsSaving(false);
+    setIsTesting(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -315,6 +319,92 @@ export function ModelEditDialog({
     },
     [handleSave],
   );
+
+  const handleTestModel = useCallback(async () => {
+    const trimmedModelName = form.modelName.trim();
+    if (!trimmedModelName) {
+      push({
+        variant: "danger",
+        description: t("models.test.missingModelName", "请先填写模型名称"),
+      });
+      return;
+    }
+
+    setIsTesting(true);
+    try {
+      const providers = await getProviders();
+      const provider = providers.find((item) => item.id === providerId);
+
+      if (!provider) {
+        push({
+          variant: "danger",
+          description: t(
+            "models.test.missingProvider",
+            "未找到对应的供应商配置，请先保存供应商",
+          ),
+        });
+        return;
+      }
+
+      const temperatureValue = Number(form.temperature);
+      const maxToolRoundsValue = Number(form.maxToolRounds);
+
+      const response = await fetch("/api/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiUrl: normalizeProviderApiUrl(
+            provider.providerType,
+            provider.apiUrl,
+          ),
+          apiKey: provider.apiKey,
+          providerType: provider.providerType,
+          modelName: trimmedModelName,
+          temperature: Number.isFinite(temperatureValue)
+            ? temperatureValue
+            : Number(DEFAULT_FORM_STATE.temperature),
+          maxToolRounds: Number.isFinite(maxToolRoundsValue)
+            ? maxToolRoundsValue
+            : Number(DEFAULT_FORM_STATE.maxToolRounds),
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data?.success) {
+        push({
+          variant: "success",
+          description: t("models.test.success", {
+            response: data?.response ?? "ok",
+          }),
+        });
+      } else {
+        push({
+          variant: "danger",
+          description:
+            data?.error ??
+            data?.message ??
+            t("models.test.error", "测试失败，请检查配置是否正确"),
+        });
+      }
+    } catch (error) {
+      logger.error("[ModelEditDialog] 测试模型失败", error);
+      push({
+        variant: "danger",
+        description: t("models.test.networkError", "网络错误，请检查配置"),
+      });
+    } finally {
+      setIsTesting(false);
+    }
+  }, [
+    form.maxToolRounds,
+    form.modelName,
+    form.temperature,
+    getProviders,
+    providerId,
+    push,
+    t,
+  ]);
 
   return (
     <ModalOverlay
@@ -591,18 +681,33 @@ export function ModelEditDialog({
                 <FieldError className="text-sm">{errors.general}</FieldError>
               ) : null}
 
-              <div className="flex items-center justify-end gap-2">
-                <Button variant="secondary" onPress={handleClose}>
-                  {t("common.cancel", "取消")}
-                </Button>
+              <div className="flex items-center justify-between gap-2">
                 <Button
-                  variant="primary"
-                  onPress={handleSave}
-                  isDisabled={!isFormValid || isSaving}
+                  variant="secondary"
+                  onPress={handleTestModel}
+                  isDisabled={isTesting || isSaving || !form.modelName.trim()}
                 >
-                  {isSaving ? <Spinner size="sm" /> : null}
-                  {t("common.save", "保存")}
+                  {isTesting ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <Zap className="h-4 w-4" />
+                  )}
+                  {t("models.form.testModel", "测试模型")}
                 </Button>
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="tertiary" onPress={handleClose}>
+                    {t("common.cancel", "取消")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onPress={handleSave}
+                    isDisabled={!isFormValid || isSaving}
+                  >
+                    {isSaving ? <Spinner size="sm" /> : null}
+                    {t("common.save", "保存")}
+                  </Button>
+                </div>
               </div>
             </form>
           </AriaDialog>

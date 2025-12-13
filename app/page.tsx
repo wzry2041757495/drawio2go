@@ -18,6 +18,7 @@ import { useToast } from "./components/toast";
 import { useAppTranslation, useI18n } from "./i18n/hooks";
 import { createLogger } from "./lib/logger";
 import { toErrorString } from "./lib/error-handler";
+import { subscribeSidebarNavigate } from "./lib/ui-events";
 
 const logger = createLogger("Page");
 
@@ -78,6 +79,13 @@ export default function Home() {
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] =
     useState<boolean>(false);
+
+  useEffect(() => {
+    return subscribeSidebarNavigate((detail) => {
+      setIsSidebarOpen(true);
+      setSidebarTab(detail.tab);
+    });
+  }, []);
   const pendingSavesRef = useRef<Map<string, PendingSaveEntry>>(new Map());
   const lastSavedXmlByProjectRef = useRef<Map<string, string>>(new Map());
   const diagramStateRef = useRef<DiagramState>(diagramState);

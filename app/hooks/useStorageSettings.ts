@@ -17,7 +17,6 @@ import {
   STORAGE_KEY_AGENT_SETTINGS,
   STORAGE_KEY_LLM_MODELS,
   STORAGE_KEY_LLM_PROVIDERS,
-  initializeDefaultLLMConfig,
   normalizeLLMConfig,
 } from "@/app/lib/config-utils";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
@@ -177,18 +176,13 @@ export function useStorageSettings() {
 
   const loadProviders = useCallback(
     async (storage: StorageInstance): Promise<ProviderConfig[]> => {
-      let raw = await withStorageTimeout(
+      const raw = await withStorageTimeout(
         storage.getSetting(STORAGE_KEY_LLM_PROVIDERS),
       );
 
       if (raw === null) {
-        logger.warn(
-          "[useStorageSettings] 未找到 LLM providers，尝试初始化默认配置",
-        );
-        await initializeDefaultLLMConfig(storage);
-        raw = await withStorageTimeout(
-          storage.getSetting(STORAGE_KEY_LLM_PROVIDERS),
-        );
+        logger.info("[useStorageSettings] 未找到 LLM providers，返回空列表");
+        return [];
       }
 
       const parsed = safeParseJSON<ProviderConfig[]>(
@@ -203,18 +197,13 @@ export function useStorageSettings() {
 
   const loadModels = useCallback(
     async (storage: StorageInstance): Promise<ModelConfig[]> => {
-      let raw = await withStorageTimeout(
+      const raw = await withStorageTimeout(
         storage.getSetting(STORAGE_KEY_LLM_MODELS),
       );
 
       if (raw === null) {
-        logger.warn(
-          "[useStorageSettings] 未找到 LLM models，尝试初始化默认配置",
-        );
-        await initializeDefaultLLMConfig(storage);
-        raw = await withStorageTimeout(
-          storage.getSetting(STORAGE_KEY_LLM_MODELS),
-        );
+        logger.info("[useStorageSettings] 未找到 LLM models，返回空列表");
+        return [];
       }
 
       const parsed = safeParseJSON<ModelConfig[]>(
@@ -1023,23 +1012,21 @@ export function useStorageSettings() {
       const normalized = normalizeLLMConfig(config);
 
       await execute(async (storage) => {
-        let [providers, models, agentSettings, activeModel] = await Promise.all(
-          [
-            loadProviders(storage),
-            loadModels(storage),
-            loadAgentSettings(storage),
-            loadActiveModel(storage),
-          ],
-        );
-
-        if (providers.length === 0 || models.length === 0) {
-          await initializeDefaultLLMConfig(storage);
-          [providers, models, agentSettings, activeModel] = await Promise.all([
+        const [loadedProviders, loadedModels, agentSettings, activeModel] =
+          await Promise.all([
             loadProviders(storage),
             loadModels(storage),
             loadAgentSettings(storage),
             loadActiveModel(storage),
           ]);
+
+        const providers = loadedProviders;
+        let models = loadedModels;
+
+        if (providers.length === 0 || models.length === 0) {
+          throw new Error(
+            "[useStorageSettings] 未配置任何供应商/模型，请先在设置中完成模型配置",
+          );
         }
 
         const fallbackActive = pickFallbackActiveModel(providers, models);

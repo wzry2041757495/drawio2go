@@ -93,6 +93,8 @@
   "input": {
     "placeholder": "输入消息...",
     "placeholderWithProject": "向 {{project}} 提问...",
+    "configureModelFirst": "请先配置模型",
+    "goToModelSettings": "打开模型设置",
     "send": "发送",
     "stop": "停止",
     "newChat": "新建聊天",

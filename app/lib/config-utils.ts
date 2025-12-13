@@ -7,7 +7,6 @@ import {
   type RuntimeLLMConfig,
 } from "@/app/types/chat";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
-import { generateProjectUUID } from "@/app/lib/utils";
 import type { StorageAdapter } from "@/app/lib/storage/adapter";
 import { createLogger } from "@/lib/logger";
 
@@ -35,7 +34,8 @@ export const DEFAULT_SYSTEM_PROMPT = `你是一个专业的 DrawIO XML 绘制助
 
 确保输出的 XML 始终可以被 DrawIO 正确解析与渲染，并在回复中解释你的思考过程与操作理由。`;
 
-export const DEFAULT_API_URL = "https://api.deepseek.com/v1";
+// 默认不提供任何供应商 API URL（需要用户在设置中显式配置）
+export const DEFAULT_API_URL = "";
 export const DEFAULT_ANTHROPIC_API_URL = "https://api.anthropic.com";
 
 export function isProviderType(value: unknown): value is ProviderType {
@@ -126,70 +126,26 @@ export const STORAGE_KEY_LLM_MODELS = "settings.llm.models";
 export const STORAGE_KEY_AGENT_SETTINGS = "settings.llm.agent";
 export const STORAGE_KEY_ACTIVE_MODEL = "settings.llm.activeModel";
 
-export const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  {
-    id: "deepseek-default",
-    displayName: "DeepSeek",
-    providerType: "deepseek-native",
-    apiUrl: "https://api.deepseek.com/v1",
-    apiKey: "",
-    models: ["deepseek-chat-default", "deepseek-reasoner-default"],
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
-
-export const DEFAULT_MODELS: ModelConfig[] = [
-  {
-    id: "deepseek-chat-default",
-    providerId: "deepseek-default",
-    modelName: "deepseek-chat",
-    displayName: "DeepSeek Chat",
-    temperature: 0.3,
-    maxToolRounds: 5,
-    isDefault: true,
-    capabilities: getDefaultCapabilities("deepseek-chat"),
-    enableToolsInThinking: false,
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "deepseek-reasoner-default",
-    providerId: "deepseek-default",
-    modelName: "deepseek-reasoner",
-    displayName: "DeepSeek Reasoner",
-    temperature: 0.3,
-    maxToolRounds: 5,
-    isDefault: false,
-    capabilities: getDefaultCapabilities("deepseek-reasoner"),
-    enableToolsInThinking: true,
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
+// 默认不预置任何 providers/models（需要用户在设置中创建）
+export const DEFAULT_PROVIDERS: ProviderConfig[] = [];
+export const DEFAULT_MODELS: ModelConfig[] = [];
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   updatedAt: 0,
 };
 
-export const DEFAULT_ACTIVE_MODEL: ActiveModelReference = {
-  providerId: "deepseek-default",
-  modelId: "deepseek-chat-default",
-  updatedAt: 0,
-};
+export const DEFAULT_ACTIVE_MODEL: ActiveModelReference | null = null;
 
 export const DEFAULT_LLM_CONFIG: RuntimeLLMConfig = Object.freeze({
-  apiUrl: DEFAULT_API_URL,
+  apiUrl: "",
   apiKey: "",
-  providerType: "deepseek-native" as const,
-  modelName: "deepseek-chat",
+  // 仅作为结构兜底，不代表实际已配置的供应商/模型
+  providerType: "openai-compatible" as const,
+  modelName: "",
   temperature: 0.3,
   maxToolRounds: 5,
-  capabilities: getDefaultCapabilities("deepseek-chat"),
+  capabilities: getDefaultCapabilities(null),
   enableToolsInThinking: false,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   customConfig: {},
@@ -353,75 +309,7 @@ export async function initializeDefaultLLMConfig(
       await cleanupLegacyKey();
       return;
     }
-
-    const now = Date.now();
-
-    const providers = JSON.parse(
-      JSON.stringify(DEFAULT_PROVIDERS),
-    ) as ProviderConfig[];
-    const models = JSON.parse(JSON.stringify(DEFAULT_MODELS)) as ModelConfig[];
-    const agentSettings = JSON.parse(
-      JSON.stringify(DEFAULT_AGENT_SETTINGS),
-    ) as AgentSettings;
-    const activeModel = JSON.parse(
-      JSON.stringify(DEFAULT_ACTIVE_MODEL),
-    ) as ActiveModelReference;
-
-    const providerIdMap = new Map<string, string>();
-    providers.forEach((provider) => {
-      const newId = generateProjectUUID();
-      providerIdMap.set(provider.id, newId);
-      provider.id = newId;
-      provider.createdAt = now;
-      provider.updatedAt = now;
-    });
-
-    const modelIdMap = new Map<string, string>();
-    models.forEach((model) => {
-      const mappedProviderId = providerIdMap.get(model.providerId);
-      if (mappedProviderId) {
-        model.providerId = mappedProviderId;
-      }
-
-      const newModelId = generateProjectUUID();
-      modelIdMap.set(model.id, newModelId);
-      model.id = newModelId;
-      model.createdAt = now;
-      model.updatedAt = now;
-    });
-
-    providers.forEach((provider) => {
-      provider.models = provider.models
-        .map((modelId) => modelIdMap.get(modelId))
-        .filter((id): id is string => Boolean(id));
-    });
-
-    const mappedProviderId = providerIdMap.get(activeModel.providerId);
-    const mappedModelId = modelIdMap.get(activeModel.modelId);
-
-    if (mappedProviderId) {
-      activeModel.providerId = mappedProviderId;
-    }
-    if (mappedModelId) {
-      activeModel.modelId = mappedModelId;
-    }
-    activeModel.updatedAt = now;
-
-    agentSettings.updatedAt = now;
-
-    await storage.setSetting(
-      STORAGE_KEY_LLM_PROVIDERS,
-      JSON.stringify(providers),
-    );
-    await storage.setSetting(STORAGE_KEY_LLM_MODELS, JSON.stringify(models));
-    await storage.setSetting(
-      STORAGE_KEY_AGENT_SETTINGS,
-      JSON.stringify(agentSettings),
-    );
-    await storage.setSetting(
-      STORAGE_KEY_ACTIVE_MODEL,
-      JSON.stringify(activeModel),
-    );
+    // 默认不再写入任何 provider/model 配置；仅清理旧键位即可
     await cleanupLegacyKey();
   } catch (error) {
     logger.error("Failed to initialize default LLM config", { error });
