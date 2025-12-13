@@ -1014,9 +1014,7 @@ export class IndexedDBStorage implements StorageAdapter {
     }
 
     if (attachment.file_size > MAX_ATTACHMENT_BYTES) {
-      throw new Error(
-        `File size exceeds 10MB: ${attachment.file_size} bytes`,
-      );
+      throw new Error(`File size exceeds 10MB: ${attachment.file_size} bytes`);
     }
 
     const blobData = (() => {

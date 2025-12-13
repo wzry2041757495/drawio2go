@@ -113,12 +113,13 @@ class SQLiteManager {
     }
 
     if (attachment.file_size > MAX_ATTACHMENT_BYTES) {
-      throw new Error(
-        `File size exceeds 10MB: ${attachment.file_size} bytes`,
-      );
+      throw new Error(`File size exceeds 10MB: ${attachment.file_size} bytes`);
     }
 
-    if (typeof blobByteLength === "number" && blobByteLength > MAX_ATTACHMENT_BYTES) {
+    if (
+      typeof blobByteLength === "number" &&
+      blobByteLength > MAX_ATTACHMENT_BYTES
+    ) {
       throw new Error(`File size exceeds 10MB: ${blobByteLength} bytes`);
     }
   }
@@ -717,7 +718,9 @@ class SQLiteManager {
     const filePaths = rows.map((row) => row.file_path).filter(Boolean);
 
     const tx = this.db.transaction((conversationId, paths) => {
-      this.db.prepare("DELETE FROM conversations WHERE id = ?").run(conversationId);
+      this.db
+        .prepare("DELETE FROM conversations WHERE id = ?")
+        .run(conversationId);
       for (const filePath of paths) {
         const absPath = this._getAttachmentAbsolutePath(filePath);
         if (fs.existsSync(absPath)) {
@@ -1021,7 +1024,10 @@ class SQLiteManager {
     try {
       fs.writeFileSync(absPath, dataBuffer);
     } catch (fsError) {
-      console.error("[SQLiteManager] 文件写入失败", { id: attachment.id, fsError });
+      console.error("[SQLiteManager] 文件写入失败", {
+        id: attachment.id,
+        fsError,
+      });
       throw new Error(`Failed to write attachment file: ${fsError.message}`);
     }
 
