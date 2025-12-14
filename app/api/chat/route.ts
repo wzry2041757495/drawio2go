@@ -5,59 +5,15 @@ import { ErrorCodes, type ErrorCode } from "@/app/errors/error-codes";
 import { createLogger } from "@/lib/logger";
 import type { ToolExecutionContext } from "@/app/types/socket";
 import { getStorage } from "@/app/lib/storage";
-import {
-  checkVisionSupport,
-  convertImagePartsToFileUIParts,
-  validateImageParts,
-} from "@/lib/attachment-converter";
-import {
-  streamText,
-  stepCountIs,
-  convertToModelMessages,
-  type ModelMessage,
-  type UIMessage,
-} from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { NextRequest, NextResponse } from "next/server";
-import type { ImagePart } from "@/app/types/chat";
+import { validateAndExtractChatParams } from "./helpers/request-validator";
+import { createModelFromConfig } from "./helpers/model-factory";
+import { classifyError } from "./helpers/error-classifier";
+import { buildReasoningParams } from "./helpers/reasoning-utils";
+import { processImageAttachments } from "./helpers/image-utils";
 
 const logger = createLogger("Chat API");
-
-function extractRecentReasoning(messages: ModelMessage[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.role !== "assistant") {
-      continue;
-    }
-
-    const { content } = message;
-    if (!Array.isArray(content)) {
-      return undefined;
-    }
-
-    const reasoningText = content
-      .filter((part) => part.type === "reasoning")
-      .map((part) => part.text ?? "")
-      .join("")
-      .trim();
-
-    return reasoningText || undefined;
-  }
-
-  return undefined;
-}
-
-function isNewUserQuestion(messages: ModelMessage[]): boolean {
-  if (messages.length === 0) {
-    return false;
-  }
-
-  const lastMessage = messages[messages.length - 1];
-  return lastMessage.role === "user";
-}
 
 function apiError(
   code: ErrorCode,
@@ -90,61 +46,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const messages = body?.messages as UIMessage[] | undefined;
-    const rawConfig = body?.llmConfig;
-    const bodyProjectUuid =
-      typeof body?.projectUuid === "string" &&
-      body.projectUuid.trim().length > 0
-        ? body.projectUuid.trim()
-        : "";
-    const headerProjectUuid =
-      typeof req.headers.get("x-project-uuid") === "string"
-        ? (req.headers.get("x-project-uuid")?.trim() ?? "")
-        : "";
-    const projectUuid = bodyProjectUuid;
-    const conversationId =
-      typeof body?.conversationId === "string" &&
-      body.conversationId.trim().length > 0
-        ? body.conversationId.trim()
-        : "";
-
-    if (!Array.isArray(messages) || !rawConfig) {
+    const validation = validateAndExtractChatParams(body);
+    if (!validation.ok) {
       return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing required parameters: messages or llmConfig",
-        400,
+        validation.error.code,
+        validation.error.message,
+        validation.error.status,
+        validation.error.details,
       );
     }
 
-    if (!projectUuid) {
-      return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing required parameter: projectUuid",
-        400,
-      );
-    }
-
-    if (!conversationId) {
-      return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing conversationId in request body",
-        400,
-        {
-          conversationIdSource: "body",
-        },
-      );
-    }
-
-    const getProjectUuidSource = () => {
-      if (bodyProjectUuid) return "body";
-      if (headerProjectUuid) return "header";
-      return "missing";
-    };
-
-    const paramSources = {
-      conversationIdSource: "body",
-      projectUuidSource: getProjectUuidSource(),
-    };
+    const { messages, rawConfig, projectUuid, conversationId, paramSources } =
+      validation;
 
     const isServerEnvironment = typeof window === "undefined";
 
@@ -153,19 +66,6 @@ export async function POST(req: NextRequest) {
       conversationId,
       ...paramSources,
     });
-
-    if (headerProjectUuid && headerProjectUuid !== projectUuid) {
-      requestLogger.warn("拒绝访问：projectUuid 不一致", {
-        bodyProjectUuid,
-        headerProjectUuid,
-      });
-      return apiError(
-        ErrorCodes.CHAT_CONVERSATION_FORBIDDEN,
-        "Project UUID mismatch between body and header",
-        403,
-        paramSources,
-      );
-    }
 
     let conversation;
     if (isServerEnvironment) {
@@ -213,7 +113,9 @@ export async function POST(req: NextRequest) {
     let normalizedConfig: LLMConfig;
 
     try {
-      normalizedConfig = normalizeLLMConfig(rawConfig);
+      normalizedConfig = normalizeLLMConfig(
+        rawConfig as Partial<LLMConfig> | null,
+      );
     } catch {
       return apiError(
         ErrorCodes.CHAT_INVALID_CONFIG,
@@ -231,184 +133,42 @@ export async function POST(req: NextRequest) {
     });
 
     // ==================== 图片消息处理（Milestone 3） ====================
-
-    // 步骤 1: 检查 vision 支持（有图片但模型不支持时硬拒绝）
-    const visionCheck = checkVisionSupport(
+    const imageResult = processImageAttachments(
       messages,
-      Boolean(normalizedConfig.capabilities?.supportsVision),
+      normalizedConfig,
+      configAwareLogger,
     );
 
-    if (visionCheck.shouldReject) {
-      configAwareLogger.warn("拒绝图片消息: 模型不支持 vision", {
-        modelName: normalizedConfig.modelName,
-      });
-
+    if (!imageResult.ok) {
       return apiError(
-        ErrorCodes.CHAT_VISION_NOT_SUPPORTED,
-        visionCheck.errorMessage || "Model does not support vision",
-        400,
+        imageResult.error.code,
+        imageResult.error.message,
+        imageResult.error.status,
       );
     }
 
-    // 步骤 2: 提取并验证所有图片 parts（数量/大小/MIME）
-    const allImageParts: ImagePart[] = [];
-    for (const msg of messages) {
-      const parts = (msg as unknown as { parts?: unknown }).parts;
-      if (!Array.isArray(parts)) {
-        continue;
-      }
-
-      const imageParts = parts.filter((part): part is ImagePart => {
-        if (typeof part !== "object" || part === null) {
-          return false;
-        }
-
-        return (part as { type?: unknown }).type === "image";
-      });
-
-      allImageParts.push(...imageParts);
-    }
-
-    if (allImageParts.length > 0) {
-      const validation = validateImageParts(allImageParts);
-      if (!validation.valid) {
-        configAwareLogger.warn("图片验证失败", {
-          error: validation.error,
-          imageCount: allImageParts.length,
-        });
-
-        return apiError(
-          ErrorCodes.CHAT_INVALID_IMAGE,
-          validation.error || "Invalid image attachments",
-          400,
-        );
-      }
-    }
-
-    // 步骤 3: 将 ImagePart 原地替换为 AI SDK 标准的 FileUIPart（保持 parts 顺序）
-    const processedMessages: UIMessage[] = messages.map((msg) => {
-      const parts = (msg as unknown as { parts?: unknown }).parts;
-      if (!Array.isArray(parts)) {
-        return msg;
-      }
-
-      const imageParts = parts.filter((part): part is ImagePart => {
-        if (typeof part !== "object" || part === null) {
-          return false;
-        }
-
-        return (part as { type?: unknown }).type === "image";
-      });
-
-      if (imageParts.length === 0) {
-        return msg;
-      }
-
-      const fileParts = convertImagePartsToFileUIParts(imageParts);
-      let fileIndex = 0;
-
-      const nextParts = parts.map((part) => {
-        if (typeof part !== "object" || part === null) {
-          return part;
-        }
-
-        if ((part as { type?: unknown }).type !== "image") {
-          return part;
-        }
-
-        const nextFile = fileParts[fileIndex];
-        fileIndex += 1;
-        return nextFile ?? part;
-      });
-
-      return {
-        ...msg,
-        parts: nextParts as unknown as UIMessage["parts"],
-      };
-    });
-
-    const modelMessages = convertToModelMessages(processedMessages, {
-      tools,
-    });
+    const modelMessages = convertToModelMessages(
+      imageResult.processedMessages,
+      {
+        tools,
+      },
+    );
 
     configAwareLogger.info("收到请求", {
       messagesCount: modelMessages.length,
-      imageCount: allImageParts.length,
+      imageCount: imageResult.allImageParts.length,
       capabilities: normalizedConfig.capabilities,
       enableToolsInThinking: normalizedConfig.enableToolsInThinking,
       paramSources,
     });
 
-    // 根据 providerType 选择合适的 provider
-    let model;
+    const model = createModelFromConfig(normalizedConfig);
 
-    if (normalizedConfig.providerType === "openai-reasoning") {
-      // OpenAI Reasoning 模型：使用原生 @ai-sdk/openai
-      const openaiProvider = createOpenAI({
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      model = openaiProvider.chat(normalizedConfig.modelName);
-    } else if (normalizedConfig.providerType === "deepseek-native") {
-      // DeepSeek Native：使用 @ai-sdk/deepseek
-      const deepseekProvider = createDeepSeek({
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      // deepseekProvider 直接返回模型调用函数（无需 .chat）
-      model = deepseekProvider(normalizedConfig.modelName);
-    } else if (normalizedConfig.providerType === "anthropic") {
-      const anthropicProvider = createAnthropic({
-        baseURL: normalizedConfig.apiUrl || "https://api.anthropic.com",
-        apiKey: normalizedConfig.apiKey || "",
-      });
-      model = anthropicProvider(normalizedConfig.modelName);
-    } else {
-      // OpenAI Compatible：使用 @ai-sdk/openai-compatible
-      const compatibleProvider = createOpenAICompatible({
-        name: normalizedConfig.providerType,
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      model = compatibleProvider(normalizedConfig.modelName);
-    }
-
-    let experimentalParams: Record<string, unknown> | undefined;
-    let reasoningContent: string | undefined;
-
-    try {
-      if (
-        normalizedConfig.enableToolsInThinking &&
-        normalizedConfig.capabilities?.supportsThinking
-      ) {
-        const isNewQuestion = isNewUserQuestion(modelMessages);
-
-        if (!isNewQuestion) {
-          reasoningContent = extractRecentReasoning(modelMessages);
-
-          if (reasoningContent) {
-            experimentalParams = { reasoning_content: reasoningContent };
-
-            configAwareLogger.debug("复用 reasoning_content", {
-              length: reasoningContent.length,
-            });
-          } else {
-            configAwareLogger.debug("无可复用的 reasoning_content");
-          }
-        } else {
-          configAwareLogger.debug("新用户问题，跳过 reasoning_content 复用");
-        }
-      }
-    } catch (reasoningError) {
-      configAwareLogger.error("构建 reasoning_content 失败，已降级为普通模式", {
-        error:
-          reasoningError instanceof Error
-            ? reasoningError.message
-            : reasoningError,
-        stack:
-          reasoningError instanceof Error ? reasoningError.stack : undefined,
-      });
-    }
+    const { experimentalParams } = buildReasoningParams(
+      normalizedConfig,
+      modelMessages,
+      configAwareLogger,
+    );
 
     const result = streamText({
       model,
@@ -440,32 +200,10 @@ export async function POST(req: NextRequest) {
     }
 
     logger.error("Chat API error", error);
-
-    let statusCode = 500;
-    let code: ErrorCode = ErrorCodes.CHAT_SEND_FAILED;
-    let message = "Failed to send request";
-
     const err = error as Error;
-    if (err.message?.includes("Anthropic")) {
-      message = err.message;
-      statusCode = 400;
-    } else if (err.message?.includes("API key")) {
-      code = ErrorCodes.CHAT_API_KEY_INVALID;
-      message = "API key is missing or invalid";
-      statusCode = 401;
-    } else if (err.message?.includes("model")) {
-      code = ErrorCodes.CHAT_MODEL_NOT_FOUND;
-      message = "Model does not exist or is unavailable";
-      statusCode = 400;
-    } else if (err.message?.includes("配置参数")) {
-      code = ErrorCodes.CHAT_INVALID_CONFIG;
-      message = "Invalid LLM configuration";
-      statusCode = 400;
-    } else if (err.message) {
-      message = err.message;
-    }
+    const classified = classifyError(err);
 
-    return apiError(code, message, statusCode);
+    return apiError(classified.code, classified.message, classified.statusCode);
   } finally {
     req.signal.removeEventListener("abort", abortListener);
   }

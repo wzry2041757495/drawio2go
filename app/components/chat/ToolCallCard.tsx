@@ -14,6 +14,17 @@ import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("ToolCallCard");
 
+const I18N_KEYS = {
+  copied: "messages.actions.copied",
+  expand: "toolCalls.actions.expand",
+  collapse: "toolCalls.actions.collapse",
+  copyInput: "toolCalls.actions.copyInput",
+  copyOutput: "toolCalls.actions.copyOutput",
+  error: "toolCalls.error",
+  parameters: "toolCalls.parameters",
+  result: "toolCalls.result",
+} as const;
+
 interface ToolCallCardProps {
   part: ToolMessagePart;
   expanded: boolean;
@@ -65,7 +76,7 @@ export default function ToolCallCard({
 
   // 复制错误信息
   const handleCopyError = () =>
-    handleCopy(part.errorText ?? t("toolCalls.error"), setCopiedError, "error");
+    handleCopy(part.errorText ?? t(I18N_KEYS.error), setCopiedError, "error");
 
   const { pressProps: togglePressProps } = usePress({ onPress: onToggle });
   const { pressProps: copyErrorPressProps } = usePress({
@@ -88,11 +99,7 @@ export default function ToolCallCard({
         type="button"
         className="tool-call-header"
         aria-expanded={expanded}
-        aria-label={
-          expanded
-            ? t("toolCalls.actions.collapse")
-            : t("toolCalls.actions.expand")
-        }
+        aria-label={expanded ? t(I18N_KEYS.collapse) : t(I18N_KEYS.expand)}
         {...togglePressProps}
       >
         <div className="tool-call-title">{title}</div>
@@ -130,20 +137,16 @@ export default function ToolCallCard({
             <div className="tool-call-section">
               <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
-                  {t("toolCalls.error")}
+                  {t(I18N_KEYS.error)}
                 </div>
                 <button
                   type="button"
                   className="tool-call-copy-icon-button"
                   title={
-                    copiedError
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyOutput")
+                    copiedError ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyOutput)
                   }
                   aria-label={
-                    copiedError
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyOutput")
+                    copiedError ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyOutput)
                   }
                   {...copyErrorPressProps}
                 >
@@ -151,7 +154,7 @@ export default function ToolCallCard({
                 </button>
               </div>
               <div className="tool-call-error-text">
-                {part.errorText ?? t("toolCalls.error")}
+                {part.errorText ?? t(I18N_KEYS.error)}
               </div>
             </div>
           )}
@@ -161,20 +164,16 @@ export default function ToolCallCard({
             <div className="tool-call-section">
               <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
-                  {t("toolCalls.parameters")}
+                  {t(I18N_KEYS.parameters)}
                 </div>
                 <button
                   type="button"
                   className="tool-call-copy-icon-button"
                   title={
-                    copiedInput
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyInput")
+                    copiedInput ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyInput)
                   }
                   aria-label={
-                    copiedInput
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyInput")
+                    copiedInput ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyInput)
                   }
                   {...copyInputPressProps}
                 >
@@ -192,20 +191,16 @@ export default function ToolCallCard({
             <div className="tool-call-section">
               <div className="tool-call-section-header">
                 <div className="tool-call-section-title">
-                  {t("toolCalls.result")}
+                  {t(I18N_KEYS.result)}
                 </div>
                 <button
                   type="button"
                   className="tool-call-copy-icon-button"
                   title={
-                    copiedOutput
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyOutput")
+                    copiedOutput ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyOutput)
                   }
                   aria-label={
-                    copiedOutput
-                      ? t("messages.actions.copied")
-                      : t("toolCalls.actions.copyOutput")
+                    copiedOutput ? t(I18N_KEYS.copied) : t(I18N_KEYS.copyOutput)
                   }
                   {...copyOutputPressProps}
                 >

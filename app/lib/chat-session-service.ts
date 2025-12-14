@@ -9,7 +9,7 @@ import type {
   MessageMetadata,
   ToolInvocationState,
 } from "@/app/types/chat";
-import { createLogger } from "@/lib/logger";
+import { createLogger, type Logger } from "@/lib/logger";
 
 const logger = createLogger("chat-session-service");
 
@@ -645,6 +645,130 @@ export function generateTitle(messages: ChatUIMessage[]): string {
   return text.trim().slice(0, 30) || "新对话";
 }
 
+async function migrateConversationCaches(
+  originalId: string,
+  resolveConversationId: ((id: string) => Promise<string | null>) | undefined,
+  onConversationResolved: ((resolvedId: string) => void) | undefined,
+  conversationMessages: Map<string, ChatUIMessage[]>,
+  lastSavedMessages: Map<string, ChatUIMessage[]>,
+  notifyMessagesChange: (id: string, messages: ChatUIMessage[]) => void,
+): Promise<{ resolvedId: string; error?: string }> {
+  if (!resolveConversationId) {
+    return { resolvedId: originalId };
+  }
+
+  try {
+    const resolvedId = await resolveConversationId(originalId);
+    if (!resolvedId || resolvedId === originalId) {
+      return { resolvedId: originalId };
+    }
+
+    onConversationResolved?.(resolvedId);
+
+    const cached = conversationMessages.get(originalId);
+    if (cached && !conversationMessages.has(resolvedId)) {
+      conversationMessages.set(resolvedId, cached);
+      conversationMessages.delete(originalId);
+      notifyMessagesChange(resolvedId, cached);
+    }
+
+    const saved = lastSavedMessages.get(originalId);
+    if (saved && !lastSavedMessages.has(resolvedId)) {
+      lastSavedMessages.set(resolvedId, saved);
+      lastSavedMessages.delete(originalId);
+    }
+
+    return { resolvedId };
+  } catch (error) {
+    return {
+      resolvedId: originalId,
+      error: error instanceof Error ? error.message : "保存前校验会话失败",
+    };
+  }
+}
+
+async function handleNoChanges(
+  conversationId: string,
+  normalizedMessages: ChatUIMessage[],
+  previousMessages: ChatUIMessage[],
+  forceTitleUpdate: boolean,
+  lastSavedMessages: Map<string, ChatUIMessage[]>,
+  updateConversation: (
+    id: string,
+    updates: Partial<Pick<Conversation, "title">>,
+  ) => Promise<void>,
+  generateTitle: (messages: ChatUIMessage[]) => string,
+  logger: Logger,
+): Promise<boolean> {
+  const changedMessages = getChangedMessages(
+    previousMessages,
+    normalizedMessages,
+  );
+
+  if (changedMessages.length > 0) {
+    return false;
+  }
+
+  const nextTitle = generateTitle(normalizedMessages);
+
+  if (forceTitleUpdate) {
+    try {
+      await updateConversation(conversationId, { title: nextTitle });
+    } catch (error) {
+      logger.error("强制更新对话标题失败", { conversationId, error });
+    }
+  }
+
+  if (!lastSavedMessages.has(conversationId)) {
+    lastSavedMessages.set(conversationId, normalizedMessages);
+  }
+
+  return true;
+}
+
+async function persistWithRetry(
+  messagesToPersist: CreateMessageInput[],
+  conversationId: string,
+  normalizedMessages: ChatUIMessage[],
+  addMessages: (messages: CreateMessageInput[]) => Promise<Message[]>,
+  updateConversation: (
+    id: string,
+    updates: Partial<Pick<Conversation, "title">>,
+  ) => Promise<void>,
+  generateTitle: (messages: ChatUIMessage[]) => string,
+  conversationMessages: Map<string, ChatUIMessage[]>,
+  lastSavedMessages: Map<string, ChatUIMessage[]>,
+  notifyMessagesChange: (id: string, messages: ChatUIMessage[]) => void,
+  logger: Logger,
+  maxRetries = 3,
+): Promise<{ success: boolean; error?: string }> {
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      await addMessages(messagesToPersist);
+
+      const nextTitle = generateTitle(normalizedMessages);
+      await updateConversation(conversationId, { title: nextTitle });
+
+      conversationMessages.set(conversationId, normalizedMessages);
+      lastSavedMessages.set(conversationId, normalizedMessages);
+      notifyMessagesChange(conversationId, normalizedMessages);
+
+      return { success: true };
+    } catch (error) {
+      logger.error("保存消息失败", { conversationId, attempt, error });
+
+      if (attempt >= maxRetries) {
+        const message = error instanceof Error ? error.message : "消息保存失败";
+        return { success: false, error: message };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    }
+  }
+
+  return { success: false, error: "重试次数已用尽" };
+}
+
 // ========== 服务实现 ========== //
 
 interface SavePayload extends SaveOptions {
@@ -697,37 +821,25 @@ export function createChatSessionService(
   const persistMessages = async (payload: SavePayload) => {
     if (!payload.conversationId) return;
 
-    let conversationId = payload.conversationId;
     onSaveError?.("");
 
-    try {
-      if (payload.resolveConversationId) {
-        const resolvedId = await payload.resolveConversationId(conversationId);
-        if (resolvedId && resolvedId !== conversationId) {
-          conversationId = resolvedId;
-          payload.onConversationResolved?.(resolvedId);
+    const originalId = payload.conversationId;
+    const { resolvedId, error: migrateError } = await migrateConversationCaches(
+      originalId,
+      payload.resolveConversationId,
+      payload.onConversationResolved,
+      conversationMessages,
+      lastSavedMessages,
+      notifyMessagesChange,
+    );
 
-          const cached = conversationMessages.get(payload.conversationId);
-          if (cached && !conversationMessages.has(resolvedId)) {
-            conversationMessages.set(resolvedId, cached);
-            conversationMessages.delete(payload.conversationId);
-            notifyMessagesChange(resolvedId, cached);
-          }
-
-          const saved = lastSavedMessages.get(payload.conversationId);
-          if (saved && !lastSavedMessages.has(resolvedId)) {
-            lastSavedMessages.set(resolvedId, saved);
-            lastSavedMessages.delete(payload.conversationId);
-          }
-        }
-      }
-    } catch (error) {
-      onSaveError?.(
-        error instanceof Error ? error.message : "保存前校验会话失败",
-      );
+    if (migrateError) {
+      onSaveError?.(migrateError);
       onSavingChange?.(false);
       return;
     }
+
+    const conversationId = resolvedId;
 
     const normalizedMessages = payload.messages.map(ensureMessageMetadata);
 
@@ -736,33 +848,27 @@ export function createChatSessionService(
       conversationMessages.get(conversationId) ??
       [];
 
-    const changedMessages = getChangedMessages(
-      previousMessages,
+    const noChanges = await handleNoChanges(
+      conversationId,
       normalizedMessages,
+      previousMessages,
+      Boolean(payload.forceTitleUpdate),
+      lastSavedMessages,
+      updateConversation,
+      generateTitle,
+      logger,
     );
 
-    if (changedMessages.length === 0) {
-      const nextTitle = generateTitle(normalizedMessages);
-
-      if (payload.forceTitleUpdate) {
-        try {
-          await updateConversation(conversationId, { title: nextTitle });
-        } catch (error) {
-          logger.error("强制更新对话标题失败", {
-            conversationId,
-            error,
-          });
-        }
-      }
-
-      if (!lastSavedMessages.has(conversationId)) {
-        lastSavedMessages.set(conversationId, normalizedMessages);
-      }
-
+    if (noChanges) {
       onSavingChange?.(false);
       onSaveError?.("");
       return;
     }
+
+    const changedMessages = getChangedMessages(
+      previousMessages,
+      normalizedMessages,
+    );
 
     const messagesToPersist = changedMessages.map((msg) =>
       convertUIMessageToCreateInput(
@@ -775,42 +881,31 @@ export function createChatSessionService(
     onSavingChange?.(true);
     onSaveError?.("");
 
-    const maxRetries = 3;
+    const { success } = await persistWithRetry(
+      messagesToPersist,
+      conversationId,
+      normalizedMessages,
+      addMessages,
+      updateConversation,
+      generateTitle,
+      conversationMessages,
+      lastSavedMessages,
+      notifyMessagesChange,
+      logger,
+    );
 
-    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-      try {
-        await addMessages(messagesToPersist);
+    onSavingChange?.(false);
 
-        const nextTitle = generateTitle(normalizedMessages);
-        await updateConversation(conversationId, { title: nextTitle });
-
-        conversationMessages.set(conversationId, normalizedMessages);
-        lastSavedMessages.set(conversationId, normalizedMessages);
-        notifyMessagesChange(conversationId, normalizedMessages);
-
-        onSavingChange?.(false);
-        onSaveError?.("");
-        pendingSavePayload = null;
-        return;
-      } catch (error) {
-        logger.error("保存消息失败", {
-          conversationId,
-          attempt,
-          error,
-        });
-
-        if (attempt >= maxRetries) {
-          const message =
-            error instanceof Error ? error.message : "消息保存失败";
-          const userMessage =
-            "消息自动保存失败，将在后台继续重试。请检查存储或网络状态。";
-          onSavingChange?.(false);
-          onSaveError?.(userMessage || message);
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
-        }
-      }
+    if (!success) {
+      const userMessage =
+        "消息自动保存失败，已停止自动重试。请检查存储或网络状态后重试。";
+      onSaveError?.(userMessage);
+      pendingSavePayload = null;
+      return;
     }
+
+    onSaveError?.("");
+    pendingSavePayload = null;
   };
 
   const ensureMessages = async (

@@ -92,12 +92,59 @@ export function useLLMConfig(): UseLLMConfigResult {
   const requestIdRef = useRef(0);
   const isMountedRef = useRef(true);
 
+  const isRequestStillValid = (requestId: number): boolean => {
+    return requestId === requestIdRef.current && isMountedRef.current;
+  };
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  const rollbackModelConfig = useCallback(
+    async (
+      previousModelId: string | null,
+      previousConfig: LLMConfig | null,
+      currentRequestId: number,
+    ) => {
+      // 优先使用缓存的配置
+      if (previousConfig) {
+        setLlmConfig(previousConfig);
+        return;
+      }
+
+      // 如果没有缓存，尝试重新加载之前的模型配置
+      if (!previousModelId) {
+        setLlmConfig((prev) => prev ?? null);
+        return;
+      }
+
+      const previousProviderId =
+        models.find((model) => model.id === previousModelId)?.providerId ??
+        null;
+      if (!previousProviderId) {
+        setLlmConfig((prev) => prev ?? null);
+        return;
+      }
+
+      try {
+        const rollbackConfig = await getRuntimeConfig(
+          previousProviderId,
+          previousModelId,
+        );
+        if (currentRequestId !== requestIdRef.current || !isMountedRef.current)
+          return;
+        setLlmConfig(
+          rollbackConfig ? normalizeLLMConfig(rollbackConfig) : null,
+        );
+      } catch {
+        setLlmConfig((prev) => prev ?? null);
+      }
+    },
+    [models, getRuntimeConfig],
+  );
 
   const loadModelSelector = useCallback(
     async (options?: LoadOptions) => {
@@ -185,6 +232,7 @@ export function useLLMConfig(): UseLLMConfigResult {
   const handleModelChange = useCallback(
     async (modelId: string) => {
       const currentRequestId = ++requestIdRef.current;
+
       if (!modelId) return;
 
       const previousModelId = selectedModelId;
@@ -207,59 +255,29 @@ export function useLLMConfig(): UseLLMConfigResult {
       try {
         await setActiveModel(providerId, modelId);
 
-        if (currentRequestId !== requestIdRef.current || !isMountedRef.current)
-          return;
+        if (!isRequestStillValid(currentRequestId)) return;
 
         const runtimeConfig = await getRuntimeConfig(providerId, modelId);
 
-        if (currentRequestId !== requestIdRef.current || !isMountedRef.current)
-          return;
+        if (!isRequestStillValid(currentRequestId)) return;
 
         setLlmConfig(runtimeConfig ? normalizeLLMConfig(runtimeConfig) : null);
       } catch {
         // 只有最新请求的错误才显示给用户
-        if (currentRequestId === requestIdRef.current && isMountedRef.current) {
-          pushErrorToast(
-            t("chat:messages.modelSwitchFailed", "模型切换失败，请稍后重试"),
-          );
+        if (!isRequestStillValid(currentRequestId)) return;
 
-          setSelectedModelId(previousModelId);
+        pushErrorToast(
+          t("chat:messages.modelSwitchFailed", "模型切换失败，请稍后重试"),
+        );
 
-          if (previousConfig) {
-            setLlmConfig(previousConfig);
-          } else if (previousModelId) {
-            const previousProviderId =
-              models.find((model) => model.id === previousModelId)
-                ?.providerId ?? null;
-
-            if (previousProviderId) {
-              try {
-                const rollbackConfig = await getRuntimeConfig(
-                  previousProviderId,
-                  previousModelId,
-                );
-
-                if (
-                  currentRequestId !== requestIdRef.current ||
-                  !isMountedRef.current
-                )
-                  return;
-
-                setLlmConfig(
-                  rollbackConfig ? normalizeLLMConfig(rollbackConfig) : null,
-                );
-              } catch {
-                setLlmConfig((prev) => prev ?? null);
-              }
-            } else {
-              setLlmConfig((prev) => prev ?? null);
-            }
-          } else {
-            setLlmConfig((prev) => prev ?? null);
-          }
-        }
+        setSelectedModelId(previousModelId);
+        await rollbackModelConfig(
+          previousModelId,
+          previousConfig,
+          currentRequestId,
+        );
       } finally {
-        if (currentRequestId === requestIdRef.current && isMountedRef.current) {
+        if (isRequestStillValid(currentRequestId)) {
           setSelectorLoading(false);
           setConfigLoading(false);
         }
@@ -270,6 +288,7 @@ export function useLLMConfig(): UseLLMConfigResult {
       llmConfig,
       models,
       pushErrorToast,
+      rollbackModelConfig,
       selectedModelId,
       setActiveModel,
       t,

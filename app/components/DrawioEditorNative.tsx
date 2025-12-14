@@ -140,7 +140,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       Array<{ xml: string | undefined; resolve: () => void }>
     >([]);
 
-    const settleExport = (format: string, payload: string) => {
+    const settleExport = useCallback((format: string, payload: string) => {
       const normalizedFormat = (format || "xml").toLowerCase();
       const queue = pendingExportsRef.current.get(normalizedFormat);
       if (!queue || queue.length === 0) {
@@ -160,9 +160,9 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       }
 
       return true;
-    };
+    }, []);
 
-    const flushPendingExports = () => {
+    const flushPendingExports = useCallback(() => {
       pendingExportsRef.current.forEach((queue) => {
         queue.forEach((entry) => {
           clearTimeout(entry.timeout);
@@ -170,12 +170,12 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
         });
       });
       pendingExportsRef.current.clear();
-    };
+    }, []);
 
-    const flushPendingLoads = () => {
+    const flushPendingLoads = useCallback(() => {
       pendingLoadQueueRef.current.forEach(({ resolve }) => resolve());
       pendingLoadQueueRef.current = [];
-    };
+    }, []);
 
     // 构建 DrawIO URL（包含主题参数）
     // dark=1 表示深色模式，dark=0 表示浅色模式
@@ -399,172 +399,233 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
       [], // 空依赖数组，因为使用 ref 来访问最新的函数
     );
 
-    useEffect(() => {
-      logger.debug("DrawioEditorNative 组件已挂载");
-      logger.debug("DrawIO URL:", drawioUrl);
+    const handleInitEvent = useCallback(() => {
+      logger.debug("DrawIO iframe 初始化成功！");
+      setIsReady(true);
+      isReadyRef.current = true;
+      replayPendingLoads();
 
-      // 监听来自 iframe 的消息
-      const handleMessage = (event: MessageEvent) => {
-        // 安全检查：确保消息来自 diagrams.net
-        if (!event.origin.includes("diagrams.net")) {
-          return;
+      // 先导出当前 DrawIO 的 XML，用于对比
+      logger.debug("请求 export 以获取 DrawIO 当前 XML");
+      // 使用 setTimeout 确保 setIsReady 状态已更新
+      setTimeout(() => {
+        requestExportRef.current("xml");
+      }, 100);
+
+      // 启动 autosave 监测定时器（2秒后检查）
+      autosaveTimerRef.current = setTimeout(() => {
+        if (
+          !autosaveReceivedRef.current &&
+          !initializationCompleteRef.current
+        ) {
+          logger.debug("2秒内未收到 autosave，主动执行 export");
+          exportDiagramRef.current();
         }
+      }, 2000);
+    }, [replayPendingLoads]);
+
+    const handleExportedXmlCache = useCallback((decodedXml: string) => {
+      exportedXmlRef.current = decodedXml;
+
+      if (!initializationCompleteRef.current) {
+        const normalizedExported = decodedXml.trim();
+        const normalizedInitial = (initialXmlRef.current || "").trim();
+
+        if (normalizedExported !== normalizedInitial) {
+          logger.debug("检测到 XML 不同，执行 load 操作");
+          logger.debug(`  - 期望 XML 长度: ${normalizedInitial.length} 字符`);
+          logger.debug(
+            `  - DrawIO XML 长度: ${normalizedExported.length} 字符`,
+          );
+          loadDiagramRef.current(initialXmlRef.current, true);
+        } else {
+          logger.debug("XML 相同，跳过 load 操作");
+        }
+
+        isFirstLoadRef.current = false; // 标记首次加载已完成
+        initializationCompleteRef.current = true; // 标记初始化完成
+      }
+    }, []);
+
+    const tryResolveExportRequest = useCallback(
+      (
+        decodedSvg: string,
+        decodedXml: string,
+        payload: { hasXml: boolean; hasSvg: boolean; format?: unknown },
+      ) => {
+        // 智能解析：依次尝试不同格式，直到成功匹配待处理的导出请求
+        // 不依赖 data.format 字段，因为 DrawIO 可能不返回该字段
+        let resolved = false;
+
+        // 1. 优先尝试 SVG（如果有 data.data 字段）
+        if (decodedSvg) {
+          resolved = settleExport("svg", decodedSvg);
+          logger.debug(`  尝试 SVG 格式: ${resolved ? "成功" : "失败"}`);
+        }
+
+        // 2. 如果 SVG 失败，尝试 XML（如果有 data.xml 字段）
+        if (!resolved && decodedXml) {
+          resolved = settleExport("xml", decodedXml);
+          logger.debug(`  尝试 XML 格式: ${resolved ? "成功" : "失败"}`);
+        }
+
+        // 3. 记录失败情况（用于调试）
+        if (!resolved) {
+          logger.warn("无法匹配任何待处理的导出请求");
+          logger.warn("  响应中的数据:", payload);
+        }
+
+        return resolved;
+      },
+      [settleExport],
+    );
+
+    const handleExportEvent = useCallback(
+      (data: Record<string, unknown>) => {
+        logger.debug("收到 export 响应");
+
+        // 读取所有可能的数据字段
+        // - data.xml: XML 格式的 DrawIO 源文件
+        // - data.data: SVG 等其他格式的导出内容（通常是 data URI）
+        const xmlData = typeof data.xml === "string" ? data.xml : "";
+        const svgData = typeof data.data === "string" ? data.data : "";
+
+        // 解码数据（处理 base64 data URI）
+        const decodedXml = xmlData ? decodeBase64DataURI(xmlData) : "";
+        const decodedSvg = svgData ? decodeBase64DataURI(svgData) : "";
+
+        tryResolveExportRequest(decodedSvg, decodedXml, {
+          hasXml: !!xmlData,
+          hasSvg: !!svgData,
+          format: data.format,
+        });
+
+        // 更新 XML 缓存（用于初始化逻辑）
+        if (decodedXml) {
+          handleExportedXmlCache(decodedXml);
+        }
+      },
+      [handleExportedXmlCache, tryResolveExportRequest],
+    );
+
+    const handleMergeEvent = useCallback((data: Record<string, unknown>) => {
+      const requestIdFromPayload =
+        typeof data.requestId === "string" ? data.requestId : undefined;
+      const requestId = requestIdFromPayload ?? activeRequestIdRef.current;
+
+      if (requestIdFromPayload) {
+        activeRequestIdRef.current = requestIdFromPayload;
+      }
+
+      // 新增：检测 DrawIO 返回的 merge 错误
+      if (data.error) {
+        logger.error("[DrawIO] merge 错误:", data.error);
+        window.dispatchEvent(
+          new CustomEvent("drawio-merge-error", {
+            detail: {
+              error: data.error,
+              message: data.message,
+              requestId,
+            },
+          }),
+        );
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("drawio-merge-success", {
+            detail: { requestId },
+          }),
+        );
+      }
+
+      logger.debug("merge 操作完成");
+    }, []);
+
+    const handleSaveEvent = useCallback((data: Record<string, unknown>) => {
+      logger.debug("DrawIO 保存事件触发");
+      autosaveReceivedRef.current = true; // 标记已收到 autosave
+      const latestOnSave = onSaveRef.current;
+      if (latestOnSave && data.xml) {
+        latestOnSave(data.xml as string);
+      }
+    }, []);
+
+    const handleLoadEvent = useCallback(() => {
+      logger.debug("DrawIO 已加载内容");
+      const resolver = sentLoadResolversRef.current.shift();
+      resolver?.();
+    }, []);
+
+    const handleSelectionEvent = useCallback(
+      (data: Record<string, unknown>) => {
+        // 处理选区信息
+        const count = Number((data as { count?: unknown }).count ?? 0) || 0;
+        const cells = (data as { cells?: RawDrawioCell[] }).cells || [];
+
+        const selectionInfo: DrawioSelectionInfo = {
+          count,
+          cells: cells.map((cell: RawDrawioCell) => ({
+            id: cell.id || "",
+            type: (cell.type ||
+              "unknown") as DrawioSelectionInfo["cells"][number]["type"],
+            value: cell.value,
+            style: cell.style || "",
+            label: cell.label || "",
+            geometry: cell.geometry || undefined,
+          })),
+        };
+
+        onSelectionChangeRef.current?.(selectionInfo);
+      },
+      [],
+    );
+
+    const handleMessage = useCallback(
+      (event: MessageEvent) => {
+        // 安全检查：确保消息来自 diagrams.net
+        if (!event.origin.includes("diagrams.net")) return;
 
         try {
           const data = JSON.parse(event.data);
           logger.debug("收到来自 DrawIO 的消息:", data.event);
 
-          if (data.event === "init") {
-            logger.debug("DrawIO iframe 初始化成功！");
-            setIsReady(true);
-            isReadyRef.current = true;
-            replayPendingLoads();
-
-            // 先导出当前 DrawIO 的 XML，用于对比
-            logger.debug("请求 export 以获取 DrawIO 当前 XML");
-            // 使用 setTimeout 确保 setIsReady 状态已更新
-            setTimeout(() => {
-              requestExportRef.current("xml");
-            }, 100);
-
-            // 启动 autosave 监测定时器（2秒后检查）
-            autosaveTimerRef.current = setTimeout(() => {
-              if (
-                !autosaveReceivedRef.current &&
-                !initializationCompleteRef.current
-              ) {
-                logger.debug("2秒内未收到 autosave，主动执行 export");
-                exportDiagramRef.current();
-              }
-            }, 2000);
-          } else if (data.event === "export") {
-            logger.debug("收到 export 响应");
-
-            // 读取所有可能的数据字段
-            // - data.xml: XML 格式的 DrawIO 源文件
-            // - data.data: SVG 等其他格式的导出内容（通常是 data URI）
-            const xmlData = typeof data.xml === "string" ? data.xml : "";
-            const svgData = typeof data.data === "string" ? data.data : "";
-
-            // 解码数据（处理 base64 data URI）
-            const decodedXml = xmlData ? decodeBase64DataURI(xmlData) : "";
-            const decodedSvg = svgData ? decodeBase64DataURI(svgData) : "";
-
-            // 智能解析：依次尝试不同格式，直到成功匹配待处理的导出请求
-            // 不依赖 data.format 字段，因为 DrawIO 可能不返回该字段
-            let resolved = false;
-
-            // 1. 优先尝试 SVG（如果有 data.data 字段）
-            if (decodedSvg) {
-              resolved = settleExport("svg", decodedSvg);
-              logger.debug(`  尝试 SVG 格式: ${resolved ? "成功" : "失败"}`);
-            }
-
-            // 2. 如果 SVG 失败，尝试 XML（如果有 data.xml 字段）
-            if (!resolved && decodedXml) {
-              resolved = settleExport("xml", decodedXml);
-              logger.debug(`  尝试 XML 格式: ${resolved ? "成功" : "失败"}`);
-            }
-
-            // 3. 记录失败情况（用于调试）
-            if (!resolved) {
-              logger.warn("无法匹配任何待处理的导出请求");
-              logger.warn("  响应中的数据:", {
-                hasXml: !!xmlData,
-                hasSvg: !!svgData,
-                format: data.format,
-              });
-            }
-
-            // 更新 XML 缓存（用于初始化逻辑）
-            if (decodedXml) {
-              exportedXmlRef.current = decodedXml;
-
-              if (!initializationCompleteRef.current) {
-                const normalizedExported = decodedXml.trim();
-                const normalizedInitial = (initialXmlRef.current || "").trim();
-
-                if (normalizedExported !== normalizedInitial) {
-                  logger.debug("检测到 XML 不同，执行 load 操作");
-                  logger.debug(
-                    `  - 期望 XML 长度: ${normalizedInitial.length} 字符`,
-                  );
-                  logger.debug(
-                    `  - DrawIO XML 长度: ${normalizedExported.length} 字符`,
-                  );
-                  loadDiagramRef.current(initialXmlRef.current, true);
-                } else {
-                  logger.debug("XML 相同，跳过 load 操作");
-                }
-                isFirstLoadRef.current = false; // 标记首次加载已完成
-                initializationCompleteRef.current = true; // 标记初始化完成
-              }
-            }
-          } else if (data.event === "merge") {
-            const requestIdFromPayload =
-              typeof data.requestId === "string" ? data.requestId : undefined;
-            const requestId =
-              requestIdFromPayload ?? activeRequestIdRef.current;
-
-            if (requestIdFromPayload) {
-              activeRequestIdRef.current = requestIdFromPayload;
-            }
-
-            // 新增：检测 DrawIO 返回的 merge 错误
-            if (data.error) {
-              logger.error("[DrawIO] merge 错误:", data.error);
-              window.dispatchEvent(
-                new CustomEvent("drawio-merge-error", {
-                  detail: {
-                    error: data.error,
-                    message: data.message,
-                    requestId,
-                  },
-                }),
-              );
-            } else {
-              window.dispatchEvent(
-                new CustomEvent("drawio-merge-success", {
-                  detail: { requestId },
-                }),
-              );
-            }
-
-            logger.debug("merge 操作完成");
-          } else if (data.event === "autosave" || data.event === "save") {
-            logger.debug("DrawIO 保存事件触发");
-            autosaveReceivedRef.current = true; // 标记已收到 autosave
-            const latestOnSave = onSaveRef.current;
-            if (latestOnSave && data.xml) {
-              latestOnSave(data.xml);
-            }
-          } else if (data.event === "load") {
-            logger.debug("DrawIO 已加载内容");
-            const resolver = sentLoadResolversRef.current.shift();
-            resolver?.();
-          } else if (data.event === "drawio-selection") {
-            // 处理选区信息
-            const count = Number(data.count ?? 0) || 0;
-            const cells = data.cells || [];
-
-            const selectionInfo: DrawioSelectionInfo = {
-              count,
-              cells: cells.map((cell: RawDrawioCell) => ({
-                id: cell.id || "",
-                type: cell.type || "unknown",
-                value: cell.value,
-                style: cell.style || "",
-                label: cell.label || "",
-                geometry: cell.geometry || undefined,
-              })),
-            };
-
-            onSelectionChangeRef.current?.(selectionInfo);
+          switch (data.event) {
+            case "init":
+              handleInitEvent();
+              break;
+            case "export":
+              handleExportEvent(data);
+              break;
+            case "merge":
+              handleMergeEvent(data);
+              break;
+            case "autosave":
+            case "save":
+              handleSaveEvent(data);
+              break;
+            case "load":
+              handleLoadEvent();
+              break;
+            case "drawio-selection":
+              handleSelectionEvent(data);
+              break;
           }
         } catch (error) {
           logger.error("解析消息失败:", error);
         }
-      };
+      },
+      [
+        handleInitEvent,
+        handleExportEvent,
+        handleMergeEvent,
+        handleSaveEvent,
+        handleLoadEvent,
+        handleSelectionEvent,
+      ],
+    );
+
+    useEffect(() => {
+      logger.debug("DrawioEditorNative 组件已挂载");
+      logger.debug("DrawIO URL:", drawioUrl);
 
       window.addEventListener("message", handleMessage);
 
@@ -582,8 +643,7 @@ const DrawioEditorNative = forwardRef<DrawioEditorRef, DrawioEditorNativeProps>(
         flushPendingLoads();
         flushPendingExports();
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [drawioUrl, flushPendingExports, flushPendingLoads, handleMessage]);
 
     // 监听 initialXml 的变化，智能更新内容
     useEffect(() => {

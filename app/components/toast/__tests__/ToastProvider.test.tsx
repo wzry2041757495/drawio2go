@@ -15,6 +15,16 @@ const DEFAULT_DURATION = 3200;
 const EXIT_DURATION = 200;
 const MAX_VISIBLE = 3;
 
+const TEST_SELECTORS = {
+  toast: ".toast",
+  toastLeaving: ".toast--leaving",
+  toastStack: ".toast-stack",
+} as const;
+
+const TEST_CLASSES = {
+  toastLeaving: "toast--leaving",
+} as const;
+
 let idCounter = 0;
 
 const TestConsumer = ({
@@ -77,7 +87,9 @@ describe("ToastProvider", () => {
         });
       });
 
-      expect(document.body.querySelector(".toast-stack")).not.toBeNull();
+      expect(
+        document.body.querySelector(TEST_SELECTORS.toastStack),
+      ).not.toBeNull();
       expect(screen.getByText("Hello Toast")).toBeInTheDocument();
 
       act(() => api.dismiss(toastId));
@@ -109,11 +121,13 @@ describe("ToastProvider", () => {
         api.push({ description: "Auto close", variant: "info" });
       });
 
-      const toastElement = screen.getByText("Auto close").closest(".toast");
+      const toastElement = screen
+        .getByText("Auto close")
+        .closest(TEST_SELECTORS.toast);
       expect(toastElement).not.toBeNull();
 
       act(() => vi.advanceTimersByTime(DEFAULT_DURATION));
-      expect(toastElement).toHaveClass("toast--leaving");
+      expect(toastElement).toHaveClass(TEST_CLASSES.toastLeaving);
 
       act(() => vi.advanceTimersByTime(EXIT_DURATION));
       expect(screen.queryByText("Auto close")).toBeNull();
@@ -131,8 +145,10 @@ describe("ToastProvider", () => {
       });
 
       act(() => vi.advanceTimersByTime(500));
-      const toastElement = screen.getByText("Fast close").closest(".toast");
-      expect(toastElement).toHaveClass("toast--leaving");
+      const toastElement = screen
+        .getByText("Fast close")
+        .closest(TEST_SELECTORS.toast);
+      expect(toastElement).toHaveClass(TEST_CLASSES.toastLeaving);
 
       act(() => vi.advanceTimersByTime(EXIT_DURATION));
       expect(screen.queryByText("Fast close")).toBeNull();
@@ -151,7 +167,9 @@ describe("ToastProvider", () => {
         });
       });
 
-      const toastElement = screen.getByText("Persistent").closest(".toast");
+      const toastElement = screen
+        .getByText("Persistent")
+        .closest(TEST_SELECTORS.toast);
       expect(toastElement).not.toBeNull();
 
       act(() => {
@@ -159,7 +177,7 @@ describe("ToastProvider", () => {
       });
 
       expect(toastElement).toBeInTheDocument();
-      expect(toastElement).not.toHaveClass("toast--leaving");
+      expect(toastElement).not.toHaveClass(TEST_CLASSES.toastLeaving);
     });
 
     it("duration 为 0/-1/NaN 视为持久化，不自动关闭", () => {
@@ -184,9 +202,9 @@ describe("ToastProvider", () => {
       values.forEach((_value, index) => {
         const toastElement = screen
           .getByText(`Persistent-${index}`)
-          .closest(".toast");
+          .closest(TEST_SELECTORS.toast);
         expect(toastElement).not.toBeNull();
-        expect(toastElement).not.toHaveClass("toast--leaving");
+        expect(toastElement).not.toHaveClass(TEST_CLASSES.toastLeaving);
       });
     });
 
@@ -215,7 +233,9 @@ describe("ToastProvider", () => {
         });
       });
 
-      const toastElement = screen.getByText("HoverPersist").closest(".toast")!;
+      const toastElement = screen
+        .getByText("HoverPersist")
+        .closest(TEST_SELECTORS.toast)!;
 
       act(() => {
         fireEvent.mouseEnter(toastElement);
@@ -226,7 +246,7 @@ describe("ToastProvider", () => {
       });
 
       expect(toastElement).toBeInTheDocument();
-      expect(toastElement).not.toHaveClass("toast--leaving");
+      expect(toastElement).not.toHaveClass(TEST_CLASSES.toastLeaving);
     });
 
     it("持久化 toast 可手动 dismiss", () => {
@@ -296,8 +316,10 @@ describe("ToastProvider", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(500);
       });
-      const toast4Element = screen.getByText("Toast-4").closest(".toast");
-      expect(toast4Element).toHaveClass("toast--leaving");
+      const toast4Element = screen
+        .getByText("Toast-4")
+        .closest(TEST_SELECTORS.toast);
+      expect(toast4Element).toHaveClass(TEST_CLASSES.toastLeaving);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(EXIT_DURATION);

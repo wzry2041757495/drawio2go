@@ -79,6 +79,64 @@ function resolveLocator(locator: { xpath?: string; id?: string }): string {
   throw new Error("resolveLocator: xpath 或 id 必须至少提供一个");
 }
 
+function executeQueryById(
+  document: Document,
+  id: string | string[],
+): DrawioQueryResult[] {
+  const ids = normalizeIds(id);
+  const results: DrawioQueryResult[] = [];
+
+  for (const currentId of ids) {
+    const resolvedXpath = resolveLocator({ id: currentId });
+    const nodes = selectNodes(document, resolvedXpath);
+
+    for (const node of nodes) {
+      const converted = convertNodeToResult(node);
+      if (converted) {
+        results.push(converted);
+      }
+    }
+  }
+
+  return results;
+}
+
+function executeQueryByXpath(
+  document: Document,
+  xpath: string,
+): DrawioQueryResult[] {
+  const trimmedXpath = xpath.trim();
+  let evaluation;
+
+  try {
+    evaluation = select(trimmedXpath, document);
+  } catch (error) {
+    throw new Error(
+      `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  // 处理标量值
+  if (!Array.isArray(evaluation)) {
+    const scalar = toScalarString(evaluation);
+    return scalar !== undefined
+      ? [{ type: "text", value: scalar, matched_xpath: trimmedXpath }]
+      : [];
+  }
+
+  // 处理数组结果
+  const results: DrawioQueryResult[] = [];
+  for (const node of evaluation) {
+    if (!isDomNode(node)) continue;
+    const converted = convertNodeToResult(node);
+    if (converted) {
+      results.push(converted);
+    }
+  }
+
+  return results;
+}
+
 export async function executeDrawioRead(
   input: DrawioReadInput & { description?: string },
   context: ToolExecutionContext,
@@ -89,71 +147,20 @@ export async function executeDrawioRead(
   const xmlString = await fetchDiagramXml(resolvedContext, description);
   const document = parseXml(xmlString);
 
-  const hasXpath = Boolean(xpath);
-  const hasId = Boolean(id);
-
-  // 模式 1：ls（未提供 xpath/id）
-  if (!hasXpath && !hasId) {
+  // 模式 1：列表查询（无 xpath/id）
+  if (!xpath && !id) {
     return executeListMode(document, filter);
   }
 
-  // 模式 2：id 查询（支持数组）
-  if (hasId && id) {
-    const ids = normalizeIds(id);
-    const results: DrawioQueryResult[] = [];
-
-    for (const currentId of ids) {
-      const resolvedXpath = resolveLocator({ id: currentId });
-      const nodes = selectNodes(document, resolvedXpath);
-      for (const node of nodes) {
-        const converted = convertNodeToResult(node);
-        if (converted) {
-          results.push(converted);
-        }
-      }
-    }
-
+  // 模式 2：ID 查询
+  if (id) {
+    const results = executeQueryById(document, id);
     return { success: true, results };
   }
 
-  // 模式 3：xpath 查询
-  if (hasXpath && xpath) {
-    const trimmedXpath = xpath.trim();
-    let evaluation;
-    try {
-      evaluation = select(trimmedXpath, document);
-    } catch (error) {
-      throw new Error(
-        `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    if (!Array.isArray(evaluation)) {
-      const scalar = toScalarString(evaluation);
-      return {
-        success: true,
-        results:
-          scalar !== undefined
-            ? [
-                {
-                  type: "text",
-                  value: scalar,
-                  matched_xpath: trimmedXpath,
-                },
-              ]
-            : [],
-      };
-    }
-
-    const results: DrawioQueryResult[] = [];
-    for (const node of evaluation) {
-      if (!isDomNode(node)) continue;
-      const converted = convertNodeToResult(node);
-      if (converted) {
-        results.push(converted);
-      }
-    }
-
+  // 模式 3：XPath 查询
+  if (xpath) {
+    const results = executeQueryByXpath(document, xpath);
     return { success: true, results };
   }
 
