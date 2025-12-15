@@ -13,6 +13,7 @@ export { useChatSessionsController } from "./useChatSessionsController";
 export { useLLMConfig } from "./useLLMConfig";
 export { useOperationToast } from "./useOperationToast";
 export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
+export { useUpdateChecker } from "./useUpdateChecker";
 
 // Other Hooks - 其他 Hooks
 export { useDrawioSocket } from "./useDrawioSocket";

@@ -66,6 +66,10 @@ const id = push({
   title?: 'Title Text',            // 可选: 通知标题
   description: 'Message text',     // 必须: 通知内容
   duration?: 5000,                 // 可选: 显示时长（毫秒），默认 3200
+  action?: {                       // 可选: 操作按钮（如“打开下载页”）
+    label: 'Open',
+    onPress: () => {},
+  },
 });
 ```
 
@@ -237,6 +241,11 @@ interface Toast {
   title?: string;
   description: string;
   duration?: number;
+  action?: {
+    label: string;
+    onPress: () => void | Promise<void>;
+    ariaLabel?: string;
+  };
 }
 
 interface ToastContextValue {

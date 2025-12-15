@@ -71,6 +71,23 @@ declare global {
    */
   interface Window {
     electron?: {
+      checkForUpdates: () => Promise<null | {
+        hasUpdate: boolean;
+        currentVersion: string;
+        latestVersion: string;
+        releaseUrl: string;
+        releaseNotes?: string;
+      }>;
+      openReleasePage: (url: string) => Promise<void>;
+      onUpdateAvailable: (
+        callback: (result: {
+          hasUpdate: boolean;
+          currentVersion: string;
+          latestVersion: string;
+          releaseUrl: string;
+          releaseNotes?: string;
+        }) => void,
+      ) => () => void;
       selectFolder: () => Promise<string | null>;
       saveDiagram: (
         xml: string,

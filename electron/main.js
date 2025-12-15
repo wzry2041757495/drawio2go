@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
 const { fork } = require("child_process");
 const net = require("net");
 const SQLiteManager = require("./storage/sqlite-manager");
@@ -9,6 +10,8 @@ let mainWindow;
 let storageManager = null;
 let serverProcess = null; // 内嵌服务器子进程
 let serverPort = 3000; // 服务器端口
+let updateCheckTimeoutId = null;
+let updateCheckIntervalId = null;
 // 更可靠的开发模式检测：检查是否打包或者环境变量
 const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
@@ -213,6 +216,16 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+
+    // 清理更新检查定时器（防止窗口销毁后继续发送 IPC）
+    if (updateCheckTimeoutId) {
+      clearTimeout(updateCheckTimeoutId);
+      updateCheckTimeoutId = null;
+    }
+    if (updateCheckIntervalId) {
+      clearInterval(updateCheckIntervalId);
+      updateCheckIntervalId = null;
+    }
   });
 
   // 设置会话权限，允许 DrawIO iframe 加载
@@ -244,6 +257,11 @@ function createWindow() {
       console.log(`[Renderer Console] ${message}`);
     },
   );
+
+  // 自动检查更新：窗口加载完成后启动（避免影响启动体验）
+  mainWindow.webContents.once("did-finish-load", () => {
+    scheduleAutoUpdateChecks();
+  });
 }
 
 app.whenReady().then(async () => {
@@ -288,6 +306,16 @@ app.on("before-quit", () => {
   if (serverProcess && !serverProcess.killed) {
     serverProcess.kill("SIGTERM");
     serverProcess = null;
+  }
+
+  // 清理更新检查定时器
+  if (updateCheckTimeoutId) {
+    clearTimeout(updateCheckTimeoutId);
+    updateCheckTimeoutId = null;
+  }
+  if (updateCheckIntervalId) {
+    clearInterval(updateCheckIntervalId);
+    updateCheckIntervalId = null;
   }
 });
 
@@ -389,6 +417,249 @@ ipcMain.handle("load-diagram", async () => {
 
 // IPC 处理：打开外部链接
 ipcMain.handle("open-external", async (event, url) => {
+  await shell.openExternal(url);
+});
+
+// ==================== Update Check (GitHub Releases) ====================
+
+function normalizeVersion(rawVersion) {
+  if (typeof rawVersion !== "string") return "";
+  return rawVersion.trim().replace(/^[vV]/, "");
+}
+
+function parseSemver(rawVersion) {
+  const normalized = normalizeVersion(rawVersion);
+  const [versionCore, versionPreRelease = ""] = normalized.split("-", 2);
+  const [majorRaw = "0", minorRaw = "0", patchRaw = "0"] =
+    versionCore.split(".");
+
+  const major = Number.parseInt(majorRaw, 10) || 0;
+  const minor = Number.parseInt(minorRaw, 10) || 0;
+  const patch = Number.parseInt(patchRaw, 10) || 0;
+
+  const preRelease = versionPreRelease
+    ? versionPreRelease.split(".").filter(Boolean)
+    : [];
+
+  return { major, minor, patch, preRelease };
+}
+
+function compareNumbers(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function isNumericIdentifier(identifier) {
+  return /^\d+$/.test(identifier);
+}
+
+function comparePreReleaseIdentifiers(a, b) {
+  if (a === b) return 0;
+
+  const aIsNum = isNumericIdentifier(a);
+  const bIsNum = isNumericIdentifier(b);
+
+  if (aIsNum && bIsNum) {
+    return compareNumbers(Number.parseInt(a, 10), Number.parseInt(b, 10));
+  }
+
+  // 数字标识符优先级低于非数字
+  if (aIsNum && !bIsNum) return -1;
+  if (!aIsNum && bIsNum) return 1;
+
+  return a < b ? -1 : 1;
+}
+
+function comparePreRelease(preA, preB) {
+  const aHasPre = preA.length > 0;
+  const bHasPre = preB.length > 0;
+
+  // 无 pre-release 的版本优先级更高
+  if (!aHasPre && !bHasPre) return 0;
+  if (!aHasPre && bHasPre) return 1;
+  if (aHasPre && !bHasPre) return -1;
+
+  const maxLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const ida = preA[i];
+    const idb = preB[i];
+
+    if (ida === undefined) return -1;
+    if (idb === undefined) return 1;
+
+    const cmp = comparePreReleaseIdentifiers(ida, idb);
+    if (cmp !== 0) return cmp;
+  }
+
+  return 0;
+}
+
+/**
+ * 比较两个 semver 版本号
+ * @returns {-1 | 0 | 1} a < b 返回 -1，a > b 返回 1
+ */
+function compareSemver(a, b) {
+  const va = parseSemver(a);
+  const vb = parseSemver(b);
+
+  const majorCmp = compareNumbers(va.major, vb.major);
+  if (majorCmp !== 0) return majorCmp;
+
+  const minorCmp = compareNumbers(va.minor, vb.minor);
+  if (minorCmp !== 0) return minorCmp;
+
+  const patchCmp = compareNumbers(va.patch, vb.patch);
+  if (patchCmp !== 0) return patchCmp;
+
+  return comparePreRelease(va.preRelease, vb.preRelease);
+}
+
+function fetchGitHubLatestRelease() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const requestOptions = {
+    hostname: "api.github.com",
+    path: "/repos/Menghuan1918/drawio2go/releases/latest",
+    method: "GET",
+    headers: {
+      "User-Agent": `DrawIO2Go/${currentVersion || "0.0.0"} (Electron)`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const req = https.request(requestOptions, (res) => {
+      let raw = "";
+
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        raw += chunk;
+      });
+
+      res.on("end", () => {
+        if (res.statusCode !== 200) {
+          console.error(
+            `[Update] GitHub API 返回非 200：${res.statusCode} ${res.statusMessage || ""}`.trim(),
+          );
+          settle(null);
+          return;
+        }
+
+        try {
+          const json = JSON.parse(raw);
+          const tagName = json?.tag_name;
+          const htmlUrl = json?.html_url;
+          const releaseNotes = json?.body;
+
+          if (typeof tagName !== "string" || typeof htmlUrl !== "string") {
+            console.error("[Update] GitHub Release 响应缺少必要字段");
+            settle(null);
+            return;
+          }
+
+          settle({ tagName, htmlUrl, releaseNotes });
+        } catch (error) {
+          console.error("[Update] 解析 GitHub Release JSON 失败:", error);
+          settle(null);
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      console.error("[Update] GitHub Release 请求失败:", error);
+      settle(null);
+    });
+
+    // 超时：静默失败（记录日志）
+    req.setTimeout(8000, () => {
+      console.error("[Update] GitHub Release 请求超时（8s）");
+      req.destroy(new Error("timeout"));
+      settle(null);
+    });
+
+    req.end();
+  });
+}
+
+/**
+ * @returns {Promise<null | { hasUpdate: boolean, currentVersion: string, latestVersion: string, releaseUrl: string, releaseNotes?: string }>}
+ */
+async function checkForUpdates() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const release = await fetchGitHubLatestRelease();
+  if (!release) return null;
+
+  const latestVersion = normalizeVersion(release.tagName);
+  if (!latestVersion) {
+    console.error("[Update] 最新 Release tag_name 无效");
+    return null;
+  }
+
+  const hasUpdate = compareSemver(currentVersion, latestVersion) < 0;
+  return {
+    hasUpdate,
+    currentVersion,
+    latestVersion,
+    releaseUrl: release.htmlUrl,
+    releaseNotes:
+      typeof release.releaseNotes === "string" && release.releaseNotes.trim()
+        ? release.releaseNotes
+        : undefined,
+  };
+}
+
+async function runUpdateCheckAndNotify() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const result = await checkForUpdates();
+  if (!result) return;
+
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("update:available", result);
+  } catch (error) {
+    console.error("[Update] 发送 update:available 失败:", error);
+  }
+}
+
+function scheduleAutoUpdateChecks() {
+  // 防止多次注册（例如 macOS 激活重新创建窗口）
+  if (updateCheckTimeoutId) {
+    clearTimeout(updateCheckTimeoutId);
+    updateCheckTimeoutId = null;
+  }
+  if (updateCheckIntervalId) {
+    clearInterval(updateCheckIntervalId);
+    updateCheckIntervalId = null;
+  }
+
+  // 首次检查延迟 5 秒（避免影响启动体验）
+  updateCheckTimeoutId = setTimeout(() => {
+    updateCheckTimeoutId = null;
+    runUpdateCheckAndNotify();
+  }, 5000);
+
+  // 每小时检查一次
+  updateCheckIntervalId = setInterval(() => {
+    runUpdateCheckAndNotify();
+  }, 3600000);
+}
+
+ipcMain.handle("update:check", async () => {
+  return checkForUpdates();
+});
+
+ipcMain.handle("update:openReleasePage", async (_event, url) => {
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("无效的 Release URL");
+  }
   await shell.openExternal(url);
 });
 

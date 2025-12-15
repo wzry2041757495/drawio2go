@@ -15,6 +15,19 @@ contextBridge.exposeInMainWorld("electron", {
   // 打开外部链接
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
 
+  // 更新检查（GitHub Releases）
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  openReleasePage: (url) => ipcRenderer.invoke("update:openReleasePage", url),
+  onUpdateAvailable: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, result) => callback(result);
+    ipcRenderer.on("update:available", listener);
+    return () => ipcRenderer.removeListener("update:available", listener);
+  },
+
   // 通用文件对话框和文件操作
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),

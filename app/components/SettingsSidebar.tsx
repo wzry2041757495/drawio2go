@@ -13,6 +13,7 @@ import { useStorageSettings } from "@/app/hooks/useStorageSettings";
 import SettingsNav, { type SettingsTab } from "./settings/SettingsNav";
 import ModelsSettingsPanel from "./settings/ModelsSettingsPanel";
 import { VersionSettingsPanel } from "./settings/VersionSettingsPanel";
+import AboutSettingsPanel from "./settings/AboutSettingsPanel";
 import {
   AgentSettingsPanel,
   isSystemPromptValid,
@@ -63,6 +64,7 @@ export default function SettingsSidebar({
   const [versionSettings, setVersionSettings] = useState({
     autoVersionOnAIEdit: true,
   });
+  const [autoCheckEnabled, setAutoCheckEnabled] = useState(true);
 
   const { push } = useToast();
 
@@ -157,6 +159,15 @@ export default function SettingsSidebar({
     [runSaveTask, setSetting],
   );
 
+  const saveUpdateAutoCheckNow = useCallback(
+    async (enabled: boolean) => {
+      await runSaveTask(async () => {
+        await setSetting("update.autoCheck", enabled ? "1" : "0");
+      });
+    },
+    [runSaveTask, setSetting],
+  );
+
   useEffect(() => {
     saveDefaultPathNowRef.current = saveDefaultPathNow;
   }, [saveDefaultPathNow]);
@@ -206,6 +217,7 @@ export default function SettingsSidebar({
           loadedAgent,
           loadedActiveModel,
           versionSetting,
+          autoCheckSetting,
         ] = await Promise.all([
           getGeneralSettings(),
           getProviders(),
@@ -213,6 +225,7 @@ export default function SettingsSidebar({
           getAgentSettings(),
           getActiveModel(),
           getSetting("version.autoVersionOnAIEdit"),
+          getSetting("update.autoCheck"),
         ]);
 
         const normalizedPath = generalSettings.defaultPath || "";
@@ -231,6 +244,10 @@ export default function SettingsSidebar({
         const autoVersionOnAIEdit =
           versionSetting !== "0" && versionSetting !== "false";
         setVersionSettings({ autoVersionOnAIEdit });
+
+        const enabled =
+          autoCheckSetting !== "0" && autoCheckSetting !== "false";
+        setAutoCheckEnabled(enabled);
       } catch (e) {
         logger.error(t("errors.loadFailed"), e);
         setProviders([]);
@@ -238,6 +255,7 @@ export default function SettingsSidebar({
         setAgentSettings(DEFAULT_AGENT_SETTINGS);
         setActiveModelState(null);
         setVersionSettings({ autoVersionOnAIEdit: true });
+        setAutoCheckEnabled(true);
         setSidebarExpanded(true);
         showToast({
           variant: "danger",
@@ -332,6 +350,14 @@ export default function SettingsSidebar({
     [saveVersionSettingsNow],
   );
 
+  const handleAutoCheckChange = useCallback(
+    (enabled: boolean) => {
+      setAutoCheckEnabled(enabled);
+      saveUpdateAutoCheckNow(enabled).catch(() => {});
+    },
+    [saveUpdateAutoCheckNow],
+  );
+
   const handleTabChange = useCallback(
     (tab: SettingsTab) => {
       // 切换 Tab 前 flush，避免最后一次输入还在防抖队列中
@@ -379,6 +405,13 @@ export default function SettingsSidebar({
             <VersionSettingsPanel
               settings={versionSettings}
               onChange={handleVersionSettingsChange}
+            />
+          )}
+
+          {activeTab === "about" && (
+            <AboutSettingsPanel
+              autoCheckEnabled={autoCheckEnabled}
+              onAutoCheckChange={handleAutoCheckChange}
             />
           )}
         </div>

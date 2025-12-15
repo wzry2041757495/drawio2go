@@ -27,8 +27,9 @@
 | **ModelEditDialog**      | 模型新增/编辑   | HeroUI Modal 弹窗，模型名称/温度/工具轮次校验，能力（思考/视觉/工具）按钮切换（含 Tooltip）、模型测试 |
 | **AgentSettingsPanel**   | Agent 配置      | 全局系统提示词（System Prompt）编辑                                                                   |
 | **VersionSettingsPanel** | 版本管理        | AI 编辑前自动创建版本快照                                                                             |
+| **AboutSettingsPanel**   | 关于            | 应用版本、GitHub 链接、更新检查（含 `update.autoCheck`）                                              |
 | **ConnectionTester**     | 连接测试器      | 测试 LLM API 连接可用性                                                                               |
-| **SettingsNav**          | 设置导航栏      | 标签页切换（通用 / 模型 / Agent / 版本，图标导航）                                                    |
+| **SettingsNav**          | 设置导航栏      | 标签页切换（通用 / 模型 / Agent / 版本 / 关于，图标导航）                                             |
 
 ---
 
@@ -469,6 +470,7 @@ app/components/settings/
 ├── ProviderEditDialog.tsx        # 供应商新增/编辑对话框
 ├── VersionSettingsPanel.tsx      # 版本管理设置面板
 ├── ConnectionTester.tsx          # 连接测试器（弹窗）
+├── AboutSettingsPanel.tsx        # 关于面板（版本信息 + 更新检查）
 └── constants.ts                  # 常量定义（供应商选项等）
 ```
 
@@ -483,4 +485,4 @@ app/components/settings/
 
 ---
 
-**最后更新:** 2025年12月04日
+**最后更新:** 2025年12月15日

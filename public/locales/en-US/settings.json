@@ -3,7 +3,36 @@
     "general": "General",
     "models": "Models",
     "agent": "Agent",
-    "version": "Version Settings"
+    "version": "Version Settings",
+    "about": "About"
+  },
+  "about": {
+    "title": "About",
+    "description": "Application information and update checks",
+    "appVersionLabel": "Version",
+    "github": {
+      "open": "Open GitHub"
+    },
+    "update": {
+      "currentVersion": "Current version",
+      "latestVersion": "Latest version",
+      "unknownVersion": "—",
+      "checkNow": "Check for updates",
+      "checking": "Checking...",
+      "lastChecked": "Last checked",
+      "neverChecked": "Never",
+      "desktopOnly": "Update checks are available in the desktop app.",
+      "statusUnknown": "Unknown",
+      "statusUpToDate": "Up to date",
+      "statusAvailable": "Update available",
+      "autoCheck": {
+        "label": "Auto check updates",
+        "description": "Automatically check for updates in the background."
+      },
+      "toastTitle": "New version available",
+      "toastDescription": "v{{latest}} is available (current v{{current}}).",
+      "toastAction": "Open download page"
+    }
   },
   "general": {
     "title": "General Settings",

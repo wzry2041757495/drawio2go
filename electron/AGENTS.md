@@ -65,6 +65,9 @@ electron/
 - `saveDiagram(xml, path)`: 保存图表文件
 - `loadDiagram()`: 加载图表文件
 - `openExternal(url)`: 打开外部链接
+- `checkForUpdates()`: 检查 GitHub Release 更新（失败返回 null）
+- `openReleasePage(url)`: 打开 Release 页面
+- `onUpdateAvailable(callback)`: 订阅自动更新检查结果（接收 `update:available` 事件，返回取消订阅函数）
 - `showSaveDialog(options)`: 显示保存对话框
 - `showOpenDialog(options)`: 显示打开对话框
 - `writeFile(filePath, data)`: 写入文件
@@ -103,6 +106,13 @@ contextBridge.exposeInMainWorld("electron", {
   saveDiagram: (xml, path) => ipcRenderer.invoke("save-diagram", xml, path),
   loadDiagram: () => ipcRenderer.invoke("load-diagram"),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  openReleasePage: (url) => ipcRenderer.invoke("update:openReleasePage", url),
+  onUpdateAvailable: (callback) => {
+    const listener = (_event, result) => callback(result);
+    ipcRenderer.on("update:available", listener);
+    return () => ipcRenderer.removeListener("update:available", listener);
+  },
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
   writeFile: (filePath, data) =>

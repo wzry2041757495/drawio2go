@@ -85,6 +85,7 @@ function ToastRoot({
   const closeLabel = t("toast.close", "Close notification");
   const copyLabel = t("toast.copy", "Copy notification");
   const copiedLabel = t("toast.copied", "Copied");
+  const actionAriaLabel = toast.action?.ariaLabel ?? toast.action?.label;
 
   const role =
     toast.variant === "warning" || toast.variant === "danger"
@@ -136,6 +137,23 @@ function ToastRoot({
       <ToastIcon variant={toast.variant} />
       <ToastContent title={toast.title} description={toast.description} />
       <div className="toast__actions">
+        {toast.action ? (
+          <Button
+            size="sm"
+            variant="tertiary"
+            aria-label={actionAriaLabel}
+            onPress={async () => {
+              try {
+                await toast.action?.onPress();
+              } catch {
+                // UI 级交互失败保持静默，避免 toast 内二次 toast
+              }
+            }}
+            className="toast__action"
+          >
+            {toast.action.label}
+          </Button>
+        ) : null}
         <Button
           isIconOnly
           size="sm"

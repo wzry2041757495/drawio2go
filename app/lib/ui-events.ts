@@ -1,5 +1,10 @@
 export type SidebarTabKey = "chat" | "settings" | "version";
-export type SettingsTabKey = "general" | "models" | "agent" | "version";
+export type SettingsTabKey =
+  | "general"
+  | "models"
+  | "agent"
+  | "version"
+  | "about";
 
 export type SidebarNavigateDetail = {
   tab: SidebarTabKey;

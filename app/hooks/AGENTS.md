@@ -219,26 +219,42 @@
 - **特性**:
   - `disabled=true` 时视为始终可见（用于测试或强制加载）
   - 缺少 `IntersectionObserver` 的环境自动回退为可见
-  - 清理阶段 `disconnect` observer，避免泄漏
+- 清理阶段 `disconnect` observer，避免泄漏
+
+### 18. useUpdateChecker _(新增，2025-12-15)_
+
+**更新检查 Hook** - 统一管理更新检查状态（手动检查 + Electron 主进程自动检查事件）。
+
+- **返回**: `isChecking` / `lastCheckTime` / `updateInfo` / `checkForUpdates()` / `openReleasePage()`
+- **事件**: 订阅 Electron 主进程 `update:available`（通过 `window.electron.onUpdateAvailable`）
+- **通知**: 检测到新版本时推送 `variant="info"` Toast（10s），并提供打开下载页的操作按钮
+- **使用场景**: `AboutSettingsPanel`（关于面板）
 
 ## 统一导出
 
 所有 Hooks 通过 `app/hooks/index.ts` 统一导出：
 
 ```typescript
-export { useDrawioSocket } from "./useDrawioSocket";
-export { useChatLock } from "./useChatLock";
+// Storage Hooks - 存储层 React Hooks 封装
 export { useStorageSettings } from "./useStorageSettings";
 export { useStorageProjects } from "./useStorageProjects";
-export { useCurrentProject } from "./useCurrentProject";
-export { useStorageConversations } from "./useStorageConversations";
 export { useStorageXMLVersions } from "./useStorageXMLVersions";
+export { useStorageConversations } from "./useStorageConversations";
 export { useVersionCompare } from "./useVersionCompare";
+export { useCurrentProject } from "./useCurrentProject";
+export { useChatLock } from "./useChatLock";
 export { useNetworkStatus } from "./useNetworkStatus";
-export { useDrawioEditor } from "./useDrawioEditor";
 export { useVersionPages } from "./useVersionPages";
 export { usePanZoomStage } from "./usePanZoomStage";
+export { useChatSessionsController } from "./useChatSessionsController";
+export { useLLMConfig } from "./useLLMConfig";
+export { useOperationToast } from "./useOperationToast";
 export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
+export { useUpdateChecker } from "./useUpdateChecker";
+
+// Other Hooks - 其他 Hooks
+export { useDrawioSocket } from "./useDrawioSocket";
+export { useDrawioEditor } from "./useDrawioEditor";
 ```
 
 ## 设计原则
