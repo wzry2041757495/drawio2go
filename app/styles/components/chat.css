@@ -228,6 +228,24 @@
   gap: 0.5rem;
 }
 
+.chat-config-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklch, var(--warning) 35%, transparent);
+  background: color-mix(in oklch, var(--warning) 10%, transparent);
+  color: var(--foreground-secondary, #6b7280);
+  font-size: 0.875rem;
+}
+
+.chat-config-status__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* 按钮组布局 */
 .chat-input-actions {
   display: flex;

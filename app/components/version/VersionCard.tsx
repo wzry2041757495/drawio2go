@@ -10,6 +10,7 @@ import {
   TooltipContent,
   TooltipRoot,
 } from "@heroui/react";
+import type { TFunction } from "i18next";
 import {
   Clock,
   Key,
@@ -64,6 +65,66 @@ interface PageThumbnail {
   url: string;
 }
 
+type BuildVersionCardClassNameParams = {
+  isLatest: boolean;
+  effectiveExpanded: boolean;
+  compareMode: boolean;
+  selected: boolean;
+  isSubVersionEntry: boolean;
+  isWIP: boolean;
+};
+
+function buildVersionCardClassName({
+  isLatest,
+  effectiveExpanded,
+  compareMode,
+  selected,
+  isSubVersionEntry,
+  isWIP,
+}: BuildVersionCardClassNameParams): string {
+  const classes = ["version-card"];
+  if (isLatest) classes.push("version-card--latest");
+  if (effectiveExpanded) classes.push("version-card--expanded");
+  else classes.push("version-card--collapsed");
+  if (compareMode) classes.push("version-card--compare");
+  if (selected) classes.push("version-card--selected");
+  if (isSubVersionEntry) classes.push("version-card--sub-version");
+  if (isWIP) classes.push("version-card--wip");
+  return classes.join(" ");
+}
+
+function getDiffLabelAndIcon(
+  isWIP: boolean,
+  isKeyframe: boolean,
+  tVersion: TFunction,
+): {
+  diffLabel: string | null;
+  diffIcon: React.ReactNode | null;
+} {
+  if (isWIP) {
+    return { diffLabel: tVersion("card.meta.wip"), diffIcon: null };
+  }
+  if (isKeyframe) {
+    return {
+      diffLabel: tVersion("card.meta.keyframe"),
+      diffIcon: <Key className="w-3.5 h-3.5" />,
+    };
+  }
+  return {
+    diffLabel: tVersion("card.meta.diffChain"),
+    diffIcon: <GitBranch className="w-3.5 h-3.5" />,
+  };
+}
+
+function bindDiffChainDepth(tVersion: TFunction, depth: number): TFunction {
+  return ((key: string, options?: Record<string, unknown>) => {
+    if (key === "card.meta.diffChain") {
+      return tVersion(key, { ...(options ?? {}), depth });
+    }
+    return tVersion(key, options);
+  }) as unknown as TFunction;
+}
+
 function safeParsePageNames(raw?: string | null) {
   if (!raw) return [] as string[];
   try {
@@ -79,6 +140,270 @@ function safeParsePageNames(raw?: string | null) {
     logger.warn("page_names 解析失败，使用兜底名称", error);
     return [];
   }
+}
+
+function useLoadVersionSVGFields(version: XMLVersion) {
+  const { loadVersionSVGFields } = useStorageXMLVersions();
+  const [resolvedVersion, setResolvedVersion] =
+    React.useState<XMLVersion>(version);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setResolvedVersion(version);
+
+    const needsPreview = !version.preview_svg;
+    const needsPages = (version.page_count ?? 0) > 1 && !version.pages_svg;
+    if (!needsPreview && !needsPages) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const enriched = await loadVersionSVGFields(version);
+        if (!cancelled) {
+          setResolvedVersion(enriched);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          logger.warn("加载版本 SVG 数据失败", error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [version, loadVersionSVGFields]);
+
+  return resolvedVersion;
+}
+
+type CompareSelectChipProps = {
+  compareMode: boolean;
+  isWIP: boolean;
+  selected: boolean;
+  compareOrder: number | null;
+  versionId: string;
+  tVersion: TFunction;
+  onToggleSelect?: (versionId: string) => void;
+};
+
+function CompareSelectChip({
+  compareMode,
+  isWIP,
+  selected,
+  compareOrder,
+  versionId,
+  tVersion,
+  onToggleSelect,
+}: CompareSelectChipProps) {
+  if (!compareMode || isWIP) return null;
+
+  const ariaLabel = selected
+    ? tVersion("aria.card.selectOrder", { order: (compareOrder ?? 0) + 1 })
+    : tVersion("aria.card.selectHint");
+
+  const label =
+    selected && compareOrder !== null
+      ? tVersion("card.compare.added", { order: compareOrder + 1 })
+      : tVersion("card.compare.selectHint");
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={ariaLabel}
+      className={`version-card__select-chip${selected ? " version-card__select-chip--active" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleSelect?.(versionId);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleSelect?.(versionId);
+        }
+      }}
+    >
+      {selected ? (
+        <CheckSquare className="w-3.5 h-3.5" />
+      ) : (
+        <Square className="w-3.5 h-3.5" />
+      )}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+type CompactBadgesProps = {
+  isLatest: boolean;
+  isWIP: boolean;
+  isKeyframe: boolean;
+  diffDepth: number;
+  pageCount: number;
+  shouldShowSubVersionBadge: boolean;
+  subVersionCount: number;
+  tVersion: TFunction;
+};
+
+function CompactBadges({
+  isLatest,
+  isWIP,
+  isKeyframe,
+  diffDepth,
+  pageCount,
+  shouldShowSubVersionBadge,
+  subVersionCount,
+  tVersion,
+}: CompactBadgesProps) {
+  return (
+    <>
+      {isLatest && !isWIP && (
+        <span className="latest-badge">{tVersion("card.badges.latest")}</span>
+      )}
+      {!isWIP &&
+        (isKeyframe ? (
+          <TooltipRoot>
+            <span className="keyframe-badge">
+              <Key className="w-3 h-3" />
+            </span>
+            <TooltipContent>{tVersion("card.badges.keyframe")}</TooltipContent>
+          </TooltipRoot>
+        ) : (
+          <TooltipRoot>
+            <span className="diff-badge">
+              <GitBranch className="w-3 h-3" />+{diffDepth}
+            </span>
+            <TooltipContent>
+              {tVersion("card.badges.diffDepth", { depth: diffDepth })}
+            </TooltipContent>
+          </TooltipRoot>
+        ))}
+      {pageCount > 1 && (
+        <TooltipRoot>
+          <span className="page-count-badge">
+            <LayoutGrid className="w-3 h-3" />
+            {pageCount}
+          </span>
+          <TooltipContent>
+            {tVersion("card.badges.pages", { count: pageCount })}
+          </TooltipContent>
+        </TooltipRoot>
+      )}
+      {shouldShowSubVersionBadge && (
+        <TooltipRoot>
+          <span
+            className="version-card__sub-version-badge"
+            aria-label={tVersion("aria.card.subVersionBadge", {
+              count: subVersionCount,
+            })}
+          >
+            <Layers className="w-3 h-3" />
+            {subVersionCount}
+          </span>
+          <TooltipContent>
+            {tVersion("card.badges.subVersions", { count: subVersionCount })}
+          </TooltipContent>
+        </TooltipRoot>
+      )}
+    </>
+  );
+}
+
+type ExpandedPagesGridProps = {
+  showAllPages: boolean;
+  isLoadingPages: boolean;
+  effectivePagesError: string | null;
+  pageThumbs: PageThumbnail[];
+  versionId: string;
+  tVersion: TFunction;
+  onActivateThumb: (pageIndex: number) => void;
+};
+
+function ExpandedPagesGrid({
+  showAllPages,
+  isLoadingPages,
+  effectivePagesError,
+  pageThumbs,
+  versionId,
+  tVersion,
+  onActivateThumb,
+}: ExpandedPagesGridProps) {
+  if (!showAllPages) return null;
+
+  if (isLoadingPages) {
+    return (
+      <div className="version-pages-grid">
+        <div className="version-pages-grid__status">
+          <Loader2 className="version-pages-grid__spinner" />
+          <span>{tVersion("card.preview.loadingPages")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (effectivePagesError) {
+    return (
+      <div className="version-pages-grid">
+        <div className="version-pages-grid__status version-pages-grid__status--error">
+          <ImageOff className="version-pages-grid__status-icon" />
+          <span>{effectivePagesError}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (pageThumbs.length === 0) {
+    return (
+      <div className="version-pages-grid">
+        <div className="version-pages-grid__status version-pages-grid__status--empty">
+          <ImageOff className="version-pages-grid__status-icon" />
+          <span>{tVersion("card.preview.pagesEmpty")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="version-pages-grid">
+      <div className="version-pages-grid__inner">
+        {pageThumbs.map((thumb) => (
+          <button
+            key={`${versionId}-page-${thumb.index}`}
+            type="button"
+            className="version-pages-grid__item"
+            onClick={() => onActivateThumb(thumb.index)}
+            title={tVersion("card.preview.thumbTitle", {
+              index: thumb.index + 1,
+              name: thumb.name,
+            })}
+          >
+            <div className="version-pages-grid__thumb">
+              <img
+                src={thumb.url}
+                alt={tVersion("card.preview.thumbAlt", {
+                  index: thumb.index + 1,
+                })}
+                loading="lazy"
+              />
+            </div>
+            <div className="version-pages-grid__label">
+              <span className="version-pages-grid__label-index">
+                {thumb.index + 1}
+              </span>
+              <span className="version-pages-grid__label-name">
+                {thumb.name}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -110,10 +435,9 @@ export function VersionCard({
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerInitialPage, setViewerInitialPage] = React.useState(0);
   const pageObjectUrlsRef = React.useRef<string[]>([]);
-  const { getXMLVersion, loadVersionSVGFields } = useStorageXMLVersions();
+  const { getXMLVersion } = useStorageXMLVersions();
   const { push } = useToast();
-  const [resolvedVersion, setResolvedVersion] =
-    React.useState<XMLVersion>(version);
+  const resolvedVersion = useLoadVersionSVGFields(version);
   const isSubVersionEntry = React.useMemo(
     () => isSubVersion(version.semantic_version),
     [version.semantic_version],
@@ -142,50 +466,13 @@ export function VersionCard({
   );
   const isLoadingPages = showAllPages && versionPages.isLoading;
   const effectivePagesError = versionPages.error?.message ?? pagesError;
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setResolvedVersion(version);
-
-    const needsPreview = !version.preview_svg;
-    const needsPages = (version.page_count ?? 0) > 1 && !version.pages_svg;
-    if (!needsPreview && !needsPages) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    (async () => {
-      try {
-        const enriched = await loadVersionSVGFields(version);
-        if (!cancelled) {
-          setResolvedVersion(enriched);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          logger.warn("加载版本 SVG 数据失败", error);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [version, loadVersionSVGFields]);
   const effectiveExpanded = isWIP ? false : isExpanded;
 
   const versionLabel = isWIP ? "WIP" : `v${version.semantic_version}`;
-  const diffLabel = isWIP
-    ? tVersion("card.meta.wip")
-    : resolvedVersion.is_keyframe
-      ? tVersion("card.meta.keyframe")
-      : tVersion("card.meta.diffChain", {
-          depth: resolvedVersion.diff_chain_depth,
-        });
-  const diffIcon = isWIP ? null : resolvedVersion.is_keyframe ? (
-    <Key className="w-3.5 h-3.5" />
-  ) : (
-    <GitBranch className="w-3.5 h-3.5" />
+  const { diffLabel, diffIcon } = getDiffLabelAndIcon(
+    isWIP,
+    resolvedVersion.is_keyframe,
+    bindDiffChainDepth(tVersion, resolvedVersion.diff_chain_depth),
   );
 
   const hasMultiplePages = (resolvedVersion.page_count ?? 0) > 1;
@@ -214,11 +501,14 @@ export function VersionCard({
   );
 
   const handleCardAreaClick = React.useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLDivElement>) => {
       if (isWIP) return;
-      const target = event.target as HTMLElement | null;
-
-      if (target?.closest(".version-card__trigger")) {
+      const target = e.target as HTMLElement;
+      if (
+        target?.closest(
+          "button, a, [role='button'], input, textarea, .version-preview__container, .version-card__pages-grid",
+        )
+      ) {
         return;
       }
 
@@ -227,11 +517,10 @@ export function VersionCard({
         return;
       }
 
-      const isInExpandedContent = Boolean(
-        target?.closest(".version-card__expanded-content"),
+      const expandedContent = target?.closest(
+        ".version-card__expanded-content",
       );
-
-      if (!isInExpandedContent) {
+      if (!expandedContent) {
         setIsExpanded(false);
       }
     },
@@ -427,7 +716,14 @@ export function VersionCard({
 
   return (
     <Card.Root
-      className={`version-card${isLatest ? " version-card--latest" : ""}${effectiveExpanded ? " version-card--expanded" : " version-card--collapsed"}${compareMode ? " version-card--compare" : ""}${selected ? " version-card--selected" : ""}${isSubVersionEntry ? " version-card--sub-version" : ""}${isWIP ? " version-card--wip" : ""}`}
+      className={buildVersionCardClassName({
+        isLatest: Boolean(isLatest),
+        effectiveExpanded,
+        compareMode,
+        selected,
+        isSubVersionEntry,
+        isWIP,
+      })}
       variant="secondary"
       onClick={handleCardAreaClick}
     >
@@ -452,107 +748,27 @@ export function VersionCard({
               aria-disabled={isWIP}
             >
               <div className="version-card__compact-view">
-                {compareMode && !isWIP && (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={selected}
-                    aria-label={
-                      selected
-                        ? tVersion("aria.card.selectOrder", {
-                            order: (compareOrder ?? 0) + 1,
-                          })
-                        : tVersion("aria.card.selectHint")
-                    }
-                    className={`version-card__select-chip${selected ? " version-card__select-chip--active" : ""}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleSelect?.(version.id);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onToggleSelect?.(version.id);
-                      }
-                    }}
-                  >
-                    {selected ? (
-                      <CheckSquare className="w-3.5 h-3.5" />
-                    ) : (
-                      <Square className="w-3.5 h-3.5" />
-                    )}
-                    <span>
-                      {selected && compareOrder !== null
-                        ? tVersion("card.compare.added", {
-                            order: compareOrder + 1,
-                          })
-                        : tVersion("card.compare.selectHint")}
-                    </span>
-                  </div>
-                )}
+                <CompareSelectChip
+                  compareMode={compareMode}
+                  isWIP={isWIP}
+                  selected={selected}
+                  compareOrder={compareOrder}
+                  versionId={version.id}
+                  tVersion={tVersion}
+                  onToggleSelect={onToggleSelect}
+                />
                 <div className="version-card__compact-left">
                   <span className="version-number">{versionLabel}</span>
-                  {isLatest && !isWIP && (
-                    <span className="latest-badge">
-                      {tVersion("card.badges.latest")}
-                    </span>
-                  )}
-                  {!isWIP &&
-                    (version.is_keyframe ? (
-                      <TooltipRoot>
-                        <span className="keyframe-badge">
-                          <Key className="w-3 h-3" />
-                        </span>
-                        <TooltipContent>
-                          {tVersion("card.badges.keyframe")}
-                        </TooltipContent>
-                      </TooltipRoot>
-                    ) : (
-                      <TooltipRoot>
-                        <span className="diff-badge">
-                          <GitBranch className="w-3 h-3" />+
-                          {version.diff_chain_depth}
-                        </span>
-                        <TooltipContent>
-                          {tVersion("card.badges.diffDepth", {
-                            depth: version.diff_chain_depth,
-                          })}
-                        </TooltipContent>
-                      </TooltipRoot>
-                    ))}
-                  {/* 页面数徽章（仅多页时显示） */}
-                  {version.page_count > 1 && (
-                    <TooltipRoot>
-                      <span className="page-count-badge">
-                        <LayoutGrid className="w-3 h-3" />
-                        {version.page_count}
-                      </span>
-                      <TooltipContent>
-                        {tVersion("card.badges.pages", {
-                          count: version.page_count,
-                        })}
-                      </TooltipContent>
-                    </TooltipRoot>
-                  )}
-                  {shouldShowSubVersionBadge && (
-                    <TooltipRoot>
-                      <span
-                        className="version-card__sub-version-badge"
-                        aria-label={tVersion("aria.card.subVersionBadge", {
-                          count: subVersionCount,
-                        })}
-                      >
-                        <Layers className="w-3 h-3" />
-                        {subVersionCount}
-                      </span>
-                      <TooltipContent>
-                        {tVersion("card.badges.subVersions", {
-                          count: subVersionCount,
-                        })}
-                      </TooltipContent>
-                    </TooltipRoot>
-                  )}
+                  <CompactBadges
+                    isLatest={Boolean(isLatest)}
+                    isWIP={isWIP}
+                    isKeyframe={version.is_keyframe}
+                    diffDepth={version.diff_chain_depth}
+                    pageCount={version.page_count}
+                    shouldShowSubVersionBadge={shouldShowSubVersionBadge}
+                    subVersionCount={subVersionCount}
+                    tVersion={tVersion}
+                  />
                   {/* 内联描述（自适应宽度，仅有描述时显示） */}
                   {isWIP ? (
                     <span
@@ -727,69 +943,15 @@ export function VersionCard({
                 </div>
               </div>
 
-              {showAllPages && (
-                <div className="version-pages-grid">
-                  {isLoadingPages && (
-                    <div className="version-pages-grid__status">
-                      <Loader2 className="version-pages-grid__spinner" />
-                      <span>{tVersion("card.preview.loadingPages")}</span>
-                    </div>
-                  )}
-
-                  {!isLoadingPages && effectivePagesError && (
-                    <div className="version-pages-grid__status version-pages-grid__status--error">
-                      <ImageOff className="version-pages-grid__status-icon" />
-                      <span>{effectivePagesError}</span>
-                    </div>
-                  )}
-
-                  {!isLoadingPages &&
-                    !effectivePagesError &&
-                    pageThumbs.length === 0 && (
-                      <div className="version-pages-grid__status version-pages-grid__status--empty">
-                        <ImageOff className="version-pages-grid__status-icon" />
-                        <span>{tVersion("card.preview.pagesEmpty")}</span>
-                      </div>
-                    )}
-
-                  {!isLoadingPages &&
-                    !effectivePagesError &&
-                    pageThumbs.length > 0 && (
-                      <div className="version-pages-grid__inner">
-                        {pageThumbs.map((thumb) => (
-                          <button
-                            key={`${version.id}-page-${thumb.index}`}
-                            type="button"
-                            className="version-pages-grid__item"
-                            onClick={() => handleThumbnailActivate(thumb.index)}
-                            title={tVersion("card.preview.thumbTitle", {
-                              index: thumb.index + 1,
-                              name: thumb.name,
-                            })}
-                          >
-                            <div className="version-pages-grid__thumb">
-                              <img
-                                src={thumb.url}
-                                alt={tVersion("card.preview.thumbAlt", {
-                                  index: thumb.index + 1,
-                                })}
-                                loading="lazy"
-                              />
-                            </div>
-                            <div className="version-pages-grid__label">
-                              <span className="version-pages-grid__label-index">
-                                {thumb.index + 1}
-                              </span>
-                              <span className="version-pages-grid__label-name">
-                                {thumb.name}
-                              </span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                </div>
-              )}
+              <ExpandedPagesGrid
+                showAllPages={showAllPages}
+                isLoadingPages={isLoadingPages}
+                effectivePagesError={effectivePagesError}
+                pageThumbs={pageThumbs}
+                versionId={version.id}
+                tVersion={tVersion}
+                onActivateThumb={handleThumbnailActivate}
+              />
 
               <div className="version-card__meta">
                 <div className="version-card__meta-item">

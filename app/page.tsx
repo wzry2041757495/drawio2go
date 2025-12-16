@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
 import { Alert, Button, Spinner } from "@heroui/react";
 import DrawioEditorNative from "./components/DrawioEditorNative"; // 使用原生 iframe 实现
 import TopBar from "./components/TopBar";
@@ -18,12 +24,23 @@ import { useToast } from "./components/toast";
 import { useAppTranslation, useI18n } from "./i18n/hooks";
 import { createLogger } from "./lib/logger";
 import { toErrorString } from "./lib/error-handler";
+import { subscribeSidebarNavigate } from "./lib/ui-events";
 
 const logger = createLogger("Page");
 
+type DiagramState = {
+  projectUuid: string | null;
+  xml: string;
+};
+
+type PendingSaveEntry = {
+  xml: string;
+  timeout: ReturnType<typeof setTimeout> | null;
+};
+
 export default function Home() {
   // 存储 Hook
-  const { getDefaultPath } = useStorageSettings();
+  const { getGeneralSettings } = useStorageSettings();
 
   // 工程管理 Hook
   const {
@@ -39,19 +56,25 @@ export default function Home() {
     loading: projectsLoading,
   } = useStorageProjects();
 
-  const { saveXML, getAllXMLVersions, rollbackToVersion } =
+  const { saveXML, getAllXMLVersions, rollbackToVersion, getCurrentXML } =
     useStorageXMLVersions();
 
   const { t } = useI18n();
   const { t: tp } = useAppTranslation("page");
   const { push } = useToast();
 
+  const currentProjectUuid = currentProject?.uuid ?? null;
+
   // DrawIO 编辑器 Hook
-  const { editorRef, loadProjectXml, replaceWithXml } = useDrawioEditor(
-    currentProject?.uuid,
+  const { editorRef, replaceWithXml } = useDrawioEditor(
+    currentProjectUuid ?? undefined,
   );
 
-  const [diagramXml, setDiagramXml] = useState<string>("");
+  const [diagramState, setDiagramState] = useState<DiagramState>({
+    projectUuid: null,
+    xml: "",
+  });
+  const [isDiagramLoading, setIsDiagramLoading] = useState(false);
   const [settings, setSettings] = useState({ defaultPath: "" });
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -62,12 +85,34 @@ export default function Home() {
   const [isElectronEnv, setIsElectronEnv] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] =
     useState<boolean>(false);
-  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSavedXmlRef = useRef<string>("");
-  const pendingXmlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return subscribeSidebarNavigate((detail) => {
+      setIsSidebarOpen(true);
+      setSidebarTab(detail.tab);
+    });
+  }, []);
+  const pendingSavesRef = useRef<Map<string, PendingSaveEntry>>(new Map());
+  const lastSavedXmlByProjectRef = useRef<Map<string, string>>(new Map());
+  const diagramStateRef = useRef<DiagramState>(diagramState);
+  const activeProjectUuidRef = useRef<string | null>(currentProjectUuid);
+  const projectLoadSeqRef = useRef(0);
+  const isEditorDataReady =
+    Boolean(currentProjectUuid) &&
+    diagramState.projectUuid === currentProjectUuid &&
+    !isDiagramLoading;
+  const editorInitialXml = isEditorDataReady ? diagramState.xml : "";
+
+  useEffect(() => {
+    diagramStateRef.current = diagramState;
+  }, [diagramState]);
+
+  useEffect(() => {
+    activeProjectUuidRef.current = currentProjectUuid;
+  }, [currentProjectUuid]);
 
   // 初始化 Socket.IO 连接
-  const { isConnected } = useDrawioSocket(editorRef);
+  const { isConnected } = useDrawioSocket(editorRef, currentProjectUuid);
 
   // 确保项目有 WIP 版本
   const ensureWIPVersion = useCallback(
@@ -94,31 +139,73 @@ export default function Home() {
     [getAllXMLVersions, saveXML],
   );
 
-  // 同步 XML 到 diagramXml 状态
-  const syncDiagramXml = useCallback(async () => {
-    const xml = await loadProjectXml();
-    setDiagramXml(xml);
-    lastSavedXmlRef.current = xml;
-    pendingXmlRef.current = null;
-  }, [loadProjectXml]);
+  // 同步当前工程 XML 到状态
+  const syncDiagramXml = useCallback(
+    async (
+      projectUuid: string,
+      options?: {
+        loadIntoEditor?: boolean;
+      },
+    ) => {
+      const xml = (await getCurrentXML(projectUuid)) ?? "";
+
+      if (activeProjectUuidRef.current !== projectUuid) {
+        return;
+      }
+
+      setDiagramState({ projectUuid, xml });
+      lastSavedXmlByProjectRef.current.set(projectUuid, xml);
+
+      const entry = pendingSavesRef.current.get(projectUuid);
+      if (entry?.timeout) {
+        clearTimeout(entry.timeout);
+      }
+      pendingSavesRef.current.delete(projectUuid);
+
+      if (options?.loadIntoEditor !== false && editorRef.current) {
+        await editorRef.current.loadDiagram(xml);
+      }
+    },
+    [editorRef, getCurrentXML],
+  );
 
   // 加载当前工程的 XML
   useEffect(() => {
     if (currentProject && !projectLoading) {
+      const projectUuid = currentProject.uuid;
+      const loadSeq = projectLoadSeqRef.current + 1;
+      projectLoadSeqRef.current = loadSeq;
+      setIsDiagramLoading(true);
       (async () => {
         try {
           // 先确保 WIP 版本存在
-          await ensureWIPVersion(currentProject.uuid);
-          // 然后加载工程 XML 到编辑器并同步状态
-          await syncDiagramXml();
+          await ensureWIPVersion(projectUuid);
+
+          if (projectLoadSeqRef.current !== loadSeq) {
+            return;
+          }
+
+          // 先把正确的 XML 预加载到状态，避免 editor 以空内容完成初始化
+          // 编辑器挂载后会用 initialXml 完成首次 load
+          await syncDiagramXml(projectUuid, { loadIntoEditor: false });
         } catch (error) {
           logger.error("初始化工程失败", {
-            projectId: currentProject.uuid,
+            projectId: projectUuid,
             error,
           });
+        } finally {
+          if (projectLoadSeqRef.current === loadSeq) {
+            setIsDiagramLoading(false);
+          }
         }
       })();
+
+      return () => {
+        // 递增序号，使进行中的异步加载失效
+        projectLoadSeqRef.current += 1;
+      };
     }
+    return undefined;
   }, [currentProject, projectLoading, syncDiagramXml, ensureWIPVersion]);
 
   // 初始化环境检测
@@ -127,21 +214,20 @@ export default function Home() {
       setIsElectronEnv(Boolean(window.electron));
 
       // 加载默认路径设置
-      const loadDefaultPath = async () => {
+      const loadGeneralSettings = async () => {
         try {
-          const savedPath = await getDefaultPath();
-          if (savedPath) {
-            setSettings({ defaultPath: savedPath });
-          }
+          const general = await getGeneralSettings();
+          setSettings({ defaultPath: general.defaultPath });
+          setIsSidebarOpen(general.sidebarExpanded);
         } catch (error) {
-          logger.error("加载默认路径失败", { error });
+          logger.error("加载通用设置失败", { error });
         }
       };
 
-      loadDefaultPath();
+      loadGeneralSettings();
       return undefined;
     }
-  }, [getDefaultPath, editorRef]);
+  }, [getGeneralSettings, editorRef]);
 
   // 监听 DrawIO 合并错误并展示提示
   useEffect(() => {
@@ -178,68 +264,85 @@ export default function Home() {
 
   // 自动保存图表到统一存储层
   const flushPendingSave = useCallback(
-    async (options?: { skipStateUpdate?: boolean }) => {
-      if (
-        !currentProject ||
-        typeof window === "undefined" ||
-        !pendingXmlRef.current
-      ) {
+    async (projectUuid: string, options?: { skipStateUpdate?: boolean }) => {
+      if (typeof window === "undefined" || !projectUuid) {
         return;
       }
 
-      const xmlToSave = pendingXmlRef.current;
+      const entry = pendingSavesRef.current.get(projectUuid);
+      if (!entry) {
+        return;
+      }
 
-      if (xmlToSave === lastSavedXmlRef.current) {
-        pendingXmlRef.current = null;
+      if (entry.timeout) {
+        clearTimeout(entry.timeout);
+        entry.timeout = null;
+      }
+
+      const xmlToSave = entry.xml;
+      const lastSavedXml = lastSavedXmlByProjectRef.current.get(projectUuid);
+
+      if (xmlToSave === lastSavedXml) {
+        pendingSavesRef.current.delete(projectUuid);
         return;
       }
 
       try {
-        await saveXML(xmlToSave, currentProject.uuid);
-        lastSavedXmlRef.current = xmlToSave;
-        if (!options?.skipStateUpdate) {
-          setDiagramXml(xmlToSave);
+        await saveXML(xmlToSave, projectUuid);
+        lastSavedXmlByProjectRef.current.set(projectUuid, xmlToSave);
+
+        if (
+          !options?.skipStateUpdate &&
+          activeProjectUuidRef.current === projectUuid
+        ) {
+          setDiagramState({ projectUuid, xml: xmlToSave });
         }
       } catch (error) {
         logger.error("自动保存失败", {
-          projectId: currentProject.uuid,
+          projectId: projectUuid,
           error,
         });
         // 可以在这里添加用户提示，但不中断编辑流程
       } finally {
-        pendingXmlRef.current = null;
+        pendingSavesRef.current.delete(projectUuid);
       }
     },
-    [currentProject, saveXML],
+    [saveXML],
   );
 
   const handleAutoSave = useCallback(
     (xml: string) => {
-      if (!currentProject || typeof window === "undefined") return;
+      if (!currentProjectUuid || typeof window === "undefined") return;
 
-      // 清除旧的定时器
-      if (saveDebounceRef.current) {
-        clearTimeout(saveDebounceRef.current);
+      const existing = pendingSavesRef.current.get(currentProjectUuid);
+      if (existing?.timeout) {
+        clearTimeout(existing.timeout);
       }
 
-      pendingXmlRef.current = xml;
+      const entry: PendingSaveEntry = existing ?? { xml, timeout: null };
+      entry.xml = xml;
 
       // 设置新的防抖定时器（1.5 秒）
-      saveDebounceRef.current = setTimeout(() => {
-        void flushPendingSave();
+      entry.timeout = setTimeout(() => {
+        void flushPendingSave(currentProjectUuid);
       }, 1500);
+
+      pendingSavesRef.current.set(currentProjectUuid, entry);
     },
-    [currentProject, flushPendingSave],
+    [currentProjectUuid, flushPendingSave],
   );
 
   // 组件卸载或工程切换时清理定时器并保存未落盘内容
   useEffect(() => {
+    const pendingSaves = pendingSavesRef.current;
     return () => {
-      if (saveDebounceRef.current) {
-        clearTimeout(saveDebounceRef.current);
-        saveDebounceRef.current = null;
-      }
-      void flushPendingSave({ skipStateUpdate: true });
+      const entries = Array.from(pendingSaves.entries());
+      entries.forEach(([projectUuid, entry]) => {
+        if (entry.timeout) {
+          clearTimeout(entry.timeout);
+        }
+        void flushPendingSave(projectUuid, { skipStateUpdate: true });
+      });
     };
   }, [flushPendingSave]);
 
@@ -396,7 +499,7 @@ export default function Home() {
       await rollbackToVersion(currentProject.uuid, versionId);
 
       // 重新加载 WIP 到编辑器并同步状态
-      await syncDiagramXml();
+      await syncDiagramXml(currentProject.uuid);
 
       logger.info("版本回滚成功", {
         projectId: currentProject.uuid,
@@ -494,6 +597,38 @@ export default function Home() {
     );
   }
 
+  let editorContent: ReactNode = null;
+  if (isEditorDataReady) {
+    editorContent = (
+      <DrawioEditorNative
+        key={currentProjectUuid ?? "no-project"}
+        ref={editorRef}
+        initialXml={editorInitialXml}
+        onSave={handleAutoSave}
+        onSelectionChange={handleSelectionChange}
+      />
+    );
+  } else if (currentProjectUuid || projectLoading || isDiagramLoading) {
+    editorContent = (
+      <div className="loading-overlay">
+        <div className="loading-overlay__card">
+          <Spinner
+            size="xl"
+            color="success"
+            aria-label={tp("main.loadingProject")}
+            className="loading-overlay__spinner"
+          />
+          <h2 className="loading-overlay__title">
+            {tp("main.loadingProject")}
+          </h2>
+          <p className="loading-overlay__description">
+            {tp("main.loadingProjectDetail")}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className={`main-container ${isSidebarOpen ? "sidebar-open" : ""}`}>
       {/* 项目加载失败提示 */}
@@ -545,12 +680,7 @@ export default function Home() {
       <div
         className={`editor-container ${isSidebarOpen ? "sidebar-open" : ""}`}
       >
-        <DrawioEditorNative
-          ref={editorRef}
-          initialXml={diagramXml}
-          onSave={handleAutoSave}
-          onSelectionChange={handleSelectionChange}
-        />
+        {editorContent}
       </div>
 
       {/* 统一侧拉栏 */}

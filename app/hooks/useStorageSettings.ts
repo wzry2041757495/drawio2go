@@ -5,7 +5,6 @@ import { getStorage } from "@/app/lib/storage";
 import type {
   ActiveModelReference,
   AgentSettings,
-  LLMConfig,
   ModelCapabilities,
   ModelConfig,
   RuntimeLLMConfig,
@@ -13,11 +12,12 @@ import type {
 } from "@/app/types/chat";
 import {
   DEFAULT_AGENT_SETTINGS,
+  DEFAULT_GENERAL_SETTINGS,
   STORAGE_KEY_ACTIVE_MODEL,
   STORAGE_KEY_AGENT_SETTINGS,
+  STORAGE_KEY_GENERAL_SETTINGS,
   STORAGE_KEY_LLM_MODELS,
   STORAGE_KEY_LLM_PROVIDERS,
-  initializeDefaultLLMConfig,
   normalizeLLMConfig,
 } from "@/app/lib/config-utils";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
@@ -31,10 +31,17 @@ import {
 const logger = createLogger("useStorageSettings");
 const STORAGE_TIMEOUT_MESSAGE = getStorageTimeoutMessage();
 
-type SettingsUpdatedType = "provider" | "model" | "agent" | "activeModel";
+type SettingsUpdatedType =
+  | "provider"
+  | "model"
+  | "agent"
+  | "activeModel"
+  | "general";
 type SettingsUpdatedDetail = { type: SettingsUpdatedType };
 
 type StorageInstance = Awaited<ReturnType<typeof getStorage>>;
+
+type GeneralSettings = typeof DEFAULT_GENERAL_SETTINGS;
 
 const safeParseJSON = <T>(
   raw: string | null,
@@ -48,6 +55,24 @@ const safeParseJSON = <T>(
     logger.error(`[useStorageSettings] 解析 ${key} 失败`, error);
     return fallback;
   }
+};
+
+const normalizeGeneralSettings = (parsed: unknown): GeneralSettings | null => {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  return {
+    sidebarExpanded:
+      typeof record.sidebarExpanded === "boolean"
+        ? record.sidebarExpanded
+        : DEFAULT_GENERAL_SETTINGS.sidebarExpanded,
+    defaultPath:
+      typeof record.defaultPath === "string"
+        ? record.defaultPath
+        : DEFAULT_GENERAL_SETTINGS.defaultPath,
+  };
 };
 
 const pickFallbackActiveModel = (
@@ -96,6 +121,34 @@ const dispatchSettingsUpdated = (type: SettingsUpdatedType) => {
     }),
   );
 };
+
+const buildModelIdSet = (models: ModelConfig[]) =>
+  new Set(models.map((model) => model.id));
+
+const pruneProviderModelIds = (
+  providers: ProviderConfig[],
+  allowedModelIds: Set<string>,
+): ProviderConfig[] =>
+  providers.map((provider) => ({
+    ...provider,
+    models: provider.models.filter((modelId) => allowedModelIds.has(modelId)),
+  }));
+
+const removeModelFromProviders = (
+  providers: ProviderConfig[],
+  providerId: string,
+  modelId: string,
+  updatedAt: number,
+): ProviderConfig[] =>
+  providers.map((provider) =>
+    provider.id === providerId
+      ? {
+          ...provider,
+          models: provider.models.filter((id) => id !== modelId),
+          updatedAt,
+        }
+      : provider,
+  );
 
 export type CreateProviderInput = Pick<
   ProviderConfig,
@@ -177,18 +230,13 @@ export function useStorageSettings() {
 
   const loadProviders = useCallback(
     async (storage: StorageInstance): Promise<ProviderConfig[]> => {
-      let raw = await withStorageTimeout(
+      const raw = await withStorageTimeout(
         storage.getSetting(STORAGE_KEY_LLM_PROVIDERS),
       );
 
       if (raw === null) {
-        logger.warn(
-          "[useStorageSettings] 未找到 LLM providers，尝试初始化默认配置",
-        );
-        await initializeDefaultLLMConfig(storage);
-        raw = await withStorageTimeout(
-          storage.getSetting(STORAGE_KEY_LLM_PROVIDERS),
-        );
+        logger.info("[useStorageSettings] 未找到 LLM providers，返回空列表");
+        return [];
       }
 
       const parsed = safeParseJSON<ProviderConfig[]>(
@@ -203,18 +251,13 @@ export function useStorageSettings() {
 
   const loadModels = useCallback(
     async (storage: StorageInstance): Promise<ModelConfig[]> => {
-      let raw = await withStorageTimeout(
+      const raw = await withStorageTimeout(
         storage.getSetting(STORAGE_KEY_LLM_MODELS),
       );
 
       if (raw === null) {
-        logger.warn(
-          "[useStorageSettings] 未找到 LLM models，尝试初始化默认配置",
-        );
-        await initializeDefaultLLMConfig(storage);
-        raw = await withStorageTimeout(
-          storage.getSetting(STORAGE_KEY_LLM_MODELS),
-        );
+        logger.info("[useStorageSettings] 未找到 LLM models，返回空列表");
+        return [];
       }
 
       const parsed = safeParseJSON<ModelConfig[]>(
@@ -305,6 +348,36 @@ export function useStorageSettings() {
     [],
   );
 
+  const loadGeneralSettings = useCallback(
+    async (storage: StorageInstance): Promise<GeneralSettings> => {
+      const rawGeneral = await withStorageTimeout(
+        storage.getSetting(STORAGE_KEY_GENERAL_SETTINGS),
+      );
+
+      const parsed = safeParseJSON<unknown>(
+        rawGeneral,
+        STORAGE_KEY_GENERAL_SETTINGS,
+        null,
+      );
+
+      const normalized = normalizeGeneralSettings(parsed);
+      return normalized ?? DEFAULT_GENERAL_SETTINGS;
+    },
+    [],
+  );
+
+  const persistGeneralSettings = useCallback(
+    async (storage: StorageInstance, settings: GeneralSettings) => {
+      await withStorageTimeout(
+        storage.setSetting(
+          STORAGE_KEY_GENERAL_SETTINGS,
+          JSON.stringify(settings),
+        ),
+      );
+    },
+    [],
+  );
+
   /**
    * 获取设置值
    */
@@ -335,24 +408,71 @@ export function useStorageSettings() {
   }, [execute]);
 
   /**
-   * 获取默认路径
+   * 获取通用设置（v1）
    */
-  const getDefaultPath = useCallback(async (): Promise<string | null> => {
-    return execute((storage) =>
-      withStorageTimeout(storage.getSetting("defaultPath")),
-    );
-  }, [execute]);
+  const getGeneralSettings = useCallback(async (): Promise<GeneralSettings> => {
+    return execute(async (storage) => {
+      const settings = await loadGeneralSettings(storage);
+      return settings;
+    });
+  }, [execute, loadGeneralSettings]);
 
   /**
-   * 保存默认路径
+   * 保存通用设置（全量覆盖）
+   */
+  const saveGeneralSettings = useCallback(
+    async (settings: GeneralSettings): Promise<void> => {
+      await execute(async (storage) => {
+        await persistGeneralSettings(storage, settings);
+        dispatchSettingsUpdated("general");
+      });
+    },
+    [execute, persistGeneralSettings],
+  );
+
+  /**
+   * 更新通用设置（Partial 合并）
+   */
+  const updateGeneralSettings = useCallback(
+    async (updates: Partial<GeneralSettings>): Promise<GeneralSettings> => {
+      return execute(async (storage) => {
+        const current = await loadGeneralSettings(storage);
+        const next: GeneralSettings = {
+          sidebarExpanded:
+            typeof updates.sidebarExpanded === "boolean"
+              ? updates.sidebarExpanded
+              : current.sidebarExpanded,
+          defaultPath:
+            typeof updates.defaultPath === "string"
+              ? updates.defaultPath
+              : current.defaultPath,
+        };
+
+        await persistGeneralSettings(storage, next);
+        dispatchSettingsUpdated("general");
+        return next;
+      });
+    },
+    [execute, loadGeneralSettings, persistGeneralSettings],
+  );
+
+  /**
+   * 获取默认路径（便捷方法，内部使用通用设置）
+   */
+  const getDefaultPath = useCallback(async (): Promise<string | null> => {
+    const settings = await getGeneralSettings();
+    const normalized = settings.defaultPath.trim();
+    return normalized ? normalized : null;
+  }, [getGeneralSettings]);
+
+  /**
+   * 保存默认路径（便捷方法，内部使用通用设置）
    */
   const saveDefaultPath = useCallback(
     async (path: string): Promise<void> => {
-      await execute((storage) =>
-        withStorageTimeout(storage.setSetting("defaultPath", path)),
-      );
+      await updateGeneralSettings({ defaultPath: path });
     },
-    [execute],
+    [updateGeneralSettings],
   );
 
   /**
@@ -501,12 +621,11 @@ export function useStorageSettings() {
           (model) => model.providerId !== providerId,
         );
 
-        const sanitizedProviders = remainingProviders.map((item) => ({
-          ...item,
-          models: item.models.filter((modelId) =>
-            remainingModels.some((model) => model.id === modelId),
-          ),
-        }));
+        const remainingModelIds = buildModelIdSet(remainingModels);
+        const sanitizedProviders = pruneProviderModelIds(
+          remainingProviders,
+          remainingModelIds,
+        );
 
         const shouldSwitchActive =
           activeModel?.providerId === providerId ||
@@ -749,15 +868,13 @@ export function useStorageSettings() {
           );
         }
 
+        const now = Date.now();
         const remainingModels = models.filter((item) => item.id !== modelId);
-        const updatedProviders = providers.map((item) =>
-          item.id === providerId
-            ? {
-                ...item,
-                models: item.models.filter((id) => id !== modelId),
-                updatedAt: Date.now(),
-              }
-            : item,
+        const updatedProviders = removeModelFromProviders(
+          providers,
+          providerId,
+          modelId,
+          now,
         );
 
         const shouldSwitchActive =
@@ -1007,179 +1124,6 @@ export function useStorageSettings() {
     [execute, loadActiveModel, loadAgentSettings, loadModels, loadProviders],
   );
 
-  /**
-   * @deprecated 请使用 getRuntimeConfig；此方法仅为兼容旧调用
-   */
-  const getLLMConfig = useCallback(async (): Promise<LLMConfig | null> => {
-    const runtimeConfig = await getRuntimeConfig();
-    return runtimeConfig ? normalizeLLMConfig(runtimeConfig) : null;
-  }, [getRuntimeConfig]);
-
-  /**
-   * @deprecated 请使用 provider/model/agent 级别接口；内部会同步到新存储结构
-   */
-  const saveLLMConfig = useCallback(
-    async (config: Partial<LLMConfig>): Promise<void> => {
-      const normalized = normalizeLLMConfig(config);
-
-      await execute(async (storage) => {
-        let [providers, models, agentSettings, activeModel] = await Promise.all(
-          [
-            loadProviders(storage),
-            loadModels(storage),
-            loadAgentSettings(storage),
-            loadActiveModel(storage),
-          ],
-        );
-
-        if (providers.length === 0 || models.length === 0) {
-          await initializeDefaultLLMConfig(storage);
-          [providers, models, agentSettings, activeModel] = await Promise.all([
-            loadProviders(storage),
-            loadModels(storage),
-            loadAgentSettings(storage),
-            loadActiveModel(storage),
-          ]);
-        }
-
-        const fallbackActive = pickFallbackActiveModel(providers, models);
-        const targetProviderId =
-          activeModel?.providerId ??
-          fallbackActive?.providerId ??
-          providers[0]?.id ??
-          null;
-
-        if (!targetProviderId) {
-          throw new Error(
-            "[useStorageSettings] saveLLMConfig 无法解析目标供应商",
-          );
-        }
-
-        const now = Date.now();
-        const providerIndex = providers.findIndex(
-          (item) => item.id === targetProviderId,
-        );
-        const currentProvider =
-          providerIndex >= 0 ? providers[providerIndex] : null;
-
-        if (!currentProvider) {
-          throw new Error(
-            `[useStorageSettings] saveLLMConfig 未找到供应商 ${targetProviderId}`,
-          );
-        }
-
-        const modelsOfProvider = models.filter(
-          (item) => item.providerId === targetProviderId,
-        );
-
-        let targetModel =
-          modelsOfProvider.find(
-            (item) => activeModel?.modelId && item.id === activeModel.modelId,
-          ) ??
-          modelsOfProvider[0] ??
-          null;
-
-        if (!targetModel) {
-          targetModel = {
-            id: generateUUID("model"),
-            providerId: targetProviderId,
-            modelName: normalized.modelName,
-            displayName: normalized.modelName,
-            temperature: normalized.temperature,
-            maxToolRounds: normalized.maxToolRounds,
-            isDefault: true,
-            capabilities: normalized.capabilities,
-            enableToolsInThinking: normalized.enableToolsInThinking,
-            customConfig: { ...normalized.customConfig },
-            createdAt: now,
-            updatedAt: now,
-          };
-          models.push(targetModel);
-        } else {
-          targetModel = {
-            ...targetModel,
-            modelName: normalized.modelName,
-            displayName: targetModel.displayName || normalized.modelName,
-            temperature: normalized.temperature,
-            maxToolRounds: normalized.maxToolRounds,
-            capabilities: normalized.capabilities,
-            enableToolsInThinking: normalized.enableToolsInThinking,
-            customConfig: {
-              ...targetModel.customConfig,
-              ...normalized.customConfig,
-            },
-            updatedAt: now,
-          };
-          models = models.map((item) =>
-            item.id === targetModel.id ? targetModel : item,
-          );
-        }
-
-        const providerModels = new Set(currentProvider.models);
-        providerModels.add(targetModel.id);
-
-        const updatedProvider: ProviderConfig = {
-          ...currentProvider,
-          providerType: normalized.providerType,
-          apiUrl: normalized.apiUrl,
-          apiKey: normalized.apiKey,
-          customConfig: {
-            ...currentProvider.customConfig,
-            ...normalized.customConfig,
-          },
-          models: Array.from(providerModels),
-          updatedAt: now,
-        };
-        providers[providerIndex] = updatedProvider;
-
-        const updatedAgentSettings: AgentSettings = {
-          ...agentSettings,
-          systemPrompt: normalized.systemPrompt,
-          updatedAt: now,
-        };
-
-        const activeReference: ActiveModelReference = {
-          providerId: updatedProvider.id,
-          modelId: targetModel.id,
-          updatedAt: now,
-        };
-
-        await Promise.all([
-          persistProviders(storage, providers),
-          persistModels(storage, models),
-          persistAgentSettings(storage, updatedAgentSettings),
-          persistActiveModel(storage, activeReference),
-          (async () => {
-            try {
-              await withStorageTimeout(storage.deleteSetting("llmConfig"));
-            } catch (cleanupError) {
-              logger.warn(
-                "[useStorageSettings] 清理旧 llmConfig 失败",
-                cleanupError,
-              );
-            }
-          })(),
-        ]);
-
-        dispatchSettingsUpdated("provider");
-        dispatchSettingsUpdated("model");
-        dispatchSettingsUpdated("agent");
-        dispatchSettingsUpdated("activeModel");
-      });
-    },
-    [
-      execute,
-      loadActiveModel,
-      loadAgentSettings,
-      loadModels,
-      loadProviders,
-      persistActiveModel,
-      persistAgentSettings,
-      persistModels,
-      persistProviders,
-    ],
-  );
-
   // 初始化时检查存储可用性
   useEffect(() => {
     void runStorageTask(
@@ -1197,8 +1141,9 @@ export function useStorageSettings() {
     getSetting,
     setSetting,
     getAllSettings,
-    getLLMConfig,
-    saveLLMConfig,
+    getGeneralSettings,
+    saveGeneralSettings,
+    updateGeneralSettings,
     getDefaultPath,
     saveDefaultPath,
     getProviders,

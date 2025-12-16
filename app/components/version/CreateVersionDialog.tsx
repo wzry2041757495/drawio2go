@@ -571,6 +571,101 @@ export function CreateVersionDialog({
     };
   }, [isOpen, projectUuid, getAllXMLVersions, tVersion]);
 
+  const renderParentOptionsHelp = React.useCallback(() => {
+    if (parentOptionsError) {
+      return <FieldError className="mt-2">{parentOptionsError}</FieldError>;
+    }
+
+    if (isLoadingParents) {
+      return (
+        <Description className="mt-2 flex items-center gap-2 text-default-500">
+          <Spinner size="sm" />
+          {tVersion("create.parent.loading")}
+        </Description>
+      );
+    }
+
+    if (noParentOptions) {
+      return (
+        <FieldError className="mt-2">
+          {tVersion("create.parent.empty")}
+        </FieldError>
+      );
+    }
+
+    if (parentVersion) {
+      return (
+        <Description className="mt-2 text-default-500">
+          {tVersion("create.parent.locked", { version: parentVersion })}
+        </Description>
+      );
+    }
+
+    return (
+      <Description className="mt-2 text-default-500">
+        {tVersion("create.parent.filterHint")}
+      </Description>
+    );
+  }, [
+    isLoadingParents,
+    noParentOptions,
+    parentOptionsError,
+    parentVersion,
+    tVersion,
+  ]);
+
+  const renderVersionNumberStatus = React.useCallback(() => {
+    if (checkingExists) {
+      return (
+        <Description
+          className="mt-2 flex items-center gap-2"
+          style={{ color: "var(--info)" }}
+        >
+          <Spinner size="sm" />
+          {tVersion("create.versionNumber.checking")}
+        </Description>
+      );
+    }
+
+    if (validationError) {
+      return <FieldError className="mt-2">{validationError}</FieldError>;
+    }
+
+    if (effectiveVersionNumber) {
+      return (
+        <Description className="mt-2" style={{ color: "var(--success)" }}>
+          {tVersion("create.versionNumber.available", {
+            version: effectiveVersionNumber,
+          })}
+        </Description>
+      );
+    }
+
+    if (versionType === "sub") {
+      const full = selectedParentVersion
+        ? `${selectedParentVersion}.${tVersion("create.versionNumber.autoFilled")}`
+        : tVersion("create.versionNumber.autoFilled");
+      return (
+        <Description className="mt-2">
+          {tVersion("create.versionNumber.inputSubHint", { full })}
+        </Description>
+      );
+    }
+
+    return (
+      <Description className="mt-2">
+        {tVersion("create.versionNumber.description")}
+      </Description>
+    );
+  }, [
+    checkingExists,
+    effectiveVersionNumber,
+    selectedParentVersion,
+    tVersion,
+    validationError,
+    versionType,
+  ]);
+
   if (!isOpen) return null;
 
   return (
@@ -660,26 +755,7 @@ export function CreateVersionDialog({
                   ))}
                 </ListBox>
               </Select.Popover>
-              {parentOptionsError ? (
-                <FieldError className="mt-2">{parentOptionsError}</FieldError>
-              ) : isLoadingParents ? (
-                <Description className="mt-2 flex items-center gap-2 text-default-500">
-                  <Spinner size="sm" />
-                  {tVersion("create.parent.loading")}
-                </Description>
-              ) : noParentOptions ? (
-                <FieldError className="mt-2">
-                  {tVersion("create.parent.empty")}
-                </FieldError>
-              ) : (
-                <Description className="mt-2 text-default-500">
-                  {parentVersion
-                    ? tVersion("create.parent.locked", {
-                        version: parentVersion,
-                      })
-                    : tVersion("create.parent.filterHint")}
-                </Description>
-              )}
+              {renderParentOptionsHelp()}
             </Select>
           )}
 
@@ -737,35 +813,7 @@ export function CreateVersionDialog({
                 {tVersion("create.versionNumber.recommend")}
               </Button>
             </div>
-            {checkingExists ? (
-              <Description
-                className="mt-2 flex items-center gap-2"
-                style={{ color: "var(--info)" }}
-              >
-                <Spinner size="sm" />
-                {tVersion("create.versionNumber.checking")}
-              </Description>
-            ) : validationError ? (
-              <FieldError className="mt-2">{validationError}</FieldError>
-            ) : effectiveVersionNumber ? (
-              <Description className="mt-2" style={{ color: "var(--success)" }}>
-                {tVersion("create.versionNumber.available", {
-                  version: effectiveVersionNumber,
-                })}
-              </Description>
-            ) : versionType === "sub" ? (
-              <Description className="mt-2">
-                {tVersion("create.versionNumber.inputSubHint", {
-                  full: selectedParentVersion
-                    ? `${selectedParentVersion}.${tVersion("create.versionNumber.autoFilled")}`
-                    : tVersion("create.versionNumber.autoFilled"),
-                })}
-              </Description>
-            ) : (
-              <Description className="mt-2">
-                {tVersion("create.versionNumber.description")}
-              </Description>
-            )}
+            {renderVersionNumberStatus()}
           </TextField>
 
           <TextField className="w-full mt-4">

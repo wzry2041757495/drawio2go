@@ -37,6 +37,12 @@ electron/
 ├── preload.js                 # 预加载脚本，安全暴露 IPC API
 └── storage/
     ├── sqlite-manager.js      # SQLite 数据库管理器（使用 better-sqlite3）
+    ├── migrations/            # 数据库迁移脚本
+    │   ├── index.js           # 迁移入口
+    │   └── v1.js              # V1 迁移
+    └── shared/                # 共享常量（打包时需包含）
+        ├── constants-shared.js    # 存储常量
+        └── default-diagram-xml.js # 默认图表 XML
 ```
 
 ## 核心功能
@@ -59,11 +65,18 @@ electron/
 - `saveDiagram(xml, path)`: 保存图表文件
 - `loadDiagram()`: 加载图表文件
 - `openExternal(url)`: 打开外部链接
+- `checkForUpdates()`: 检查 GitHub Release 更新（失败返回 null）
+- `openReleasePage(url)`: 打开 Release 页面
+- `onUpdateAvailable(callback)`: 订阅自动更新检查结果（接收 `update:available` 事件，返回取消订阅函数）
 - `showSaveDialog(options)`: 显示保存对话框
 - `showOpenDialog(options)`: 显示打开对话框
 - `writeFile(filePath, data)`: 写入文件
 - `readFile(filePath)`: 读取文件
 - `enableSelectionWatcher()`: 启用 DrawIO 选区监听
+
+**文件系统 API (`window.electronFS`)**:
+
+- `readFile(filePath)`: 读取 userData 目录下的二进制文件（返回 ArrayBuffer，主要用于附件 `file_path`）
 
 **存储 API (`window.electronStorage`)**:
 
@@ -74,11 +87,36 @@ electron/
 - Conversations: `getConversation`, `createConversation`, `updateConversation`, `deleteConversation`, `batchDeleteConversations`, `exportConversations`, `getConversationsByProject`
 - Messages: `getMessagesByConversation`, `createMessage`, `deleteMessage`, `createMessages`
 
+> 注意：当 key 为 `settings.llm.providers`（或 `llm.providers`）时，`getSetting()` 返回的 JSON 中 `apiKey` 字段为**解密后的明文**（用于 UI 编辑与 API Route 调用）。
+
 #### 安全策略
 
 - **CSP 配置**: 仅允许 `embed.diagrams.net` iframe
 - **开发模式**: 宽松的安全策略，便于调试
 - **生产模式**: 严格的安全限制
+
+#### 密钥与配置安全模型（必须理解）
+
+本项目的“密钥安全”目标是：**保证密钥在磁盘上加密存储（at-rest）**，并对“解密后密钥暴露面”给出清晰边界说明。
+
+**事实与限制（架构决定）**：
+
+- `safeStorage` 的加/解密能力只能在 Electron 进程中使用（主进程/预加载脚本）。
+- LLM 调用发生在 Next.js API Route（内嵌服务器子进程）中，该进程无法直接使用 `safeStorage`。
+- 因此 API Route 所需的 `apiKey` 目前来自**渲染进程提交的请求体**（UI 读取配置后随请求传入），这意味着渲染进程必须能够拿到**解密后的** API Key。
+- 结论：我们无法在架构上彻底阻止渲染进程获取解密后的密钥；一旦渲染进程发生 XSS/任意脚本执行，就可能外传密钥（这是当前架构的安全边界）。
+
+**我们做了什么（可验证）**：
+
+- ✅ **落盘加密**：仅对设置项 `settings.llm.providers`（兼容历史 `llm.providers`）中的 `ProviderConfig[].apiKey` 做加密存储/解密读取。
+  - 具体实现位于 `electron/storage/sqlite-manager.js`（前缀 `enc:v1:` + `safeStorage.encryptString()` / `decryptString()`）。
+- ✅ **显式暴露面说明**：`electron/preload.js` 会注释说明为何 `window.electronStorage.getSetting()` 需要保留“返回解密后的 providers apiKey”的能力。
+
+**使用规范（避免扩大风险面）**：
+
+- 只在“设置面板/模型配置”场景读取 providers；不要在聊天/日志/错误上报等路径传播 `apiKey`。
+- 不要把 providers 配置（尤其是 apiKey）打印到 console、toast、logger 或持久化到其它文件。
+- 避免新增“批量导出敏感配置”的 IPC API（例如 dump / exportAll），否则会放大 XSS 的影响面。
 
 ### 2. 预加载脚本 (preload.js)
 
@@ -93,6 +131,13 @@ contextBridge.exposeInMainWorld("electron", {
   saveDiagram: (xml, path) => ipcRenderer.invoke("save-diagram", xml, path),
   loadDiagram: () => ipcRenderer.invoke("load-diagram"),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  openReleasePage: (url) => ipcRenderer.invoke("update:openReleasePage", url),
+  onUpdateAvailable: (callback) => {
+    const listener = (_event, result) => callback(result);
+    ipcRenderer.on("update:available", listener);
+    return () => ipcRenderer.removeListener("update:available", listener);
+  },
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
   writeFile: (filePath, data) =>
@@ -160,6 +205,25 @@ if (isElectron) {
 3. 返回 XML 内容给前端
 
 ## 构建配置
+
+### 内嵌服务器架构（2025-12-15 更新）
+
+**生产模式**：Electron 主进程通过 `fork()` 启动内嵌的 Next.js + Socket.IO 服务器
+
+```javascript
+// electron/main.js
+async function startEmbeddedServer() {
+  const port = await findAvailablePort(3000); // 自动查找可用端口
+  serverProcess = fork(serverPath, [], { env: { PORT: port } });
+  // 监听 "Ready on" 输出确认启动成功
+}
+```
+
+**关键特性**：
+
+- 端口自动查找：避免 3000 端口被占用时的冲突
+- 优雅关闭：SIGTERM/SIGINT 信号处理
+- 路径解析：`asarUnpack` 解压的文件位于 `app.asar.unpacked/`
 
 ### electron-builder 配置
 

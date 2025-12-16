@@ -117,6 +117,10 @@ export function PageSVGViewer({
   const canNext = pages.length ? currentIndex < pages.length - 1 : false;
   const isPannable = canPan;
   const errorMessage = error?.message ?? null;
+  const stageCursor = React.useMemo(() => {
+    if (!isPannable) return "default";
+    return isPanning ? "grabbing" : "grab";
+  }, [isPannable, isPanning]);
 
   const handlePrev = React.useCallback(() => {
     if (!pages.length) return;
@@ -437,11 +441,7 @@ export function PageSVGViewer({
                 className="page-svg-viewer__canvas"
                 style={{
                   transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                  cursor: isPannable
-                    ? isPanning
-                      ? "grabbing"
-                      : "grab"
-                    : "default",
+                  cursor: stageCursor,
                 }}
               >
                 <img

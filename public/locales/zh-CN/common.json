@@ -16,6 +16,15 @@
     "close": "关闭",
     "processing": "处理中..."
   },
+  "errorBoundary": {
+    "title": "应用发生错误",
+    "description": "应用遇到未预期的错误。你可以刷新重试，或重置应用以清除本地数据。",
+    "refresh": "刷新页面",
+    "resetApp": "重置应用",
+    "resetting": "正在重置...",
+    "details": "错误详情",
+    "unknownError": "未知错误"
+  },
   "toast": {
     "close": "关闭通知",
     "copy": "复制通知内容",
@@ -26,6 +35,10 @@
     "fileSaved": "文件已保存到: {{filePath}}",
     "saveFailed": "保存失败: {{error}}",
     "loadFailed": "加载失败: {{error}}",
+    "imageUploadFailedTitle": "图片添加失败",
+    "imageUploadFailed": "图片添加失败：{{error}}",
+    "imageUploadPartialFailedTitle": "部分图片不可用",
+    "imageUploadPartialFailed": "已添加 {{success}} 张，{{failed}} 张失败（详情见预览条）",
     "projectSwitchFailed": "切换工程失败",
     "projectCreateFailed": "创建工程失败",
     "versionRollbackFailed": "版本回滚失败",

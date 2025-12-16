@@ -38,15 +38,8 @@ export type DrawioQueryResult =
   | DrawioTextResult;
 
 /**
- * 定位器基础定义：支持 XPath 与 mxCell id 双重定位。
- * 若两者同时提供，优先使用 id。
+ * 查询结果基类
  */
-export interface LocatorBase {
-  xpath?: string;
-  id?: string;
-  allow_no_match?: boolean;
-}
-
 interface DrawioQueryResultBase {
   matched_xpath: string;
 }
@@ -67,18 +60,6 @@ export interface DrawioAttributeResult extends DrawioQueryResultBase {
 export interface DrawioTextResult extends DrawioQueryResultBase {
   type: "text";
   value: string;
-}
-
-/**
- * drawio_read 输入参数
- */
-export interface DrawioReadInput {
-  /** XPath 精确查询 */
-  xpath?: string;
-  /** 按 mxCell id 查询，支持单个或多个 */
-  id?: string | string[];
-  /** ls 模式筛选器，默认 "all" */
-  filter?: "all" | "vertices" | "edges";
 }
 
 /**
@@ -117,57 +98,6 @@ export type DrawioReadResult =
       list?: undefined;
     };
 
-/**
- * drawio_edit_batch 批量操作定义
- */
-
-export interface SetAttributeOperation extends LocatorBase {
-  type: "set_attribute";
-  key: string;
-  value: string;
-}
-
-export interface RemoveAttributeOperation extends LocatorBase {
-  type: "remove_attribute";
-  key: string;
-}
-
-export type InsertPosition =
-  | "append_child"
-  | "prepend_child"
-  | "before"
-  | "after";
-
-export interface InsertElementOperation extends LocatorBase {
-  type: "insert_element";
-  new_xml: string;
-  position?: InsertPosition;
-}
-
-export interface RemoveElementOperation extends LocatorBase {
-  type: "remove_element";
-}
-
-export interface ReplaceElementOperation extends LocatorBase {
-  type: "replace_element";
-  new_xml: string;
-}
-
-export interface SetTextContentOperation extends LocatorBase {
-  type: "set_text_content";
-  value: string;
-}
-
-export type DrawioEditOperation =
-  | SetAttributeOperation
-  | RemoveAttributeOperation
-  | InsertElementOperation
-  | RemoveElementOperation
-  | ReplaceElementOperation
-  | SetTextContentOperation;
-
-export type DrawioEditBatchRequest = DrawioEditOperation[];
-
 export interface DrawioEditBatchResult {
   success: true;
   operations_applied: number;
@@ -197,3 +127,10 @@ export interface DrawioCellInfo {
     height?: number;
   };
 }
+
+/**
+ * ⚠️ 输入参数类型已迁移：
+ * - DrawioReadInput / DrawioEditOperation / DrawioEditBatchRequest
+ *   请从 `app/lib/schemas/drawio-tool-schemas.ts` 导入 zod 推导类型。
+ * 本文件保留结果与 UI 相关类型，作为运行时返回值的单一真源。
+ */

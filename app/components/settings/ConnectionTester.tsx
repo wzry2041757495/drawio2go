@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Popover, Description, Spinner } from "@heroui/react";
 import { LLMConfig } from "@/app/types/chat";
 import { normalizeLLMConfig } from "@/app/lib/config-utils";
@@ -73,6 +73,25 @@ export default function ConnectionTester({ config }: ConnectionTesterProps) {
     setResult(null);
   };
 
+  let popoverContent: ReactNode = null;
+  if (isTesting) {
+    popoverContent = (
+      <div className="test-loading">
+        <Spinner />
+        <p>{t("connectionTest.loading")}</p>
+      </div>
+    );
+  } else if (result) {
+    const resultClassName = result.success ? "test-success" : "test-error";
+    const resultIcon = result.success ? "✓" : "✗";
+    popoverContent = (
+      <div className={`test-result ${resultClassName}`}>
+        <div className="test-icon">{resultIcon}</div>
+        <p className="test-message">{result.message}</p>
+      </div>
+    );
+  }
+
   return (
     <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
       <div className="w-full mt-6">
@@ -94,21 +113,7 @@ export default function ConnectionTester({ config }: ConnectionTesterProps) {
           <Popover.Heading className="modal-title">
             {t("connectionTest.title")}
           </Popover.Heading>
-          {isTesting ? (
-            <div className="test-loading">
-              <Spinner />
-              <p>{t("connectionTest.loading")}</p>
-            </div>
-          ) : result ? (
-            <div
-              className={`test-result ${
-                result.success ? "test-success" : "test-error"
-              }`}
-            >
-              <div className="test-icon">{result.success ? "✓" : "✗"}</div>
-              <p className="test-message">{result.message}</p>
-            </div>
-          ) : null}
+          {popoverContent}
           <div className="modal-actions">
             <Button
               variant="primary"

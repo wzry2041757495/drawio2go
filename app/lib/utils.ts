@@ -107,6 +107,7 @@ export function generateUUID(prefix: string = "id"): string {
     return `${prefix}-${crypto.randomUUID()}`;
   }
 
+  // eslint-disable-next-line sonarjs/pseudo-random -- 仅用于生成非安全敏感的 UI 标识符
   const random = Math.random().toString(36).slice(2, 10);
   const timestamp = Date.now();
   return `${prefix}-${timestamp}-${random}`;

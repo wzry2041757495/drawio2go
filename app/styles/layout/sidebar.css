@@ -294,47 +294,6 @@
   padding: var(--spacing-sm);
 }
 
-.settings-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--border-light);
-  background: var(--surface, #ffffff);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  gap: var(--spacing-md);
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  box-shadow: 0 -4px 16px color-mix(in oklch, var(--accent) 8%, transparent);
-}
-
-.dark .settings-action-bar {
-  background: var(--surface, #101418);
-  box-shadow: 0 -4px 16px color-mix(in oklch, var(--accent) 16%, transparent);
-}
-
-.settings-action-status {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: 0.875rem;
-  color: var(--foreground-secondary);
-}
-
-.status-dot {
-  width: var(--spacing-sm);
-  height: var(--spacing-sm);
-  border-radius: var(--radius-lg);
-  background: var(--warning);
-  box-shadow: 0 0 0 4px color-mix(in oklch, var(--warning) 25%, transparent);
-}
-
-.settings-action-buttons {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 @media (max-width: 768px) {
   .unified-sidebar,
   .settings-sidebar {

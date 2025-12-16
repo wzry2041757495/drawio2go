@@ -81,6 +81,50 @@ const createMockCustomEvent = <T>(type: string, detail: T) =>
     detail,
   }) as unknown as CustomEvent<T>;
 
+type MockMxCellElement = { getAttribute: (name: string) => string | null };
+
+const extractMockMxCellsFromXml = (xml: string): MockMxCellElement[] => {
+  const matches = xml.match(/<mxCell[^>]*id="[^"]+"[^>]*>/g) ?? [];
+  const cells: MockMxCellElement[] = [];
+
+  for (const match of matches) {
+    const idMatch = match.match(/id="([^"]+)"/);
+    const id = idMatch?.[1] ?? null;
+    cells.push({
+      getAttribute: (name: string) => (name === "id" ? id : null),
+    });
+  }
+
+  return cells;
+};
+
+class MockDOMParser {
+  parseFromString(xml: string) {
+    const cells = extractMockMxCellsFromXml(xml);
+
+    const querySelector = (selector: string) => {
+      if (selector === "parsererror") return null;
+      if (selector === "mxGraphModel") {
+        const match = xml.match(/<mxGraphModel[^>]*>[\s\S]*?<\/mxGraphModel>/);
+        return match
+          ? ({
+              outerHTML: match[0],
+              querySelectorAll: (innerSelector: string) =>
+                innerSelector === "mxCell" ? cells : [],
+            } as unknown as Element)
+          : null;
+      }
+      return null;
+    };
+
+    const querySelectorAll = (selector: string) =>
+      selector === "mxCell" ? cells : [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { querySelector, querySelectorAll } as any;
+  }
+}
+
 // Mock 存储
 const createMockStorage = (
   shouldFailSnapshot = false,
@@ -126,6 +170,7 @@ const createMockStorage = (
 
 describe("replaceDrawioXML - 回滚错误处理", () => {
   let mockDispatchEvent: (event: Event) => boolean;
+  // eslint-disable-next-line sonarjs/no-unused-collection -- 用于 mock 事件收集，可供调试使用
   let dispatchedEvents: Event[];
   let listeners: Record<string, Set<(event: Event) => void>>;
   let originalWindow: (Window & typeof globalThis) | undefined;
@@ -193,40 +238,7 @@ describe("replaceDrawioXML - 回滚错误处理", () => {
     });
 
     // Mock DOMParser for XML 验证/比较
-    global.DOMParser = class {
-      parseFromString(xml: string) {
-        const cells =
-          xml.match(/<mxCell[^>]*id="[^"]+"[^>]*>/g)?.map((match) => {
-            const idMatch = match.match(/id="([^"]+)"/);
-            const id = idMatch?.[1] ?? null;
-            return {
-              getAttribute: (name: string) => (name === "id" ? id : null),
-            };
-          }) ?? [];
-
-        return {
-          querySelector: (selector: string) => {
-            if (selector === "parsererror") return null;
-            if (selector === "mxGraphModel") {
-              const match = xml.match(
-                /<mxGraphModel[^>]*>[\s\S]*?<\/mxGraphModel>/,
-              );
-              return match
-                ? ({
-                    outerHTML: match[0],
-                    querySelectorAll: (innerSelector: string) =>
-                      innerSelector === "mxCell" ? cells : [],
-                  } as unknown as Element)
-                : null;
-            }
-            return null;
-          },
-          querySelectorAll: (selector: string) =>
-            selector === "mxCell" ? cells : [],
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-      }
-    } as unknown as typeof DOMParser;
+    global.DOMParser = MockDOMParser as unknown as typeof DOMParser;
   });
 
   afterEach(() => {

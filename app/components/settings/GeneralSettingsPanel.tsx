@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { Button, Description, Input, Label, TextField } from "@heroui/react";
+import {
+  Button,
+  Description,
+  Input,
+  Label,
+  Switch,
+  TextField,
+} from "@heroui/react";
 import { FolderOpen } from "lucide-react";
 
 import LanguageSwitcher from "../LanguageSwitcher";
@@ -11,6 +18,8 @@ import { createLogger } from "@/lib/logger";
 const logger = createLogger("GeneralSettingsPanel");
 
 export interface GeneralSettingsPanelProps {
+  sidebarExpanded: boolean;
+  onSidebarExpandedChange: (expanded: boolean) => void;
   defaultPath: string;
   onDefaultPathChange: (path: string) => void;
 }
@@ -21,6 +30,8 @@ export interface GeneralSettingsPanelProps {
  * - 默认文件路径（Electron 环境下可用）
  */
 export default function GeneralSettingsPanel({
+  sidebarExpanded,
+  onSidebarExpandedChange,
   defaultPath,
   onDefaultPathChange,
 }: GeneralSettingsPanelProps) {
@@ -50,6 +61,24 @@ export default function GeneralSettingsPanel({
       <p className="section-description">{t("general.description")}</p>
 
       <LanguageSwitcher className="w-full mt-6" />
+
+      <div className="w-full mt-6">
+        <Switch isSelected={sidebarExpanded} onChange={onSidebarExpandedChange}>
+          <div className="flex gap-3">
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <div className="-mt-0.5 flex flex-col gap-1">
+              <Label className="text-sm">
+                {t("general.sidebarExpanded.label")}
+              </Label>
+              <Description>
+                {t("general.sidebarExpanded.description")}
+              </Description>
+            </div>
+          </div>
+        </Switch>
+      </div>
 
       <TextField className="w-full mt-6">
         <Label>{t("general.defaultPath.label")}</Label>

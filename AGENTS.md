@@ -74,9 +74,9 @@ app/
 │   │   └── diff-engine/          # 差异计算引擎模块
 │   └── AGENTS.md                 # 组件库完整文档
 ├── i18n/               # 国际化配置 [详细文档 → app/i18n/AGENTS.md]
-│   ├── locales/                  # 翻译资源（zh-CN, en-US, ja-JP）
 │   ├── config.ts                 # i18n 配置文件
-│   └── constants.ts              # 语言常量和路由规则
+│   ├── client.ts                 # i18next 初始化（动态加载 JSON）
+│   └── hooks.ts                  # 类型安全 i18n Hooks
 ├── lib/                # 工具库 [详细文档 → app/lib/AGENTS.md]
 │   ├── drawio-tools.ts          # DrawIO XML 操作工具集
 │   ├── drawio-ai-tools.ts       # DrawIO AI 工具调用接口
@@ -131,6 +131,9 @@ app/
 ├── page.tsx            # 主页面
 ├── layout.tsx          # 根布局（含国际化初始化）
 └── globals.css         # 全局样式入口
+
+public/
+└── locales/            # 翻译资源（en-US, zh-CN，按需扩展 ja-JP）
 
 electron/               # 桌面应用 [详细文档 → electron/AGENTS.md]
 server.js              # Socket.IO 服务器 + Next.js 集成
@@ -247,12 +250,12 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
   3. 前端 `useDrawioSocket` Hook 接收请求，执行实际操作
   4. 前端通过 Socket.IO 返回结果
   5. 后端 Promise resolve，返回结果给 AI
-- **超时机制**: 默认 30 秒，可配置
+- **超时机制**: 统一由 `TOOL_TIMEOUT_CONFIG` 配置（默认回退 60s，多页导出 120s）
 - **错误处理**: 前端执行失败会返回详细错误信息给 AI
 
 ### 6. 检查测试
 
-- 务必主动调用`pnpm run lint`获得语法错误检查信息，避免在编译时才处理语法错误
+- 务必主动调用`npm run lint`获得语法错误检查信息，避免在编译时才处理语法错误
 
 ## 代码腐化清理记录
 
@@ -337,19 +340,19 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 
 ## 开发命令
 
-使用pnpm作为包管理系统
+使用 npm 作为包管理系统（因 Electron 打包兼容性需求）
 
 ```bash
-pnpm run dev              # Socket.IO + Next.js 开发服务器 (http://localhost:3000)
-pnpm run electron:dev     # Electron + Socket.IO + Next.js 开发模式
-pnpm run build            # 构建 Next.js 应用
-pnpm run start            # 生产环境启动 (Socket.IO + Next.js)
-pnpm run electron:build   # 构建 Electron 应用 (输出到 dist/)
-pnpm run lint             # ESLint 检查 + TypeScript 类型检查
-pnpm format               # 使用 Prettier 格式化所有代码
+npm run dev              # Socket.IO + Next.js 开发服务器 (http://localhost:3000)
+npm run electron:dev     # Electron + Socket.IO + Next.js 开发模式
+npm run build            # 构建 Next.js 应用
+npm run start            # 生产环境启动 (Socket.IO + Next.js)
+npm run electron:build   # 构建 Electron 应用 (输出到 dist/)
+npm run lint             # ESLint 检查 + TypeScript 类型检查
+npm run format           # 使用 Prettier 格式化所有代码
 ```
 
-⚠️ **重要**: 不能使用 `next dev` 命令，必须使用 `pnpm run dev` 启动自定义服务器（包含 Socket.IO）
+⚠️ **重要**: 不能使用 `next dev` 命令，必须使用 `npm run dev` 启动自定义服务器（包含 Socket.IO）
 
 ## 常见问题
 
@@ -460,7 +463,7 @@ pnpm format               # 使用 Prettier 格式化所有代码
 **Socket.IO 工具调用架构**
 
 - 双向通讯：AI 工具调用 → Socket.IO 转发前端 → 返回结果
-- 30秒超时机制，详细错误追溯
+- 超时由 `TOOL_TIMEOUT_CONFIG` 统一管理（默认回退 60s，导出 120s）
 
 **LLM 集成**
 

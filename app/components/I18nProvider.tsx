@@ -5,6 +5,9 @@ import { I18nextProvider } from "react-i18next";
 
 import i18n from "@/app/i18n/client";
 import { defaultLocale } from "@/app/i18n/config";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("I18nProvider");
 
 type I18nProviderProps = {
   children: ReactNode;
@@ -27,18 +30,20 @@ const getDocumentLang = () => {
  * - 避免首屏访问 localStorage，兼容 SSR/SSG 和 Electron file:// 场景
  */
 export function I18nProvider({ children, locale }: I18nProviderProps) {
-  // 首次渲染仅使用安全来源（props/htmlTag/default），避免触发浏览器存储访问
-  const [_language, setLanguage] = useState<string>(
-    locale ?? getDocumentLang() ?? i18n.language ?? defaultLocale,
+  // 首次渲染仅使用安全来源（props/i18n/default），避免触发浏览器存储访问
+  const [, setLanguage] = useState<string>(
+    locale ?? i18n.language ?? getDocumentLang() ?? defaultLocale,
   );
 
   useEffect(() => {
     const initialLang =
-      locale ?? getDocumentLang() ?? i18n.language ?? defaultLocale;
+      locale ?? i18n.language ?? getDocumentLang() ?? defaultLocale;
 
-    // SSR/SSG 传入的 locale 或 htmlTag 语言优先级最高
+    // SSR/SSG 传入的 locale 语言优先级最高（htmlTag 仅作为兜底回退）
     if (initialLang && i18n.language !== initialLang) {
-      void i18n.changeLanguage(initialLang);
+      i18n.changeLanguage(initialLang).catch((error) => {
+        logger.error("初始化切换语言失败", { initialLang, error });
+      });
     }
 
     // 确保 <html lang> 始终与 i18n 状态保持一致
@@ -59,13 +64,15 @@ export function I18nProvider({ children, locale }: I18nProviderProps) {
     };
   }, [locale]);
 
-  const defaultNamespace: string | string[] | undefined = Array.isArray(
-    i18n.options.defaultNS,
-  )
-    ? [...i18n.options.defaultNS]
-    : typeof i18n.options.defaultNS === "string"
-      ? i18n.options.defaultNS
-      : undefined;
+  let defaultNamespace: string | string[] | undefined;
+  const defaultNS = i18n.options.defaultNS;
+  if (Array.isArray(defaultNS)) {
+    defaultNamespace = [...defaultNS];
+  } else if (typeof defaultNS === "string") {
+    defaultNamespace = defaultNS;
+  } else {
+    defaultNamespace = undefined;
+  }
 
   return (
     <I18nextProvider i18n={i18n} defaultNS={defaultNamespace}>

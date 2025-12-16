@@ -1,4 +1,5 @@
 import { FlatCompat } from "@eslint/eslintrc";
+import sonarjs from "eslint-plugin-sonarjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +23,8 @@ export default [
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // SonarJS 推荐规则集
+  sonarjs.configs.recommended,
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [
@@ -31,10 +34,14 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
+      // SonarJS 规则调整
+      "sonarjs/cognitive-complexity": ["warn", 25], // 认知复杂度阈值
+      "sonarjs/no-duplicate-string": ["warn", { threshold: 6 }], // 重复字符串阈值
+      "sonarjs/no-identical-functions": "warn", // 重复函数检测
     },
   },
   {
-    files: ["server.js", "electron/**/*.js"],
+    files: ["server.js", "electron/**/*.js", "scripts/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

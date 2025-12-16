@@ -6,9 +6,12 @@
 
 ## 工具文件清单
 
+- **constants/tool-names.ts**: 工具名称常量与类型定义（AI 工具 / 前端执行工具）
+- **constants/tool-config.ts**: 工具默认超时配置（毫秒），覆盖所有工具
 - **drawio-tools.ts**: 浏览器端的 XML 存储桥接（统一存储抽象层 + 事件通知）
 - **drawio-xml-service.ts**: 服务端 XML 转接层，负责 XPath 查询与批量编辑
 - **drawio-ai-tools.ts**: AI 工具定义（`drawio_read` / `drawio_edit_batch`）
+- **schemas/drawio-tool-schemas.ts**: DrawIO AI 工具参数的统一 Zod Schema 单一真源（含类型导出）
 - **tool-executor.ts**: 工具执行路由器，通过 Socket.IO 与前端通讯
 - **svg-export-utils.ts**: DrawIO 多页面 SVG 导出工具（页面拆分、单页 XML 重建、结果序列化）
 - **compression-utils.ts**: Web/Node 共享的 `CompressionStream` / `DecompressionStream` deflate-raw 压缩工具
@@ -21,6 +24,8 @@
 - **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
 - **format-utils.ts**: 统一的日期格式化工具（版本时间戳、会话日期）
 - **select-utils.ts**: HeroUI Select 选择值提取与标准化工具，消除重复实现
+- **image-utils.ts**: 图片工具层（校验/尺寸获取/Base64/压缩解压），用于视觉模型输入与存储策略对齐
+- **image-message-utils.ts**: 图片消息发送工具（File→Data URL、附件持久化、AttachmentItem→ImagePart 转换），用于 Chat 发送侧集成
 - **utils.ts**: 通用工具函数（debounce 防抖函数，支持 flush/cancel 方法；runStorageTask、withTimeout）
 - **logger.ts**: 轻量日志工厂（`createLogger(componentName)`），自动加组件前缀并支持 debug/info/warn/error 级别过滤
 - **error-handler.ts**: 通用错误处理工具（AppError + i18n 翻译 + API/Toast 友好消息）
@@ -191,7 +196,7 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 
 ## DrawIO Socket.IO 调用流程
 
-1. 后端工具通过 `executeToolOnClient(toolName, input, projectUuid, conversationId)` 获取当前 XML 或请求前端写入（必须携带项目/会话上下文）
+1. 后端工具通过 `executeToolOnClient(toolName, input, projectUuid, conversationId, description?, options?)` 获取当前 XML 或请求前端写入（必须携带项目/会话上下文；`options` 支持 `chatRunId` 与 `AbortSignal` 用于取消）
 2. 前端（`useDrawioSocket` + `drawio-tools.ts`）访问统一存储层并响应请求
 3. 服务端使用 `drawio-xml-service.ts` 对 XML 进行 XPath 查询或批量操作
 4. 编辑完成后再次通过 Socket.IO 将新 XML 写回前端（前端按 projectUuid 过滤执行）
@@ -231,11 +236,11 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 
 ## 配置规范化工具（`config-utils.ts`）
 
-- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`
+- **默认常量**: `DEFAULT_SYSTEM_PROMPT`, `DEFAULT_API_URL`（默认空字符串，不预置任何供应商）
 - **LLM 存储键**: `settings.llm.providers`, `settings.llm.models`, `settings.llm.agent`, `settings.llm.activeModel`
-- **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS` / `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`
-- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `initializeDefaultLLMConfig()`
-- **用途**: 验证 provider 合法性，规范化 API URL，初始化存储中的默认 LLM 配置
+- **默认数据**: `DEFAULT_PROVIDERS` / `DEFAULT_MODELS`（默认空数组）/ `DEFAULT_AGENT_SETTINGS` / `DEFAULT_ACTIVE_MODEL`（默认 null）
+- **核心函数**: `isProviderType()` / `normalizeApiUrl()` / `normalizeAnthropicApiUrl()` / `normalizeProviderApiUrl()` / `initializeDefaultLLMConfig()`
+- **用途**: 验证 provider 合法性，规范化 API URL；`initializeDefaultLLMConfig()` 仅用于清理旧键与兼容迁移（不再写入默认 provider/model）
 
 ## 其他工具函数
 

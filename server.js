@@ -4,7 +4,7 @@ const next = require("next");
 const { Server } = require("socket.io");
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = "localhost";
+const hostname = process.env.HOST || "localhost";
 const port = parseInt(process.env.PORT, 10) || 3000;
 
 const app = next({
@@ -27,10 +27,34 @@ app.prepare().then(() => {
     }
   });
 
+  const allowedOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const resolveCorsOrigin = (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.length === 0) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked: ${origin}`), false);
+  };
+
   // 创建 Socket.IO 服务器
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "*" : `http://${hostname}:${port}`,
+      origin: dev ? "*" : resolveCorsOrigin,
       methods: ["GET", "POST"],
     },
   });
@@ -38,20 +62,106 @@ app.prepare().then(() => {
   // 存储待处理的工具调用请求
   // key: requestId, value: { resolve, reject }
   const pendingRequests = new Map();
+
+  // 项目房间成员映射
+  // projectUuid -> Set<socketId>
+  const projectMembers = new Map();
+  // socketId -> Set<projectUuid>
+  const socketJoinedProjects = new Map();
+
+  const getProjectMemberCount = (projectUuid) =>
+    projectMembers.get(projectUuid)?.size ?? 0;
+
   const emitToolExecute = (request) => {
     const targetProject = request?.projectUuid || "(unknown-project)";
     const targetConversation =
       request?.conversationId || "(unknown-conversation)";
 
+    const activeMembers = getProjectMemberCount(targetProject);
+
+    if (!targetProject || targetProject === "(unknown-project)") {
+      throw new Error("缺少 projectUuid，无法投递工具请求");
+    }
+
+    if (activeMembers === 0) {
+      throw new Error(`目标项目没有客户端在线: ${targetProject}`);
+    }
+
     console.log(
-      `[Socket.IO] 广播工具请求: ${request?.toolName ?? "unknown"} -> project=${targetProject}, conversation=${targetConversation}, requestId=${request?.requestId ?? "n/a"}`,
+      `[Socket.IO] 向项目房间投递工具请求: ${request?.toolName ?? "unknown"} -> project=${targetProject}, conversation=${targetConversation}, requestId=${request?.requestId ?? "n/a"}, 在线客户端=${activeMembers}`,
     );
 
-    io.emit("tool:execute", request);
+    io.to(targetProject).emit("tool:execute", request);
   };
 
   io.on("connection", (socket) => {
     console.log("[Socket.IO] 客户端已连接:", socket.id);
+
+    const trackJoin = (projectUuid) => {
+      if (!projectUuid) return;
+
+      if (!projectMembers.has(projectUuid)) {
+        projectMembers.set(projectUuid, new Set());
+      }
+      if (!socketJoinedProjects.has(socket.id)) {
+        socketJoinedProjects.set(socket.id, new Set());
+      }
+
+      projectMembers.get(projectUuid).add(socket.id);
+      socketJoinedProjects.get(socket.id).add(projectUuid);
+
+      const memberCount = getProjectMemberCount(projectUuid);
+      console.log(
+        `[Socket.IO] socket ${socket.id} 已加入项目房间 ${projectUuid}，当前房间在线: ${memberCount}`,
+      );
+    };
+
+    const trackLeave = (projectUuid) => {
+      if (!projectUuid) return;
+
+      const members = projectMembers.get(projectUuid);
+      if (members) {
+        members.delete(socket.id);
+        if (members.size === 0) {
+          projectMembers.delete(projectUuid);
+        }
+      }
+
+      const joined = socketJoinedProjects.get(socket.id);
+      if (joined) {
+        joined.delete(projectUuid);
+        if (joined.size === 0) {
+          socketJoinedProjects.delete(socket.id);
+        }
+      }
+
+      const memberCount = getProjectMemberCount(projectUuid);
+      console.log(
+        `[Socket.IO] socket ${socket.id} 已离开项目房间 ${projectUuid}，当前房间在线: ${memberCount}`,
+      );
+    };
+
+    // 监听项目房间加入/离开
+    socket.on("join_project", (projectUuid) => {
+      const trimmed = typeof projectUuid === "string" ? projectUuid.trim() : "";
+      if (!trimmed) {
+        console.warn(
+          `[Socket.IO] 收到无效的 join_project 请求，socket=${socket.id}`,
+        );
+        return;
+      }
+
+      socket.join(trimmed);
+      trackJoin(trimmed);
+    });
+
+    socket.on("leave_project", (projectUuid) => {
+      const trimmed = typeof projectUuid === "string" ? projectUuid.trim() : "";
+      if (!trimmed) return;
+
+      socket.leave(trimmed);
+      trackLeave(trimmed);
+    });
 
     // 监听工具执行结果
     socket.on("tool:result", (data) => {
@@ -88,6 +198,11 @@ app.prepare().then(() => {
     });
 
     socket.on("disconnect", () => {
+      const joined = Array.from(socketJoinedProjects.get(socket.id) ?? []);
+      joined.forEach((projectUuid) => {
+        trackLeave(projectUuid);
+      });
+
       console.log("[Socket.IO] 客户端已断开:", socket.id);
     });
 
@@ -105,5 +220,22 @@ app.prepare().then(() => {
     if (err) throw err;
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> Socket.IO server initialized`);
+  });
+
+  // 优雅关闭
+  process.on("SIGTERM", () => {
+    console.log("> SIGTERM received, shutting down gracefully...");
+    httpServer.close(() => {
+      console.log("> Server closed");
+      process.exit(0);
+    });
+  });
+
+  process.on("SIGINT", () => {
+    console.log("> SIGINT received, shutting down gracefully...");
+    httpServer.close(() => {
+      console.log("> Server closed");
+      process.exit(0);
+    });
   });
 });

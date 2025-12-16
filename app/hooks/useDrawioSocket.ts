@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import { io, Socket } from "socket.io-client";
@@ -18,7 +18,6 @@ import type {
 } from "@/app/types/socket-protocol";
 import { getDrawioXML, replaceDrawioXML } from "@/app/lib/drawio-tools";
 import { useStorageXMLVersions } from "./useStorageXMLVersions";
-import { useCurrentProject } from "./useCurrentProject";
 import { useStorageSettings } from "./useStorageSettings";
 import {
   getNextSubVersion,
@@ -29,8 +28,15 @@ import {
 import { DEFAULT_FIRST_VERSION, WIP_VERSION } from "@/app/lib/storage";
 import { createLogger } from "@/lib/logger";
 import { toErrorString } from "@/lib/error-handler";
+import { CLIENT_TOOL_NAMES } from "@/lib/constants/tool-names";
+import {
+  getActiveChatRun,
+  isChatRunCancelled,
+} from "@/app/lib/chat-run-registry";
 
 const logger = createLogger("Socket Client");
+const { GET_DRAWIO_XML, REPLACE_DRAWIO_XML, EXPORT_DRAWIO } = CLIENT_TOOL_NAMES;
+const TOOL_RESULT_EVENT = "tool:result";
 
 type ConnectionStatus =
   | "connecting"
@@ -38,14 +44,29 @@ type ConnectionStatus =
   | "disconnecting"
   | "disconnected";
 
+type ToolResultLike = {
+  success: boolean;
+  error?: unknown;
+  message?: unknown;
+};
+
+function resolveToolCallError(result: ToolResultLike): string | undefined {
+  if (result.success) return undefined;
+  if (result.error) return toErrorString(result.error);
+  if (result.message) return toErrorString(result.message);
+  return undefined;
+}
+
 /**
  * DrawIO Socket.IO Hook
  *
  * @param editorRef 可选 DrawIO 编辑器引用，供自动版本快照导出 XML/SVG
+ * @param projectUuid 当前项目 UUID（由上层统一来源传入，避免多处 useCurrentProject 状态不同步）
  * @returns { isConnected: boolean } - Socket.IO 连接状态
  */
 export function useDrawioSocket(
   editorRef?: React.RefObject<DrawioEditorRef | null>,
+  projectUuid?: string | null,
 ) {
   const [connectionStatus, setConnectionStatusState] =
     useState<ConnectionStatus>("connecting");
@@ -56,26 +77,70 @@ export function useDrawioSocket(
   > | null>(null);
   const { createHistoricalVersion, getAllXMLVersions } =
     useStorageXMLVersions();
-  const { currentProject } = useCurrentProject();
   const { getSetting } = useStorageSettings();
-  const currentProjectRef = useRef(currentProject);
+  const normalizedProjectUuid = (projectUuid ?? "").trim() || null;
+  const projectUuidRef = useRef<string | null>(normalizedProjectUuid);
   const cachedProjectUuidRef = useRef<string | null>(null);
   const latestMainVersionRef = useRef<string | null>(null);
   const latestSubVersionRef = useRef<string | null>(null);
   const isCreatingSnapshotRef = useRef(false);
+  const joinedProjectRef = useRef<string | null>(null);
+
+  /**
+   * 已取消的工具请求 ID 集合
+   * 使用 LRU 风格的清理策略，限制最大条目数为 100
+   * 避免 tool:cancel 发送后对应的 tool:execute 从未到达导致 ID 永久留存
+   */
+  const cancelledToolRequestsRef = useRef<Set<string>>(new Set());
+  const MAX_CANCELLED_TOOL_REQUESTS = 100;
+
+  const syncProjectRoom = useCallback((projectUuid: string | null) => {
+    const previousProject = joinedProjectRef.current;
+    const socketInstance = socketRef.current;
+
+    if (!socketInstance || socketInstance.disconnected) {
+      return;
+    }
+
+    if (projectUuid && projectUuid !== previousProject) {
+      if (previousProject) {
+        socketInstance.emit("leave_project", previousProject);
+        logger.info("已离开项目房间", {
+          socketId: socketInstance.id,
+          projectUuid: previousProject,
+        });
+      }
+
+      socketInstance.emit("join_project", projectUuid);
+      joinedProjectRef.current = projectUuid;
+      logger.info("已加入项目房间", {
+        socketId: socketInstance.id,
+        projectUuid,
+      });
+    }
+
+    if (!projectUuid && previousProject) {
+      socketInstance.emit("leave_project", previousProject);
+      joinedProjectRef.current = null;
+      logger.info("当前项目为空，已离开先前房间", {
+        socketId: socketInstance.id,
+        projectUuid: previousProject,
+      });
+    }
+  }, []);
 
   useEffect(() => {
-    currentProjectRef.current = currentProject;
-  }, [currentProject]);
+    projectUuidRef.current = normalizedProjectUuid;
+  }, [normalizedProjectUuid]);
 
   useEffect(() => {
-    const projectId = currentProject?.uuid ?? null;
+    const projectId = normalizedProjectUuid;
     if (cachedProjectUuidRef.current !== projectId) {
       cachedProjectUuidRef.current = projectId;
       latestMainVersionRef.current = null;
       latestSubVersionRef.current = null;
     }
-  }, [currentProject]);
+  }, [normalizedProjectUuid]);
 
   useEffect(() => {
     const getLastSubNumber = (version: string | null): number | null => {
@@ -142,47 +207,49 @@ export function useDrawioSocket(
       try {
         const autoVersionEnabled =
           (await getSetting("autoVersionOnAIEdit")) !== "false";
-        const project = currentProjectRef.current;
+        const currentProjectId = projectUuidRef.current;
 
-        if (!autoVersionEnabled || !project?.uuid) {
+        if (!autoVersionEnabled || !currentProjectId) {
           return;
         }
 
         if (isCreatingSnapshotRef.current) {
           logger.debug("已有快照任务进行中，跳过本次自动快照", {
             requestId: request.requestId,
-            projectId: project.uuid,
+            projectId: currentProjectId,
           });
           return;
         }
 
         isCreatingSnapshotRef.current = true;
 
-        if (cachedProjectUuidRef.current !== project.uuid) {
-          cachedProjectUuidRef.current = project.uuid;
+        if (cachedProjectUuidRef.current !== currentProjectId) {
+          cachedProjectUuidRef.current = currentProjectId;
           resetVersionCache();
         }
 
-        await seedVersionCache(project.uuid);
+        await seedVersionCache(currentProjectId);
 
         const timestamp = new Date().toLocaleString("zh-CN");
-        const aiDescription = request.description || "AI 自动编辑";
-        const sourceDescription = originalToolName ?? request.toolName;
-        const versionDescription = `${sourceDescription} - ${aiDescription} (${timestamp})`;
+        const baseDescription =
+          (request.description && request.description.trim()) ||
+          originalToolName ||
+          request.toolName;
+        const versionDescription = `${baseDescription} (${timestamp})`;
 
         let latestMainVersion = latestMainVersionRef.current;
 
         // 没有主版本时，先创建首个主版本（关键帧），再创建子版本
         if (!latestMainVersion) {
           logger.info("未检测到主版本，正在创建首个主版本", {
-            projectId: project?.uuid,
+            projectId: currentProjectId,
             version: DEFAULT_FIRST_VERSION,
           });
 
           await createHistoricalVersion(
-            project.uuid,
+            currentProjectId,
             DEFAULT_FIRST_VERSION,
-            "AI 自动创建的首个主版本",
+            "Auto create by AI",
             editorRef,
             { onExportProgress: undefined },
           );
@@ -190,7 +257,7 @@ export function useDrawioSocket(
           latestMainVersion = DEFAULT_FIRST_VERSION;
           latestMainVersionRef.current = DEFAULT_FIRST_VERSION;
           logger.info("首个主版本创建成功，准备创建子版本", {
-            projectId: project?.uuid,
+            projectId: currentProjectId,
             parentVersion: latestMainVersion,
           });
         }
@@ -205,14 +272,15 @@ export function useDrawioSocket(
         const nextSubVersion = getNextSubVersionIncremental(latestMainVersion);
 
         logger.info("准备创建子版本", {
-          projectId: project?.uuid,
+          projectId: currentProjectId,
           parentVersion: latestMainVersion,
           nextVersion: nextSubVersion,
           requestId: request.requestId,
+          description: versionDescription,
         });
 
         await createHistoricalVersion(
-          project.uuid,
+          currentProjectId,
           nextSubVersion,
           versionDescription,
           editorRef,
@@ -220,16 +288,17 @@ export function useDrawioSocket(
         );
 
         logger.info("已创建版本快照", {
-          projectId: project?.uuid,
+          projectId: currentProjectId,
           version: nextSubVersion,
           requestId: request.requestId,
+          description: versionDescription,
         });
 
         latestMainVersionRef.current = latestMainVersion;
         latestSubVersionRef.current = nextSubVersion;
       } catch (error) {
         logger.error("自动版本创建失败", {
-          projectId: currentProjectRef.current?.uuid,
+          projectId: projectUuidRef.current,
           error,
         });
         resetVersionCache();
@@ -268,6 +337,15 @@ export function useDrawioSocket(
           previousStatus,
         });
       }
+
+      const currentProjectId = projectUuidRef.current;
+      if (currentProjectId) {
+        syncProjectRoom(currentProjectId);
+      } else {
+        logger.warn("连接成功但当前没有项目，等待项目就绪后加入房间", {
+          socketId: socket.id,
+        });
+      }
     });
 
     socket.on("disconnect", (reason: string) => {
@@ -291,9 +369,34 @@ export function useDrawioSocket(
       }
     });
 
+    socket.on("tool:cancel", (payload) => {
+      const currentProjectUuid = projectUuidRef.current;
+      if (!currentProjectUuid) return;
+      if (payload.projectUuid !== currentProjectUuid) return;
+
+      const cancelledRequests = cancelledToolRequestsRef.current;
+      cancelledRequests.add(payload.requestId);
+
+      // LRU 清理：超出最大条目数时删除最早的条目
+      if (cancelledRequests.size > MAX_CANCELLED_TOOL_REQUESTS) {
+        const iterator = cancelledRequests.values();
+        const firstValue = iterator.next().value;
+        if (firstValue !== undefined) {
+          cancelledRequests.delete(firstValue);
+        }
+      }
+
+      logger.info("收到工具取消请求", {
+        requestId: payload.requestId,
+        toolRunId: payload.chatRunId,
+        conversationId: payload.conversationId,
+        reason: payload.reason,
+      });
+    });
+
     // 监听工具执行请求
     socket.on("tool:execute", async (request: ToolCallRequest) => {
-      const currentProjectUuid = currentProjectRef.current?.uuid;
+      const currentProjectUuid = projectUuidRef.current;
 
       logger.debug("收到工具调用请求", {
         toolName: request.toolName,
@@ -301,6 +404,7 @@ export function useDrawioSocket(
         projectId: currentProjectUuid,
         requestProject: request.projectUuid,
         conversationId: request.conversationId,
+        description: request.description,
       });
 
       if (!request.projectUuid) {
@@ -330,19 +434,78 @@ export function useDrawioSocket(
         return;
       }
 
-      try {
-        const originalTool =
-          ((request.input as { _originalTool?: string } | undefined)
-            ?._originalTool ??
-            request._originalTool) ||
-          undefined;
+      if (cancelledToolRequestsRef.current.has(request.requestId)) {
+        cancelledToolRequestsRef.current.delete(request.requestId);
+        socket.emit(TOOL_RESULT_EVENT, {
+          requestId: request.requestId,
+          success: false,
+          error: "tool_cancelled",
+        });
+        logger.info("工具请求已被取消，已返回取消结果", {
+          requestId: request.requestId,
+          toolName: request.toolName,
+        });
+        return;
+      }
 
+      const chatRunIdRaw =
+        typeof request.chatRunId === "string" ? request.chatRunId.trim() : "";
+      if (!chatRunIdRaw) {
+        socket.emit(TOOL_RESULT_EVENT, {
+          requestId: request.requestId,
+          success: false,
+          error: "missing_chatRunId",
+        });
+        logger.warn("收到缺少 chatRunId 的工具请求，已拒绝执行", {
+          toolName: request.toolName,
+          requestId: request.requestId,
+          conversationId: request.conversationId,
+        });
+        return;
+      }
+
+      if (isChatRunCancelled(chatRunIdRaw)) {
+        socket.emit(TOOL_RESULT_EVENT, {
+          requestId: request.requestId,
+          success: false,
+          error: "chat_run_cancelled",
+        });
+        logger.info("收到已取消 run 的工具请求，已拒绝执行", {
+          toolName: request.toolName,
+          requestId: request.requestId,
+          conversationId: request.conversationId,
+          chatRunId: chatRunIdRaw,
+        });
+        return;
+      }
+
+      const activeRunId = getActiveChatRun(request.conversationId);
+      if (activeRunId !== chatRunIdRaw) {
+        socket.emit(TOOL_RESULT_EVENT, {
+          requestId: request.requestId,
+          success: false,
+          error: "chat_run_not_active",
+        });
+        logger.info("收到非当前活跃 run 的工具请求，已拒绝执行", {
+          toolName: request.toolName,
+          requestId: request.requestId,
+          conversationId: request.conversationId,
+          chatRunId: chatRunIdRaw,
+          activeRunId,
+        });
+        return;
+      }
+
+      try {
         if (
-          request.toolName === "replace_drawio_xml" &&
-          (originalTool === "drawio_overwrite" ||
-            originalTool === "drawio_edit_batch")
+          request.toolName === REPLACE_DRAWIO_XML ||
+          request.toolName === EXPORT_DRAWIO
         ) {
-          await handleAutoVersionSnapshot(request, originalTool);
+          await handleAutoVersionSnapshot(
+            request,
+            (request.description && request.description.trim()) ||
+              request.toolName,
+          );
         }
 
         let result: {
@@ -354,7 +517,7 @@ export function useDrawioSocket(
 
         // 根据工具名称执行相应函数
         switch (request.toolName) {
-          case "get_drawio_xml":
+          case GET_DRAWIO_XML:
             result = (await getDrawioXML()) as unknown as {
               success: boolean;
               error?: string;
@@ -363,21 +526,28 @@ export function useDrawioSocket(
             };
             break;
 
-          case "replace_drawio_xml":
+          case REPLACE_DRAWIO_XML: {
             if (!request.input?.drawio_xml) {
               throw new Error("缺少 drawio_xml 参数");
             }
-            const skipExportValidation = originalTool === "drawio_edit_batch";
+            const skipExportValidation = Boolean(
+              (request.input as { skip_export_validation?: boolean })
+                ?.skip_export_validation,
+            );
             result = await replaceDrawioXML(
               request.input.drawio_xml as string,
               {
                 requestId: request.requestId,
                 editorRef,
                 skipExportValidation,
+                description:
+                  (request.description && request.description.trim()) ||
+                  request.toolName,
               },
             );
             // 事件派发已在 replaceDrawioXML 内部处理，这里避免重复派发
             break;
+          }
 
           default:
             throw new Error(`未知工具: ${request.toolName}`);
@@ -388,16 +558,10 @@ export function useDrawioSocket(
           requestId: request.requestId,
           success: result.success,
           result: result,
-          error: result.success
-            ? undefined
-            : result.error
-              ? toErrorString(result.error)
-              : result.message
-                ? toErrorString(result.message)
-                : undefined,
+          error: resolveToolCallError(result as ToolResultLike),
         };
 
-        socket.emit("tool:result", response);
+        socket.emit(TOOL_RESULT_EVENT, response);
         logger.debug("已返回工具执行结果", {
           toolName: request.toolName,
           success: result.success,
@@ -411,7 +575,7 @@ export function useDrawioSocket(
           error: toErrorString(error),
         };
 
-        socket.emit("tool:result", response);
+        socket.emit(TOOL_RESULT_EVENT, response);
         logger.error("工具执行失败", {
           toolName: request.toolName,
           requestId: request.requestId,
@@ -422,12 +586,31 @@ export function useDrawioSocket(
 
     // 清理函数
     return () => {
+      const projectUuid = joinedProjectRef.current;
+      if (projectUuid) {
+        socket.emit("leave_project", projectUuid);
+        logger.info("Socket 客户端清理，离开项目房间", {
+          socketId: socket.id,
+          projectUuid,
+        });
+      }
+
       logger.info("Socket 客户端清理，断开连接");
       applyConnectionStatus("disconnecting");
       socket.disconnect();
       applyConnectionStatus("disconnected");
     };
-  }, [createHistoricalVersion, getAllXMLVersions, getSetting, editorRef]);
+  }, [
+    createHistoricalVersion,
+    getAllXMLVersions,
+    getSetting,
+    editorRef,
+    syncProjectRoom,
+  ]);
+
+  useEffect(() => {
+    syncProjectRoom(normalizedProjectUuid);
+  }, [normalizedProjectUuid, syncProjectRoom]);
 
   return { isConnected: connectionStatus === "connected", connectionStatus };
 }

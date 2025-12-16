@@ -1,147 +1,207 @@
 # DrawIO2Go
 
-基于 Electron + Next.js + HeroUI 构建的跨平台 DrawIO 编辑器应用。
+<p align="center">
+  <strong>AI-Powered, Human-AI Collaboration</strong>
+</p>
 
-## 功能特性
+<p align="center">
+  <a href="./README_zh-CN.md">简体中文</a> | English
+</p>
 
-- ✨ 基于 DrawIO 的强大图表编辑功能
-- 💾 本地文件保存和加载
-- ⚙️ 自定义默认保存路径
-- 🎨 现代化 UI（HeroUI v3 + Tailwind CSS v4）
-- 🖥️ 跨平台支持（Windows, macOS, Linux）
-- 🌐 同时支持浏览器和桌面应用模式
+<p align="center">
+  <img src="https://img.shields.io/badge/Electron-38.x-47848F?logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white" alt="Next.js">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+</p>
 
-## 技术栈
+---
 
-- **前端框架**: Next.js 15 (App Router)
-- **UI 库**: HeroUI v3 (Alpha)
-- **样式**: Tailwind CSS v4
-- **DrawIO 集成**: react-drawio
-- **桌面应用**: Electron
-- **语言**: TypeScript
+A modern DrawIO editor application dedicated to building better **human-AI collaborative** modeling tools with AI assistance. User-centered, not seeking simple replacement, but exploring how to best complement each other with AI.
 
-## 开发环境要求
+<div align="center">
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>Version Management</h3>
+      <p>Manual creation of major versions + automatic sub-versions on AI modifications</p>
+      <img src="111" alt="Version Control" width="100%" />
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Multi-Provider Management</h3>
+      <p>Support for multiple LLM providers/models switching</p>
+      <img src="111" alt="Multi-Provider Control" width="100%" />
+      <br />
+      <sub>Currently only supports OpenAI/DeepSeek/Anthropic formats</sub>
+    </td>
+  </tr>
+    <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>Version Comparison</h3>
+      <p>Easily compare/rollback differences between modified versions</p>
+      <img src="111" alt="Comparison Page" width="100%" />
+      <br />
+      <sub>Smart comparison is currently in beta, may have suboptimal effects/slow rendering</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>AI-Powered Editing</h3>
+      <p>Precise modification tools based on XPath/DrawIO element IDs</p>
+      <img src="111" alt="Demo" width="100%" />
+      <br />
+    </td>
+  </tr>
+</table>
+</div>
 
-- Node.js 20.x 或更高版本
-- npm 或其他包管理器
+Provides ready-to-use Electron APP. Can also be deployed as a web application, see the Quick Start section below for details.
 
-## 安装和运行
+Here are some actual demos and their prompts:
 
-### 1. 安装依赖
+<div align="center">
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>U-net Architecture Diagram</h3>
+      <p>Draw a U-net network</p>
+      <img src="111" alt="Version Control" width="100%" />
+      <br />
+      <sub>Drawn using glm-4.6</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Image to DrawIO</h3>
+      <p>Support for multiple LLM providers/models switching</p>
+      <img src="111" alt="Multi-Provider Control" width="100%" />
+      <br />
+      <sub>Drawn using claude-sonnet-4.5, image conversation support is still in beta</sub>
+    </td>
+  </tr>
+    <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>UML Architecture Diagram</h3>
+      <p>Draw a classic front-end and back-end web application UML architecture diagram</p>
+      <img src="111" alt="Comparison Page" width="100%" />
+      <br />
+      <sub>Drawn using glm-4.6</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Pure Element Drawing</h3>
+      <p>Draw a laptop</p>
+      <img src="111" alt="Demo" width="100%" />
+      <br />
+      <sub>Drawn using claude-sonnet-4.5</sub>
+      <br />
+    </td>
+  </tr>
+</table>
+</div>
+
+## Quick Start
+
+### Using Electron APP
+
+Go to [Releases](https://github.com/Menghuan1918/drawio2go/releases) to download and install the latest version
+
+### Deploy as Web Application
+
+Requirements:
+
+- Node.js 20.x or higher
+- npm
+
+Then run the following commands
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-username/drawio2go.git
+cd drawio2go
+
+# Install dependencies
 npm install
 ```
 
-### 2. 开发模式
-
-**仅运行 Next.js 网页版**:
+**Web Mode (Browser):**
 
 ```bash
 npm run dev
 ```
 
-然后在浏览器中访问 `http://localhost:3000`
+Open [http://localhost:3000](http://localhost:3000) in your browser
 
-**运行 Electron 桌面应用**:
+> [!IMPORTANT]
+> Please note that there is currently no authentication mechanism for the web version. Do not deploy it to the public internet (LLM keys are stored in the browser, but DrawIO tool callbacks are not authenticated, others may be able to obtain DrawIO tool call information)
 
-```bash
-npm run electron:dev
-```
+## Known Issues / Upcoming Features
 
-### 3. 生产构建
+- [ ] Support for passing selected elements from canvas to AI in Electron
+- [ ] Full image/file conversation support
+- [ ] Support for exporting projects to files
+- [ ] In web version, conversations may not be cancellable
+- [ ] Support for custom DrawIO widget URL
 
-**构建 Next.js 应用**:
-
-```bash
-npm run build
-```
-
-**构建 Electron 应用**:
-
-```bash
-npm run electron:build
-```
-
-这将在 `dist` 目录中生成适合您平台的安装包。
-
-## 使用说明
-
-### 主界面
-
-- **DrawIO 编辑器**: 主要编辑区域，占据大部分界面
-- **顶栏操作区**: 由左到右依次展示选区状态 → 工程选择按钮（居中铺满）→ 加载/保存 → 侧栏收起/展开图标
-- **统一侧栏**: 点击顶栏最右侧图标展开，顶部 Tab 可在“聊天 / 设置 / 版本”之间切换
-
-### 设置
-
-1. 点击顶栏最右侧的侧栏图标展开统一侧栏
-2. 在侧栏顶部 Tab 中选择“设置”
-3. 配置以下项目：
-   - **默认启动路径**: 设置图表文件的默认保存/加载目录
-     - 点击"浏览"按钮选择文件夹
-     - 或直接输入路径
-     - 设置保存后，使用"保存"按钮会自动在此目录创建文件
-
-### 文件操作
-
-#### 保存图表
-
-1. 编辑完成后，点击"保存"按钮
-2. 如果已设置默认路径，文件会自动保存到该目录
-3. 否则会弹出文件选择对话框
-
-#### 加载图表
-
-1. 点击"加载"按钮
-2. 选择要打开的 .drawio 文件
-3. 图表会在编辑器中打开
-
-### 自动保存
-
-应用会自动将编辑内容保存到浏览器的 localStorage，确保数据不会丢失。
-
-## 项目结构
+## Project Structure
 
 ```
 drawio2go/
-├── app/                      # Next.js App Router 应用
-│   ├── components/           # React 组件
-│   │   ├── DrawioEditorNative.tsx  # DrawIO 编辑器组件（iframe + PostMessage）
-│   │   ├── TopBar.tsx        # 顶栏组件
-│   │   └── SettingsPopover.tsx # 设置弹窗组件
-│   ├── layout.tsx            # 根布局
-│   ├── page.tsx              # 主页面
-│   └── globals.css           # 全局样式
-├── electron/                 # Electron 相关文件
-│   ├── main.js               # 主进程
-│   └── preload.js            # 预加载脚本
-├── package.json
-├── next.config.mjs
-├── postcss.config.mjs
-└── tsconfig.json
+├── app/                    # Next.js App Router
+│   ├── components/         # React components
+│   │   ├── chat/          # AI chat module
+│   │   ├── settings/      # Settings panels
+│   │   ├── version/       # Version management
+│   │   └── toast/         # Notification system
+│   ├── lib/               # Utilities & services
+│   │   └── storage/       # Unified storage layer
+│   ├── hooks/             # React hooks
+│   ├── i18n/              # Internationalization
+│   ├── api/               # API routes
+│   └── styles/            # CSS modules
+├── electron/              # Electron main process
+└── server.js              # Socket.IO + Next.js server
 ```
 
-## 开发说明
+## Development Guide
 
-### 添加新组件
+### Common Commands
 
-组件应放置在 `app/components/` 目录下，需要交互的组件记得添加 `"use client"` 指令。
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run lint         # Run ESLint + TypeScript check + complexity check
+npm run test         # Run tests
+npm run format       # Format code with Prettier
+```
 
-### 修改 Electron 配置
+### Production Build
 
-Electron 相关配置在 `electron/main.js` 中，包括窗口大小、IPC 通信等。
+```bash
+# Build Next.js application
+npm run build
 
-### 样式自定义
+# Build Electron installer (outputs to dist/)
+npm run electron:build
+```
 
-全局样式在 `app/globals.css` 中，可以覆盖 HeroUI 的 CSS 变量来自定义主题。
+## Contributing
 
-## 注意事项
+Contributions are welcome! Please read our contributing guidelines before submitting a PR.
 
-- HeroUI v3 目前处于 Alpha 阶段，API 可能会有变化
-- 开发环境下 Electron 会自动打开开发者工具
-- 文件保存路径需要有写入权限
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT
+This project is licensed under the MIT License
+
+## Acknowledgments
+
+- [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) - Inspiration source, excellent DrawIO AI generation implementation
+- [DrawIO](https://www.drawio.com/) - Diagram editing engine
+- [HeroUI](https://heroui.com/) - UI component library
+- [Vercel AI SDK](https://sdk.vercel.ai/) - AI integration framework

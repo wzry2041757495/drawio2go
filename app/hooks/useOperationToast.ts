@@ -32,12 +32,19 @@ export function useOperationToast() {
   const showNotice = useCallback(
     (message: string, status: ToastStatus) => {
       if (!message) return;
-      const title =
-        status === "success"
-          ? t("toasts.operationSuccessTitle")
-          : status === "warning"
-            ? t("toasts.operationWarningTitle")
-            : t("toasts.operationFailedTitle");
+      let title: string;
+      switch (status) {
+        case "success":
+          title = t("toasts.operationSuccessTitle");
+          break;
+        case "warning":
+          title = t("toasts.operationWarningTitle");
+          break;
+        case "danger":
+        default:
+          title = t("toasts.operationFailedTitle");
+          break;
+      }
 
       push({
         variant: status,

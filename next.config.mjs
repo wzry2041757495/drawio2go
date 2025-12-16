@@ -8,8 +8,9 @@ const nextConfig = {
     optimizePackageImports: ["@heroui/react"],
   },
 
-  // 生产环境输出配置
-  output: process.env.NODE_ENV === "production" ? "export" : undefined,
+  // 使用 standalone 模式以支持 API Routes 和 SSR
+  // Electron 生产模式需要内嵌完整服务器
+  output: "standalone",
 
   // 图片优化配置
   images: {

@@ -35,6 +35,9 @@
     "defaultVersion": "Default version",
     "initialVersion": "Initial version",
     "defaultConversation": "New conversation",
+    "conversationNotReady": "Conversation is not ready yet. Please try again shortly.",
+    "visionNotSupported": "The current model does not support image input (vision). Please switch to a vision-capable model and try again.",
+    "imagePlaceholder": "Image",
     "roles": {
       "user": "User",
       "assistant": "Assistant",
@@ -85,13 +88,16 @@
     "thinking": {
       "streaming": "Thinking...",
       "title": "Reasoning",
-      "empty": "No reasoning content"
+      "empty": "No reasoning content",
+      "timer": "Thinking for {{seconds}}s"
     },
     "emptyMessage": "(Empty message)"
   },
   "input": {
     "placeholder": "Type a message...",
     "placeholderWithProject": "Ask {{project}}...",
+    "configureModelFirst": "Please configure a model first",
+    "goToModelSettings": "Open model settings",
     "send": "Send",
     "stop": "Stop",
     "newChat": "New chat",
@@ -100,6 +106,7 @@
     "waitingForAI": "Waiting for AI response...",
     "reset": "Clear input",
     "attachFile": "Attach file",
+    "dropImageHint": "Drag an image here to upload",
     "shortcuts": {
       "send": "Enter to send",
       "newLine": "Shift+Enter for new line"
@@ -230,11 +237,14 @@
   },
   "modelSelector": {
     "label": "Current model",
+    "defaultLabel": "Default",
     "placeholder": "Select or search model",
     "empty": "No models available. Add providers and models in Settings first.",
     "noResult": "No available models",
     "selectFailedTitle": "Model switch failed",
-    "selectFailedDescription": "Please choose another model or try again later."
+    "selectFailedDescription": "Please choose another model or try again later.",
+    "temperature": "Temperature",
+    "maxToolRounds": "Tool rounds"
   },
   "errors": {
     "loadFailed": "Failed to load messages",

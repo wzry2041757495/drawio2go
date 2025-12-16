@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Alert } from "@heroui/react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   useChatLock,
   useNetworkStatus,
@@ -19,11 +20,25 @@ import {
 } from "@/app/hooks";
 import { useAlertDialog } from "@/app/components/alert";
 import { useI18n } from "@/app/i18n/hooks";
-import { DEFAULT_PROJECT_UUID } from "@/app/lib/storage";
+import { DEFAULT_PROJECT_UUID, getStorage } from "@/app/lib/storage";
 import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
 import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
-import { fingerprintMessage } from "@/app/lib/chat-session-service";
+import {
+  convertUIMessageToCreateInput,
+  fingerprintMessage,
+} from "@/app/lib/chat-session-service";
 import { generateUUID } from "@/app/lib/utils";
+import {
+  cancelChatRun,
+  clearActiveChatRun,
+  setActiveChatRun,
+} from "@/app/lib/chat-run-registry";
+import { useImageAttachments } from "@/hooks/useImageAttachments";
+import {
+  convertAttachmentItemToImagePart,
+  fileToDataUrl,
+  uploadImageAttachment,
+} from "@/lib/image-message-utils";
 
 import ChatHistoryView from "./chat/ChatHistoryView";
 import ChatShell from "./chat/ChatShell";
@@ -40,6 +55,40 @@ import {
 
 const logger = createLogger("ChatSidebar");
 
+const hasImageParts = (msg: unknown): boolean => {
+  if (!msg || typeof msg !== "object") return false;
+  const parts = (msg as { parts?: unknown }).parts;
+  if (!Array.isArray(parts)) return false;
+  return parts.some(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      (part as { type?: unknown }).type === "image",
+  );
+};
+
+const runWithConcurrency = async <T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> => {
+  const results: R[] = new Array(items.length) as R[];
+  let cursor = 0;
+
+  const workers = new Array(Math.min(limit, items.length))
+    .fill(0)
+    .map(async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await fn(items[index]);
+      }
+    });
+
+  await Promise.all(workers);
+  return results;
+};
+
 interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -54,6 +103,8 @@ export default function ChatSidebar({
   currentProjectId,
   isSocketConnected = true,
 }: ChatSidebarProps) {
+  type UseChatMessage = UIMessage<MessageMetadata>;
+
   const [input, setInput] = useState("");
   const [expandedToolCalls, setExpandedToolCalls] = useState<
     Record<string, boolean>
@@ -62,6 +113,7 @@ export default function ChatSidebar({
     Record<string, boolean>
   >({});
   const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
+  const imageAttachments = useImageAttachments();
 
   // ========== Hook 聚合 ==========
   const { t, i18n } = useI18n();
@@ -130,6 +182,11 @@ export default function ChatSidebar({
 
   // ========== 引用 ==========
   const sendingSessionIdRef = useRef<string | null>(null);
+  const sendingChatRunIdRef = useRef<string | null>(null);
+  const imageDataUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const imageDataUrlPendingRef = useRef<Map<string, Promise<string | null>>>(
+    new Map(),
+  );
   const alertOwnerRef = useRef<
     "socket" | "single-delete" | "batch-delete" | null
   >(null);
@@ -141,6 +198,7 @@ export default function ChatSidebar({
   const forceStopReasonRef = useRef<"sidebar" | "history" | null>(null);
   const wasOfflineRef = useRef(false);
   const previousOnlineStatusRef = useRef<boolean | null>(null);
+  const reasoningTimersRef = useRef<Map<string, number>>(new Map());
 
   // ========== 派生状态 ==========
   const fallbackModelName = useMemo(
@@ -226,7 +284,6 @@ export default function ChatSidebar({
     createConversation,
     ensureMessagesForConversation,
     resolveConversationId,
-    startTempConversation,
     removeConversationsFromState,
     handleAbnormalExitIfNeeded,
     markConversationAsStreaming,
@@ -305,6 +362,7 @@ export default function ChatSidebar({
           await chatService.saveNow(parsed.conversationId, parsed.messages, {
             resolveConversationId,
             onConversationResolved: (resolvedId) => {
+              // eslint-disable-next-line sonarjs/no-nested-functions -- setState 函数式更新需要回调，且此处嵌套层级较深
               setActiveConversationId((prev) => prev ?? resolvedId);
             },
           });
@@ -321,6 +379,149 @@ export default function ChatSidebar({
   }, [chatService, resolveConversationId, setActiveConversationId]);
 
   // ========== useChat 集成 ==========
+  const chatTransport = useMemo(() => {
+    return new DefaultChatTransport<UseChatMessage>({
+      prepareSendMessagesRequest: async (options) => {
+        const getOrCreateDataUrl = async (
+          attachmentId: string,
+        ): Promise<string | null> => {
+          const cached = imageDataUrlCacheRef.current.get(attachmentId);
+          if (cached) {
+            return cached;
+          }
+
+          const pending = imageDataUrlPendingRef.current.get(attachmentId);
+          if (pending) {
+            return await pending;
+          }
+
+          // eslint-disable-next-line sonarjs/no-nested-functions -- 深层异步 IIFE 便于复用闭包变量并保持逻辑集中
+          const request = (async () => {
+            try {
+              const storage = await getStorage();
+              const attachment = await storage.getAttachment(attachmentId);
+              if (!attachment) return null;
+
+              const mimeType =
+                attachment.mime_type || "application/octet-stream";
+              const blobData = attachment.blob_data as unknown;
+
+              if (blobData instanceof Blob) {
+                const dataUrl = await fileToDataUrl(blobData);
+                imageDataUrlCacheRef.current.set(attachmentId, dataUrl);
+                return dataUrl;
+              }
+
+              if (attachment.file_path && window.electronFS?.readFile) {
+                const buffer = await window.electronFS.readFile(
+                  attachment.file_path,
+                );
+                const blob = new Blob([buffer], { type: mimeType });
+                const dataUrl = await fileToDataUrl(blob);
+                imageDataUrlCacheRef.current.set(attachmentId, dataUrl);
+                return dataUrl;
+              }
+            } catch (error) {
+              logger.warn("[ChatSidebar] 读取附件 dataUrl 失败，已跳过", {
+                attachmentId,
+                error,
+              });
+            }
+
+            return null;
+          })();
+
+          imageDataUrlPendingRef.current.set(attachmentId, request);
+          // eslint-disable-next-line sonarjs/no-nested-functions -- finally 回调需要捕获 attachmentId/request 做一致性清理
+          request.finally(() => {
+            if (imageDataUrlPendingRef.current.get(attachmentId) === request) {
+              imageDataUrlPendingRef.current.delete(attachmentId);
+            }
+          });
+
+          return await request;
+        };
+
+        const fillDataUrlIfMissing = async (part: unknown) => {
+          if (!part || typeof part !== "object") return part;
+          const record = part as Record<string, unknown>;
+          if (record.type !== "image") return part;
+          if (typeof record.dataUrl === "string" && record.dataUrl.trim()) {
+            return part;
+          }
+
+          const attachmentId =
+            typeof record.attachmentId === "string" ? record.attachmentId : "";
+          if (!attachmentId) {
+            return part;
+          }
+
+          const dataUrl = await getOrCreateDataUrl(attachmentId);
+          if (!dataUrl) return part;
+
+          return { ...record, dataUrl };
+        };
+
+        const concurrency = 5;
+
+        const missingAttachmentIds = new Set<string>();
+        for (const msg of options.messages) {
+          const parts = (msg as { parts?: unknown }).parts;
+          if (!Array.isArray(parts)) continue;
+          for (const part of parts) {
+            if (
+              typeof part === "object" &&
+              part !== null &&
+              (part as { type?: unknown }).type === "image"
+            ) {
+              const record = part as Record<string, unknown>;
+              const hasDataUrl =
+                typeof record.dataUrl === "string" && record.dataUrl.trim();
+              if (hasDataUrl) continue;
+              const attachmentId =
+                typeof record.attachmentId === "string"
+                  ? record.attachmentId
+                  : "";
+              if (attachmentId) missingAttachmentIds.add(attachmentId);
+            }
+          }
+        }
+
+        const uniqueMissing = Array.from(missingAttachmentIds);
+        if (uniqueMissing.length > 0) {
+          await runWithConcurrency(
+            uniqueMissing,
+            concurrency,
+            getOrCreateDataUrl,
+          );
+        }
+
+        const nextMessages = await Promise.all(
+          options.messages.map(async (msg) => {
+            if (!hasImageParts(msg)) return msg;
+            const parts = (msg as { parts?: unknown }).parts;
+            if (!Array.isArray(parts)) return msg;
+
+            const nextParts = await Promise.all(
+              parts.map(fillDataUrlIfMissing),
+            );
+            return {
+              ...msg,
+              parts: nextParts,
+            } as unknown as UseChatMessage;
+          }),
+        );
+
+        return {
+          body: {
+            ...(options.body ?? {}),
+            messages: nextMessages,
+          },
+        };
+      },
+    });
+  }, []);
+
   const {
     messages,
     setMessages,
@@ -328,9 +529,10 @@ export default function ChatSidebar({
     status,
     stop,
     error: chatError,
-  } = useChat<ChatUIMessage>({
+  } = useChat<UseChatMessage>({
     id: activeConversationId || "default",
-    messages: initialMessages,
+    messages: initialMessages as unknown as UseChatMessage[],
+    transport: chatTransport,
     onFinish: async ({ messages: finishedMessages }) => {
       const targetSessionId = sendingSessionIdRef.current;
 
@@ -340,20 +542,29 @@ export default function ChatSidebar({
           return;
         }
 
-        await chatService.saveNow(targetSessionId, finishedMessages, {
-          forceTitleUpdate: true,
-          resolveConversationId,
-          onConversationResolved: (resolvedId) => {
-            setActiveConversationId(resolvedId);
+        await chatService.saveNow(
+          targetSessionId,
+          finishedMessages as unknown as ChatUIMessage[],
+          {
+            forceTitleUpdate: true,
+            resolveConversationId,
+            onConversationResolved: (resolvedId) => {
+              setActiveConversationId(resolvedId);
+            },
           },
-        });
+        );
       } catch (error) {
         logger.error("[ChatSidebar] 保存消息失败:", error);
       } finally {
+        const runId = sendingChatRunIdRef.current;
         if (targetSessionId) {
           void updateStreamingFlag(targetSessionId, false);
+          if (runId) {
+            clearActiveChatRun(targetSessionId, runId);
+          }
         }
         sendingSessionIdRef.current = null;
+        sendingChatRunIdRef.current = null;
         releaseLock();
       }
     },
@@ -389,6 +600,77 @@ export default function ChatSidebar({
     () => messages.map(ensureMessageMetadata),
     [messages, ensureMessageMetadata],
   );
+
+  useEffect(() => {
+    const activeKeys = new Set<string>();
+
+    messages.forEach((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.parts)) return;
+
+      msg.parts.forEach((part, index) => {
+        if (part.type !== "reasoning") return;
+
+        const key = `${msg.id}-${index}`;
+        activeKeys.add(key);
+
+        const state = (part as { state?: string }).state;
+        const durationMs = (part as { durationMs?: number }).durationMs;
+
+        if (state === "streaming" && !reasoningTimersRef.current.has(key)) {
+          reasoningTimersRef.current.set(key, Date.now());
+        }
+
+        if (state === "complete") {
+          if (
+            durationMs == null &&
+            reasoningTimersRef.current.has(key) &&
+            typeof reasoningTimersRef.current.get(key) === "number"
+          ) {
+            const startTime = reasoningTimersRef.current.get(key)!;
+            const computedDuration = Math.max(0, Date.now() - startTime);
+
+            // eslint-disable-next-line sonarjs/no-nested-functions -- setMessages 函数式更新需要回调，且此处嵌套层级较深
+            setMessages((prev) => {
+              const messageIndex = prev.findIndex((item) => item.id === msg.id);
+              if (messageIndex === -1) return prev;
+
+              const targetMessage = prev[messageIndex];
+              const nextParts = Array.isArray(targetMessage.parts)
+                ? [...targetMessage.parts]
+                : [];
+
+              if (
+                nextParts[index]?.type !== "reasoning" ||
+                (nextParts[index] as { durationMs?: number }).durationMs != null
+              ) {
+                return prev;
+              }
+
+              nextParts[index] = {
+                ...nextParts[index],
+                durationMs: computedDuration,
+              } as unknown as UseChatMessage["parts"][number];
+
+              const nextMessages = [...prev];
+              nextMessages[messageIndex] = {
+                ...targetMessage,
+                parts: nextParts,
+              };
+              return nextMessages;
+            });
+          }
+
+          reasoningTimersRef.current.delete(key);
+        }
+      });
+    });
+
+    reasoningTimersRef.current.forEach((_value, key) => {
+      if (!activeKeys.has(key)) {
+        reasoningTimersRef.current.delete(key);
+      }
+    });
+  }, [messages, setMessages]);
 
   const lastMessageIsUser = useMemo(() => {
     if (!displayMessages || displayMessages.length === 0) return false;
@@ -450,6 +732,31 @@ export default function ChatSidebar({
     ],
   );
 
+  const cancelChatRunOnServer = useCallback(
+    (chatRunId: string, reason: string) => {
+      const normalizedChatRunId = chatRunId.trim();
+      const normalizedReason = reason.trim() || "user_cancelled";
+      if (!normalizedChatRunId) return;
+
+      fetch("/api/chat/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chatRunId: normalizedChatRunId,
+          reason: normalizedReason,
+        }),
+        keepalive: true,
+      }).catch((error) => {
+        logger.debug("[ChatSidebar] 取消上报失败（可忽略）", {
+          chatRunId: normalizedChatRunId,
+          reason: normalizedReason,
+          error,
+        });
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     const previousSocketStatus = previousSocketStatusRef.current;
     const socketStatusChanged = previousSocketStatus !== isSocketConnected;
@@ -461,15 +768,30 @@ export default function ChatSidebar({
       socketStopHandledRef.current = true;
       logger.warn("[ChatSidebar] Socket 断开，停止聊天请求");
 
-      stop();
-      releaseLock();
-
+      const runId = sendingChatRunIdRef.current;
       const targetConversationId =
         activeConversationId ?? sendingSessionIdRef.current;
 
+      if (runId) {
+        cancelChatRun(runId);
+        if (targetConversationId) {
+          clearActiveChatRun(targetConversationId, runId);
+        }
+        cancelChatRunOnServer(runId, "socket_disconnected");
+      }
+
+      stop();
+      releaseLock();
+
       if (targetConversationId) {
-        void updateStreamingFlag(targetConversationId, false);
-        void resolveConversationId(targetConversationId)
+        updateStreamingFlag(targetConversationId, false).catch((error) => {
+          logger.error("[ChatSidebar] Socket 断开后更新流式状态失败", {
+            conversationId: targetConversationId,
+            error,
+          });
+        });
+
+        resolveConversationId(targetConversationId)
           .then((resolvedId) => markConversationAsCompleted(resolvedId))
           .catch((error) => {
             logger.error("[ChatSidebar] Socket 断开后标记对话完成失败", {
@@ -549,6 +871,7 @@ export default function ChatSidebar({
     }
   }, [
     activeConversationId,
+    cancelChatRunOnServer,
     closeAlertDialog,
     isChatStreaming,
     isI18nReady,
@@ -577,11 +900,24 @@ export default function ChatSidebar({
         logger.info("[ChatSidebar] 切换到历史视图，停止聊天请求");
       }
 
-      stop();
-      releaseLock();
-
       const targetConversationId =
         activeConversationId ?? sendingSessionIdRef.current;
+
+      const runId = sendingChatRunIdRef.current;
+      if (runId) {
+        cancelChatRun(runId);
+        if (targetConversationId) {
+          clearActiveChatRun(targetConversationId, runId);
+        }
+        cancelChatRunOnServer(
+          runId,
+          reason === "sidebar" ? "sidebar_closed" : "switch_to_history",
+        );
+        sendingChatRunIdRef.current = null;
+      }
+
+      stop();
+      releaseLock();
 
       if (targetConversationId) {
         void updateStreamingFlag(targetConversationId, false);
@@ -589,6 +925,7 @@ export default function ChatSidebar({
     },
     [
       activeConversationId,
+      cancelChatRunOnServer,
       isChatStreaming,
       releaseLock,
       stop,
@@ -629,15 +966,31 @@ export default function ChatSidebar({
         logger.warn("[ChatSidebar] 网络断开，当前无流式请求，释放聊天锁");
       }
 
-      stop();
-      releaseLock();
-
+      const runId = sendingChatRunIdRef.current;
       const targetConversationId =
         activeConversationId ?? sendingSessionIdRef.current;
 
+      if (runId) {
+        cancelChatRun(runId);
+        if (targetConversationId) {
+          clearActiveChatRun(targetConversationId, runId);
+        }
+        cancelChatRunOnServer(runId, "network_offline");
+        sendingChatRunIdRef.current = null;
+      }
+
+      stop();
+      releaseLock();
+
       if (targetConversationId) {
-        void updateStreamingFlag(targetConversationId, false);
-        void resolveConversationId(targetConversationId)
+        updateStreamingFlag(targetConversationId, false).catch((error) => {
+          logger.error("[ChatSidebar] 网络断开后更新流式状态失败", {
+            conversationId: targetConversationId,
+            error,
+          });
+        });
+
+        resolveConversationId(targetConversationId)
           .then((resolvedId) => markConversationAsCompleted(resolvedId))
           .catch((error) => {
             logger.error("[ChatSidebar] 网络断开后标记对话完成失败", {
@@ -674,6 +1027,7 @@ export default function ChatSidebar({
     }
   }, [
     activeConversationId,
+    cancelChatRunOnServer,
     isChatStreaming,
     isOnline,
     markConversationAsCompleted,
@@ -732,7 +1086,9 @@ export default function ChatSidebar({
         return current;
       }
 
-      const currentFingerprints = current.map(fingerprintMessage);
+      const currentFingerprints = (current as unknown as ChatUIMessage[]).map(
+        fingerprintMessage,
+      );
 
       const isSame = areFingerprintsEqual(
         cachedFingerprints,
@@ -748,7 +1104,7 @@ export default function ChatSidebar({
       lastSyncedToUIRef.current[targetConversationId] = cachedFingerprints;
       lastSyncedToStoreRef.current[targetConversationId] = cachedFingerprints;
 
-      return cached;
+      return cached as unknown as UseChatMessage[];
     });
 
     // 在微任务中清除来源标记，确保后续写回路径正常运行
@@ -839,6 +1195,7 @@ export default function ChatSidebar({
         (message) =>
           message.metadata?.isDisconnected &&
           message.parts.some(
+            // eslint-disable-next-line sonarjs/no-nested-functions -- 简单谓词回调，但位于深层卸载处理逻辑中
             (part) => part.type === "text" && part.text === pageClosedText,
           ),
       );
@@ -930,8 +1287,34 @@ export default function ChatSidebar({
 
   const submitMessage = async () => {
     const trimmedInput = input.trim();
+    const readyAttachments = imageAttachments.attachments.filter(
+      (item) => item.status === "ready",
+    );
+    const hasReadyAttachments = readyAttachments.length > 0;
+    const hasHistoryImages = displayMessages.some((message) =>
+      message.parts?.some((part) => part.type === "image"),
+    );
 
-    if (!trimmedInput || !llmConfig || configLoading || isChatStreaming) {
+    if (
+      (!trimmedInput && !hasReadyAttachments) ||
+      !llmConfig ||
+      configLoading ||
+      isChatStreaming
+    ) {
+      return;
+    }
+
+    if (
+      (hasReadyAttachments || hasHistoryImages) &&
+      !llmConfig.capabilities?.supportsVision
+    ) {
+      showNotice(
+        t(
+          "chat:messages.visionNotSupported",
+          "当前模型不支持图片输入（vision），请切换到支持视觉的模型后再发送。",
+        ),
+        "warning",
+      );
       return;
     }
 
@@ -967,41 +1350,121 @@ export default function ChatSidebar({
       return;
     }
 
-    let targetSessionId = activeConversationId;
-
-    // 如果没有活动会话，立即启动异步创建（不阻塞消息发送）
+    const targetSessionId = activeConversationId;
     if (!targetSessionId) {
-      logger.warn("[ChatSidebar] 检测到没有活动会话，立即启动异步创建新对话");
-      const tempConversationId = startTempConversation(
-        t("chat:messages.defaultConversation"),
+      showNotice(
+        t("chat:messages.conversationNotReady", "对话尚未就绪，请稍后重试。"),
+        "warning",
       );
-      setActiveConversationId(tempConversationId);
-      targetSessionId = tempConversationId;
+      return;
     }
 
     sendingSessionIdRef.current = targetSessionId;
+    sendingChatRunIdRef.current = null;
     logger.debug("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
+
+    const messageId = generateUUID("msg");
+    const createdAt = Date.now();
+
+    const imageParts = hasReadyAttachments
+      ? await Promise.all(
+          readyAttachments.map((item) =>
+            convertAttachmentItemToImagePart(item, item.id),
+          ),
+        )
+      : [];
+
+    const parts: ChatUIMessage["parts"] = [
+      ...(trimmedInput
+        ? [
+            {
+              type: "text",
+              text: trimmedInput,
+            } as const,
+          ]
+        : []),
+      ...imageParts,
+    ];
+
+    const userMessage: ChatUIMessage = {
+      id: messageId,
+      role: "user",
+      parts,
+      metadata: {
+        createdAt,
+        modelName: llmConfig.modelName,
+      },
+    };
 
     setInput("");
 
     let lockTransferredToStream = false;
+    let storageForRollback: Awaited<ReturnType<typeof getStorage>> | null =
+      null;
     try {
-      await sendMessage(
-        { text: trimmedInput },
-        {
-          body: {
-            llmConfig,
-            projectUuid: currentProjectId,
-            conversationId: targetSessionId,
-          },
-        },
+      const storage = await getStorage();
+      storageForRollback = storage;
+      await storage.createMessage(
+        convertUIMessageToCreateInput(userMessage, targetSessionId),
       );
+
+      if (hasReadyAttachments) {
+        await Promise.all(
+          readyAttachments.map((item) =>
+            uploadImageAttachment({
+              storage,
+              attachmentId: item.id,
+              conversationId: targetSessionId,
+              messageId,
+              file: item.file,
+              width: item.width,
+              height: item.height,
+            }),
+          ),
+        );
+      }
+
+      const chatRunId = generateUUID("chat-run");
+      sendingChatRunIdRef.current = chatRunId;
+      setActiveChatRun(targetSessionId, chatRunId);
+
+      await sendMessage(userMessage as unknown as UseChatMessage, {
+        body: {
+          llmConfig,
+          projectUuid: currentProjectId,
+          conversationId: targetSessionId,
+          chatRunId,
+        },
+      });
       lockTransferredToStream = true;
+      if (hasReadyAttachments) {
+        imageAttachments.clearAll();
+      }
       void updateStreamingFlag(targetSessionId, true);
     } catch (error) {
       logger.error("[ChatSidebar] 发送消息失败:", error);
+      const runId = sendingChatRunIdRef.current;
       sendingSessionIdRef.current = null;
+      sendingChatRunIdRef.current = null;
+      if (runId) {
+        clearActiveChatRun(targetSessionId, runId);
+      }
+      if (storageForRollback) {
+        try {
+          await storageForRollback.deleteMessage(messageId);
+        } catch (deleteError) {
+          logger.warn("[ChatSidebar] 回滚失败：删除消息失败", {
+            messageId,
+            error: deleteError,
+          });
+        }
+      }
+      setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
       setInput(trimmedInput);
+      pushErrorToast(
+        extractErrorMessage(error) ?? t("toasts.unknownError"),
+        t("toasts.chatRequestFailed"),
+      );
     } finally {
       if (!lockTransferredToStream) {
         releaseLock();
@@ -1014,17 +1477,66 @@ export default function ChatSidebar({
     await submitMessage();
   };
 
+  /**
+   * 静默停止流式传输（不保存取消消息）
+   * 用于新建对话等场景
+   */
+  const stopStreamingSilently = useCallback(async () => {
+    if (!isChatStreaming) return;
+
+    logger.info("[ChatSidebar] 静默停止流式传输");
+    const runId = sendingChatRunIdRef.current;
+    const targetConversationId =
+      activeConversationId ?? sendingSessionIdRef.current;
+
+    if (runId) {
+      cancelChatRun(runId);
+      if (targetConversationId) {
+        clearActiveChatRun(targetConversationId, runId);
+      }
+      cancelChatRunOnServer(runId, "stop_silently");
+    }
+
+    stop();
+
+    if (targetConversationId) {
+      void updateStreamingFlag(targetConversationId, false);
+    }
+
+    sendingSessionIdRef.current = null;
+    sendingChatRunIdRef.current = null;
+    releaseLock();
+  }, [
+    activeConversationId,
+    isChatStreaming,
+    releaseLock,
+    stop,
+    updateStreamingFlag,
+    cancelChatRunOnServer,
+  ]);
+
   const handleCancel = useCallback(async () => {
     if (!isChatStreaming) return;
 
     logger.info("[ChatSidebar] 用户取消聊天");
-    stop();
 
+    const runId = sendingChatRunIdRef.current;
     const targetConversationId =
       activeConversationId ?? sendingSessionIdRef.current;
 
+    if (runId) {
+      cancelChatRun(runId);
+      if (targetConversationId) {
+        clearActiveChatRun(targetConversationId, runId);
+      }
+      cancelChatRunOnServer(runId, "user_cancelled");
+    }
+
+    stop();
+
     if (!targetConversationId) {
       sendingSessionIdRef.current = null;
+      sendingChatRunIdRef.current = null;
       return;
     }
 
@@ -1051,7 +1563,7 @@ export default function ChatSidebar({
     const nextMessages = [...baseMessages, cancelMessage];
 
     if (activeConversationId === targetConversationId) {
-      setMessages(nextMessages);
+      setMessages(nextMessages as unknown as UseChatMessage[]);
     }
 
     try {
@@ -1071,6 +1583,7 @@ export default function ChatSidebar({
     } finally {
       void updateStreamingFlag(targetConversationId, false);
       sendingSessionIdRef.current = null;
+      sendingChatRunIdRef.current = null;
       releaseLock();
     }
   }, [
@@ -1087,6 +1600,7 @@ export default function ChatSidebar({
     stop,
     t,
     releaseLock,
+    cancelChatRunOnServer,
   ]);
 
   const handleRetry = useCallback(() => {
@@ -1136,6 +1650,9 @@ export default function ChatSidebar({
   ]);
 
   const handleNewChat = useCallback(async () => {
+    // 先静默取消正在进行的流式传输
+    await stopStreamingSilently();
+
     try {
       const newConv = await createConversation(
         t("chat:messages.defaultConversation"),
@@ -1145,7 +1662,13 @@ export default function ChatSidebar({
     } catch (error) {
       logger.error("[ChatSidebar] 创建新对话失败:", error);
     }
-  }, [createConversation, currentProjectId, setActiveConversationId, t]);
+  }, [
+    stopStreamingSilently,
+    createConversation,
+    currentProjectId,
+    setActiveConversationId,
+    t,
+  ]);
 
   const handleHistory = () => {
     setCurrentView("history");
@@ -1484,6 +2007,7 @@ export default function ChatSidebar({
             onNewChat={handleNewChat}
             onHistory={handleHistory}
             onRetry={handleRetry}
+            imageAttachments={imageAttachments}
             modelSelectorProps={{
               providers,
               models,

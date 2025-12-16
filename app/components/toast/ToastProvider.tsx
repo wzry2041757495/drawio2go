@@ -80,10 +80,12 @@ type TimerMeta = {
   startedAt: number;
 };
 
+/* eslint-disable sonarjs/pseudo-random -- 仅用于 UI 元素标识，非安全敏感场景 */
 const generateId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+/* eslint-enable sonarjs/pseudo-random */
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(toastReducer, { toasts: [], queue: [] });

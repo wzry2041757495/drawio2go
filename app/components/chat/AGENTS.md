@@ -22,6 +22,8 @@
 | **MessageList**         | 消息列表容器     | 渲染所有消息，自动滚动，加载状态，流式占位符            |
 | **MessageItem**         | 单条消息包装     | 消息元数据（模型名、时间戳），角色区分（用户/AI）       |
 | **MessageContent**      | 消息内容渲染引擎 | 分发文本、推理、工具调用等部分的渲染                    |
+| **ImageContent**        | 图片内容渲染     | 用户附件图片的懒加载渲染、加载态/错误态、点击全屏预览   |
+| **ImagePreview**        | 全屏图片预览弹层 | 遮罩层预览、ESC/点击背景关闭、下载                      |
 | **ToolCallCard**        | 工具调用卡片     | 展示工具调用的输入/输出/错误，支持展开/折叠，复制功能   |
 | **ThinkingBlock**       | 思考过程块       | 展示 AI 思考过程（推理），流式状态动画，展开/折叠       |
 | **ModelComboBox**       | 模型选择器       | 按供应商分组的模型下拉/搜索，支持禁用、加载态和默认标记 |
@@ -47,6 +49,7 @@
 1. **MessageList** 维护所有消息并处理自动滚动
 2. **MessageItem** 包装单条消息，添加角色和元数据
 3. **MessageContent** 根据消息部分类型（text/reasoning/tool）路由到不同渲染器
+   - 图片类型（type="image"）由 **ImageContent** 渲染，并在内部使用 **ImagePreview** 提供全屏预览
 4. **ToolCallCard** 展示工具调用的详细状态和数据
 5. **ThinkingBlock** 展示推理过程
 
@@ -119,8 +122,10 @@ ChatInputArea（输入组件）
 ## 输入区 UX 规则
 
 - 禁止连续用户消息：最后一条消息为用户且未在流式时会禁用发送并提示等待
+- 未配置任何供应商/模型：输入框与发送按钮禁用，并显示“请先配置模型”引导（可一键跳转到设置 → 模型）
 - 直接重试：点击“重试上一条消息”按钮会移除该消息并回填输入框，不弹确认
 - 成功重试后通过 Toast 轻量提示（国际化文案：retryTitle / retryDescription）
+- 图片附件：ChatInputArea 负责上传/预览；真正发送由 ChatSidebar 负责（持久化附件并把 ImagePart 注入消息）
 
 ---
 

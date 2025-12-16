@@ -16,6 +16,15 @@
     "close": "Close",
     "processing": "Processing..."
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "The app hit an unexpected error. You can refresh to try again, or reset the app to clear local data.",
+    "refresh": "Refresh",
+    "resetApp": "Reset app",
+    "resetting": "Resetting...",
+    "details": "Error details",
+    "unknownError": "Unknown error"
+  },
   "toast": {
     "close": "Close notification",
     "copy": "Copy notification",
@@ -26,6 +35,10 @@
     "fileSaved": "File saved to: {{filePath}}",
     "saveFailed": "Save failed: {{error}}",
     "loadFailed": "Load failed: {{error}}",
+    "imageUploadFailedTitle": "Failed to attach images",
+    "imageUploadFailed": "Failed to attach images: {{error}}",
+    "imageUploadPartialFailedTitle": "Some images failed to attach",
+    "imageUploadPartialFailed": "Added {{success}}, failed {{failed}} (see the preview bar for details).",
     "projectSwitchFailed": "Failed to switch project.",
     "projectCreateFailed": "Failed to create project.",
     "versionRollbackFailed": "Version rollback failed.",

@@ -53,7 +53,11 @@ interface ChatRequest {
   };
 }
 
-type ProviderType = "openai-reasoning" | "openai-compatible" | "deepseek";
+type ProviderType =
+  | "openai-reasoning"
+  | "openai-compatible"
+  | "deepseek-native"
+  | "anthropic";
 ```
 
 #### 响应格式
@@ -80,8 +84,14 @@ if (providerType === "openai-reasoning") {
   // OpenAI 原生推理模型（o1/o3 系列）
   // 使用 @ai-sdk/openai
   model = createOpenAI({...}).chat(modelName);
+} else if (providerType === "deepseek-native") {
+  // DeepSeek Native：使用 @ai-sdk/deepseek
+  model = createDeepSeek({...})(modelName);
+} else if (providerType === "anthropic") {
+  // Anthropic Claude：使用 @ai-sdk/anthropic
+  model = createAnthropic({...})(modelName);
 } else {
-  // OpenAI Compatible / DeepSeek
+  // OpenAI Compatible
   // 使用 @ai-sdk/openai-compatible
   model = createOpenAICompatible({...})(modelName);
 }
@@ -228,7 +238,8 @@ export interface LLMConfig {
 type ProviderType =
   | "openai-reasoning" // OpenAI o1/o3 推理模型
   | "openai-compatible" // OpenAI 兼容接口（LM Studio 等）
-  | "deepseek"; // DeepSeek API
+  | "deepseek-native" // DeepSeek 原生 API
+  | "anthropic"; // Anthropic Claude API
 ```
 
 ---
@@ -241,10 +252,11 @@ type ProviderType =
 
 ```typescript
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-  apiUrl: "https://api.deepseek.com/v1",
+  // 默认不预置任何供应商/模型，需要用户在设置中显式配置
+  apiUrl: "",
   apiKey: "",
   temperature: 0.3,
-  modelName: "deepseek-chat",
+  modelName: "",
   systemPrompt: DEFAULT_SYSTEM_PROMPT, // DrawIO 专用提示词
   providerType: "openai-compatible",
   maxToolRounds: 5,

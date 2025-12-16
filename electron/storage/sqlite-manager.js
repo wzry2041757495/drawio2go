@@ -1,25 +1,214 @@
 const Database = require("better-sqlite3");
-const { app } = require("electron");
+const { app, safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
-const {
-  createDefaultDiagramXml,
-} = require("../../app/lib/storage/default-diagram-xml");
+const { createDefaultDiagramXml } = require("./shared/default-diagram-xml");
 const {
   DEFAULT_PROJECT_UUID,
   WIP_VERSION,
   ZERO_SOURCE_VERSION_ID,
-} = require("../../app/lib/storage/constants-shared");
+} = require("./shared/constants-shared");
 const { runSQLiteMigrations } = require("./migrations");
 
 const SQLITE_DB_FILE = "drawio2go.db";
+
+const API_KEY_ENC_PREFIX = "enc:v1:";
+let safeStorageAvailableCache = null;
+let safeStorageUnavailableWarned = false;
+
+const isLlmProvidersSettingKey = (key) =>
+  key === "llm.providers" || key === "settings.llm.providers";
+
+const isSafeStorageEncryptionAvailable = () => {
+  if (safeStorageAvailableCache != null) return safeStorageAvailableCache;
+  try {
+    safeStorageAvailableCache =
+      !!safeStorage &&
+      typeof safeStorage.isEncryptionAvailable === "function" &&
+      safeStorage.isEncryptionAvailable();
+  } catch (error) {
+    safeStorageAvailableCache = false;
+    if (!safeStorageUnavailableWarned) {
+      console.warn("[SQLiteManager] safeStorage 可用性检测失败：", error);
+    }
+  }
+
+  if (!safeStorageAvailableCache && !safeStorageUnavailableWarned) {
+    safeStorageUnavailableWarned = true;
+    console.warn(
+      "[SQLiteManager] safeStorage 不可用，将回退为明文存储 API Key（建议检查系统钥匙串/Keychain 状态）",
+    );
+  }
+
+  return safeStorageAvailableCache;
+};
+
+function encryptApiKey(plainKey) {
+  if (typeof plainKey !== "string") return "";
+  const trimmed = plainKey.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith(API_KEY_ENC_PREFIX)) return trimmed;
+
+  if (!isSafeStorageEncryptionAvailable()) {
+    return trimmed;
+  }
+
+  try {
+    const encrypted = safeStorage.encryptString(trimmed);
+    const base64 = Buffer.from(encrypted).toString("base64");
+    return `${API_KEY_ENC_PREFIX}${base64}`;
+  } catch (error) {
+    console.warn("[SQLiteManager] API Key 加密失败，已回退为明文存储：", error);
+    return trimmed;
+  }
+}
+
+function decryptApiKey(encryptedKey) {
+  if (typeof encryptedKey !== "string") return "";
+  const trimmed = encryptedKey.trim();
+  if (!trimmed) return "";
+  if (!trimmed.startsWith(API_KEY_ENC_PREFIX)) return trimmed;
+
+  if (!isSafeStorageEncryptionAvailable()) {
+    console.warn(
+      "[SQLiteManager] safeStorage 不可用，无法解密已加密的 API Key，已返回空字符串",
+    );
+    return "";
+  }
+
+  const base64 = trimmed.slice(API_KEY_ENC_PREFIX.length);
+  if (!base64) return "";
+
+  try {
+    const buffer = Buffer.from(base64, "base64");
+    return safeStorage.decryptString(buffer);
+  } catch (error) {
+    console.warn(
+      "[SQLiteManager] API Key 解密失败（数据可能已损坏），已返回空字符串：",
+      error,
+    );
+    return "";
+  }
+}
+
+const maybeEncryptLlmProvidersSettingValue = (key, value) => {
+  if (!isLlmProvidersSettingKey(key) || typeof value !== "string") return value;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    console.warn(
+      "[SQLiteManager] 解析 settings.llm.providers JSON 失败，已跳过 API Key 加密：",
+      error,
+    );
+    return value;
+  }
+
+  if (!Array.isArray(parsed)) {
+    console.warn(
+      "[SQLiteManager] settings.llm.providers 不是数组，已跳过 API Key 加密",
+    );
+    return value;
+  }
+
+  let changed = false;
+  const next = parsed.map((provider) => {
+    if (!provider || typeof provider !== "object") return provider;
+    if (!Object.prototype.hasOwnProperty.call(provider, "apiKey"))
+      return provider;
+
+    const apiKey = provider.apiKey;
+    if (typeof apiKey !== "string") return provider;
+
+    const encrypted = encryptApiKey(apiKey);
+    if (encrypted === apiKey) return provider;
+
+    changed = true;
+    return { ...provider, apiKey: encrypted };
+  });
+
+  if (!changed) return value;
+
+  try {
+    return JSON.stringify(next);
+  } catch (error) {
+    console.warn(
+      "[SQLiteManager] 序列化 settings.llm.providers JSON 失败，已回退为原始值：",
+      error,
+    );
+    return value;
+  }
+};
+
+const maybeDecryptLlmProvidersSettingValue = (key, value) => {
+  if (!isLlmProvidersSettingKey(key) || typeof value !== "string") return value;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    console.warn(
+      "[SQLiteManager] 解析 settings.llm.providers JSON 失败，已跳过 API Key 解密：",
+      error,
+    );
+    return value;
+  }
+
+  if (!Array.isArray(parsed)) {
+    console.warn(
+      "[SQLiteManager] settings.llm.providers 不是数组，已跳过 API Key 解密",
+    );
+    return value;
+  }
+
+  let changed = false;
+  const next = parsed.map((provider) => {
+    if (!provider || typeof provider !== "object") return provider;
+    if (!Object.prototype.hasOwnProperty.call(provider, "apiKey"))
+      return provider;
+
+    const apiKey = provider.apiKey;
+    if (typeof apiKey !== "string") return provider;
+
+    const decrypted = decryptApiKey(apiKey);
+    if (decrypted === apiKey) return provider;
+
+    changed = true;
+    return { ...provider, apiKey: decrypted };
+  });
+
+  if (!changed) return value;
+
+  try {
+    return JSON.stringify(next);
+  } catch (error) {
+    console.warn(
+      "[SQLiteManager] 序列化 settings.llm.providers JSON 失败，已回退为原始值：",
+      error,
+    );
+    return value;
+  }
+};
+
+const MIME_TO_EXT = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+};
+
+const ALLOWED_MIMES = Object.keys(MIME_TO_EXT);
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10MB
 
 class SQLiteManager {
   constructor() {
     this.db = null;
     this.incrementSequenceStmt = null;
     this.ensureSequenceFloorStmt = null;
+    this.userDataPath = null;
   }
 
   /**
@@ -29,6 +218,95 @@ class SQLiteManager {
   _generatePlaceholders(count) {
     if (!Number.isInteger(count) || count <= 0) return "";
     return Array.from({ length: count }, () => "?").join(",");
+  }
+
+  _ensureAttachmentsDir() {
+    if (!this.userDataPath) {
+      throw new Error("SQLiteManager not initialized: userDataPath is missing");
+    }
+    const dir = path.join(this.userDataPath, "attachments");
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  _safeUnlinkSync(targetPath) {
+    try {
+      fs.unlinkSync(targetPath);
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  _toBuffer(data, label = "binary") {
+    if (data == null) return null;
+    if (Buffer.isBuffer(data)) return data;
+    if (data instanceof ArrayBuffer) {
+      return Buffer.from(data);
+    }
+    if (ArrayBuffer.isView(data)) {
+      return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    }
+    if (
+      typeof data === "object" &&
+      data &&
+      data.type === "Buffer" &&
+      Array.isArray(data.data)
+    ) {
+      return Buffer.from(data.data);
+    }
+    throw new TypeError(`Unsupported ${label} type for SQLite BLOB`);
+  }
+
+  _getAttachmentExt(mimeType) {
+    const ext = MIME_TO_EXT[mimeType];
+    if (!ext) {
+      throw new Error(`Unsupported MIME type: ${mimeType}`);
+    }
+    return ext;
+  }
+
+  _getAttachmentRelativePath(id, mimeType) {
+    const ext = this._getAttachmentExt(mimeType);
+    return path.join("attachments", `${id}${ext}`);
+  }
+
+  _getAttachmentAbsolutePath(filePath) {
+    if (!this.userDataPath) {
+      throw new Error("SQLiteManager not initialized: userDataPath is missing");
+    }
+    return path.join(this.userDataPath, filePath);
+  }
+
+  _validateAttachmentMeta(attachment, blobByteLength) {
+    if (!attachment || typeof attachment !== "object") {
+      throw new Error("Invalid attachment payload");
+    }
+
+    if (attachment.type !== "image") {
+      throw new Error(`Unsupported attachment type: ${attachment.type}`);
+    }
+
+    if (!ALLOWED_MIMES.includes(attachment.mime_type)) {
+      throw new Error(`Unsupported MIME type: ${attachment.mime_type}`);
+    }
+
+    if (typeof attachment.file_size !== "number" || attachment.file_size < 0) {
+      throw new Error(`Invalid file_size: ${attachment.file_size}`);
+    }
+
+    if (attachment.file_size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`File size exceeds 10MB: ${attachment.file_size} bytes`);
+    }
+
+    if (
+      typeof blobByteLength === "number" &&
+      blobByteLength > MAX_ATTACHMENT_BYTES
+    ) {
+      throw new Error(`File size exceeds 10MB: ${blobByteLength} bytes`);
+    }
   }
 
   _getIncrementSequenceStmt() {
@@ -69,11 +347,11 @@ class SQLiteManager {
   initialize() {
     try {
       // 数据库文件路径
-      const userDataPath = app.getPath("userData");
-      const dbPath = path.join(userDataPath, SQLITE_DB_FILE);
+      this.userDataPath = app.getPath("userData");
+      const dbPath = path.join(this.userDataPath, SQLITE_DB_FILE);
 
       // 确保目录存在
-      fs.mkdirSync(userDataPath, { recursive: true });
+      fs.mkdirSync(this.userDataPath, { recursive: true });
 
       // 打开数据库
       this.db = new Database(dbPath, { verbose: console.log });
@@ -174,11 +452,13 @@ class SQLiteManager {
     const row = this.db
       .prepare("SELECT value FROM settings WHERE key = ?")
       .get(key);
-    return row ? row.value : null;
+    if (!row) return null;
+    return maybeDecryptLlmProvidersSettingValue(key, row.value);
   }
 
   setSetting(key, value) {
     const now = Date.now();
+    const normalizedValue = maybeEncryptLlmProvidersSettingValue(key, value);
     this.db
       .prepare(
         `
@@ -187,7 +467,7 @@ class SQLiteManager {
         ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?
       `,
       )
-      .run(key, value, now, value, now);
+      .run(key, normalizedValue, now, normalizedValue, now);
   }
 
   deleteSetting(key) {
@@ -251,7 +531,50 @@ class SQLiteManager {
   }
 
   deleteProject(uuid) {
-    this.db.prepare("DELETE FROM projects WHERE uuid = ?").run(uuid);
+    const rows = this.db
+      .prepare(
+        `
+        SELECT a.file_path AS file_path
+        FROM attachments a
+        JOIN conversations c ON a.conversation_id = c.id
+        WHERE c.project_uuid = ?
+      `,
+      )
+      .all(uuid);
+    const filePaths = rows.map((row) => row.file_path).filter(Boolean);
+
+    const tx = this.db.transaction((projectUuid, paths) => {
+      const conversationRows = this.db
+        .prepare("SELECT id FROM conversations WHERE project_uuid = ?")
+        .all(projectUuid);
+      const conversationIds = conversationRows
+        .map((row) => row.id)
+        .filter(Boolean);
+
+      if (conversationIds.length > 0) {
+        const placeholders = this._generatePlaceholders(conversationIds.length);
+        this.db
+          .prepare(
+            `DELETE FROM conversation_sequences WHERE conversation_id IN (${placeholders})`,
+          )
+          .run(...conversationIds);
+      }
+
+      this.db.prepare("DELETE FROM projects WHERE uuid = ?").run(projectUuid);
+      for (const filePath of paths) {
+        const absPath = this._getAttachmentAbsolutePath(filePath);
+        if (fs.existsSync(absPath)) {
+          this._safeUnlinkSync(absPath);
+        }
+      }
+    });
+
+    try {
+      tx(uuid, filePaths);
+    } catch (error) {
+      console.error("[SQLiteManager] 删除工程失败，已回滚", { uuid, error });
+      throw error;
+    }
   }
 
   getAllProjects() {
@@ -295,12 +618,12 @@ class SQLiteManager {
 
   createXMLVersion(version) {
     const now = Date.now();
-    const metadataString =
-      typeof version.metadata === "string"
-        ? version.metadata
-        : version.metadata
-          ? JSON.stringify(version.metadata)
-          : null;
+    let metadataString = null;
+    if (typeof version.metadata === "string") {
+      metadataString = version.metadata;
+    } else if (version.metadata) {
+      metadataString = JSON.stringify(version.metadata);
+    }
 
     this.db
       .prepare(
@@ -325,9 +648,9 @@ class SQLiteManager {
           ? version.page_count
           : 1,
         version.page_names || null,
-        version.preview_svg || null,
-        version.pages_svg || null,
-        version.preview_image || null, // Buffer for BLOB
+        this._toBuffer(version.preview_svg, "preview_svg"),
+        this._toBuffer(version.pages_svg, "pages_svg"),
+        this._toBuffer(version.preview_image, "preview_image"),
         now,
       );
 
@@ -409,29 +732,28 @@ class SQLiteManager {
     for (const [key, value] of entries) {
       switch (key) {
         case "metadata": {
-          const serialized =
-            value == null
-              ? null
-              : typeof value === "string"
-                ? value
-                : JSON.stringify(value);
+          let serialized = null;
+          if (value != null) {
+            serialized =
+              typeof value === "string" ? value : JSON.stringify(value);
+          }
           fields.push("metadata = ?");
           values.push(serialized);
           break;
         }
         case "preview_image": {
           fields.push("preview_image = ?");
-          values.push(value || null);
+          values.push(this._toBuffer(value, "preview_image"));
           break;
         }
         case "preview_svg": {
           fields.push("preview_svg = ?");
-          values.push(value || null);
+          values.push(this._toBuffer(value, "preview_svg"));
           break;
         }
         case "pages_svg": {
           fields.push("pages_svg = ?");
-          values.push(value || null);
+          values.push(this._toBuffer(value, "pages_svg"));
           break;
         }
         case "page_count": {
@@ -592,25 +914,69 @@ class SQLiteManager {
   }
 
   deleteConversation(id) {
-    this.db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+    const rows = this.db
+      .prepare("SELECT file_path FROM attachments WHERE conversation_id = ?")
+      .all(id);
+    const filePaths = rows.map((row) => row.file_path).filter(Boolean);
+
+    const tx = this.db.transaction((conversationId, paths) => {
+      this.db
+        .prepare("DELETE FROM conversation_sequences WHERE conversation_id = ?")
+        .run(conversationId);
+      this.db
+        .prepare("DELETE FROM conversations WHERE id = ?")
+        .run(conversationId);
+      for (const filePath of paths) {
+        const absPath = this._getAttachmentAbsolutePath(filePath);
+        if (fs.existsSync(absPath)) {
+          this._safeUnlinkSync(absPath);
+        }
+      }
+    });
+
+    try {
+      tx(id, filePaths);
+    } catch (error) {
+      console.error("[SQLiteManager] 删除对话失败，已回滚", { id, error });
+      throw error;
+    }
   }
 
   batchDeleteConversations(ids = []) {
     if (!Array.isArray(ids) || ids.length === 0) return;
     const placeholders = this._generatePlaceholders(ids.length);
-    const tx = this.db.transaction((conversationIds) => {
+    const rows = this.db
+      .prepare(
+        `SELECT file_path FROM attachments WHERE conversation_id IN (${placeholders})`,
+      )
+      .all(...ids);
+    const filePaths = rows.map((row) => row.file_path).filter(Boolean);
+
+    const tx = this.db.transaction((conversationIds, paths) => {
       this.db
         .prepare(
           `DELETE FROM messages WHERE conversation_id IN (${placeholders})`,
         )
         .run(...conversationIds);
       this.db
+        .prepare(
+          `DELETE FROM conversation_sequences WHERE conversation_id IN (${placeholders})`,
+        )
+        .run(...conversationIds);
+      this.db
         .prepare(`DELETE FROM conversations WHERE id IN (${placeholders})`)
         .run(...conversationIds);
+
+      for (const filePath of paths) {
+        const absPath = this._getAttachmentAbsolutePath(filePath);
+        if (fs.existsSync(absPath)) {
+          this._safeUnlinkSync(absPath);
+        }
+      }
     });
 
     try {
-      tx(ids);
+      tx(ids, filePaths);
     } catch (error) {
       console.error("[SQLiteManager] 批量删除对话失败，已回滚", {
         ids,
@@ -673,12 +1039,12 @@ class SQLiteManager {
   }
 
   createMessage(message) {
-    const createdAt =
-      typeof message.created_at === "number"
-        ? message.created_at
-        : typeof message.createdAt === "number"
-          ? message.createdAt
-          : Date.now();
+    let createdAt = Date.now();
+    if (typeof message.created_at === "number") {
+      createdAt = message.created_at;
+    } else if (typeof message.createdAt === "number") {
+      createdAt = message.createdAt;
+    }
 
     const upsertStmt = this.db.prepare(
       `
@@ -734,7 +1100,27 @@ class SQLiteManager {
   }
 
   deleteMessage(id) {
-    this.db.prepare("DELETE FROM messages WHERE id = ?").run(id);
+    const rows = this.db
+      .prepare("SELECT file_path FROM attachments WHERE message_id = ?")
+      .all(id);
+    const filePaths = rows.map((row) => row.file_path).filter(Boolean);
+
+    const tx = this.db.transaction((messageId, paths) => {
+      this.db.prepare("DELETE FROM messages WHERE id = ?").run(messageId);
+      for (const filePath of paths) {
+        const absPath = this._getAttachmentAbsolutePath(filePath);
+        if (fs.existsSync(absPath)) {
+          this._safeUnlinkSync(absPath);
+        }
+      }
+    });
+
+    try {
+      tx(id, filePaths);
+    } catch (error) {
+      console.error("[SQLiteManager] 删除消息失败，已回滚", { id, error });
+      throw error;
+    }
   }
 
   createMessages(messages) {
@@ -759,12 +1145,12 @@ class SQLiteManager {
       const defaultTimestamp = Date.now();
 
       for (const msg of msgs) {
-        const createdAt =
-          typeof msg.created_at === "number"
-            ? msg.created_at
-            : typeof msg.createdAt === "number"
-              ? msg.createdAt
-              : defaultTimestamp;
+        let createdAt = defaultTimestamp;
+        if (typeof msg.created_at === "number") {
+          createdAt = msg.created_at;
+        } else if (typeof msg.createdAt === "number") {
+          createdAt = msg.createdAt;
+        }
 
         const providedSequence =
           typeof msg.sequence_number === "number" ? msg.sequence_number : null;
@@ -802,6 +1188,130 @@ class SQLiteManager {
     }
 
     return messages.map((msg) => selectByIdStmt.get(msg.id));
+  }
+
+  // ==================== Attachments ====================
+
+  getAttachment(id) {
+    return (
+      this.db.prepare("SELECT * FROM attachments WHERE id = ?").get(id) || null
+    );
+  }
+
+  getAttachmentsByMessage(messageId) {
+    return this.db
+      .prepare(
+        "SELECT * FROM attachments WHERE message_id = ? ORDER BY created_at ASC",
+      )
+      .all(messageId);
+  }
+
+  getAttachmentsByConversation(conversationId) {
+    return this.db
+      .prepare(
+        "SELECT * FROM attachments WHERE conversation_id = ? ORDER BY created_at ASC",
+      )
+      .all(conversationId);
+  }
+
+  createAttachment(attachment) {
+    const dataBuffer = this._toBuffer(
+      attachment.blob_data,
+      "attachment.blob_data",
+    );
+    this._validateAttachmentMeta(attachment, dataBuffer?.byteLength);
+
+    if (!dataBuffer) {
+      throw new Error("blob_data is required for Electron attachments");
+    }
+
+    this._ensureAttachmentsDir();
+
+    const relativePath = this._getAttachmentRelativePath(
+      attachment.id,
+      attachment.mime_type,
+    );
+    const absPath = this._getAttachmentAbsolutePath(relativePath);
+
+    // 先落盘，再写数据库；数据库失败则回滚文件
+    try {
+      fs.writeFileSync(absPath, dataBuffer);
+    } catch (fsError) {
+      console.error("[SQLiteManager] 文件写入失败", {
+        id: attachment.id,
+        fsError,
+      });
+      throw new Error(`Failed to write attachment file: ${fsError.message}`);
+    }
+
+    const now = Date.now();
+    const insertStmt = this.db.prepare(
+      `
+      INSERT INTO attachments
+      (id, message_id, conversation_id, type, mime_type, file_name, file_size, width, height, file_path, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    );
+
+    const tx = this.db.transaction((payload) => {
+      insertStmt.run(
+        payload.id,
+        payload.message_id,
+        payload.conversation_id,
+        payload.type || "image",
+        payload.mime_type,
+        payload.file_name,
+        payload.file_size,
+        typeof payload.width === "number" ? payload.width : null,
+        typeof payload.height === "number" ? payload.height : null,
+        payload.file_path,
+        payload.created_at,
+      );
+    });
+
+    try {
+      tx({
+        ...attachment,
+        file_path: relativePath,
+        created_at: now,
+      });
+    } catch (error) {
+      if (fs.existsSync(absPath)) {
+        this._safeUnlinkSync(absPath);
+      }
+      console.error("[SQLiteManager] 创建附件失败，已回滚", {
+        id: attachment?.id,
+        error,
+      });
+      throw error;
+    }
+
+    return this.getAttachment(attachment.id);
+  }
+
+  deleteAttachment(id) {
+    const existing = this.getAttachment(id);
+    if (!existing) return;
+
+    const absPath =
+      existing.file_path && this.userDataPath
+        ? this._getAttachmentAbsolutePath(existing.file_path)
+        : null;
+
+    const deleteStmt = this.db.prepare("DELETE FROM attachments WHERE id = ?");
+    const tx = this.db.transaction((attachmentId, filePathAbs) => {
+      deleteStmt.run(attachmentId);
+      if (filePathAbs && fs.existsSync(filePathAbs)) {
+        this._safeUnlinkSync(filePathAbs);
+      }
+    });
+
+    try {
+      tx(id, absPath);
+    } catch (error) {
+      console.error("[SQLiteManager] 删除附件失败，已回滚", { id, error });
+      throw error;
+    }
   }
 
   /**

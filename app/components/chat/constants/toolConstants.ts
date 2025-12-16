@@ -10,11 +10,15 @@ import {
   Loader2,
   Wrench,
 } from "lucide-react";
+import { AI_TOOL_NAMES } from "@/lib/constants/tool-names";
+
+const { DRAWIO_READ, DRAWIO_EDIT_BATCH, DRAWIO_OVERWRITE } = AI_TOOL_NAMES;
+const TOOL_PREFIX = "tool-" as const;
 
 export const TOOL_LABEL_KEYS: Record<string, string> = {
-  "tool-drawio_read": "tool-drawio_read",
-  "tool-drawio_edit_batch": "tool-drawio_edit_batch",
-  "tool-drawio_overwrite": "tool-drawio_overwrite",
+  [`${TOOL_PREFIX}${DRAWIO_READ}`]: `${TOOL_PREFIX}${DRAWIO_READ}`,
+  [`${TOOL_PREFIX}${DRAWIO_EDIT_BATCH}`]: `${TOOL_PREFIX}${DRAWIO_EDIT_BATCH}`,
+  [`${TOOL_PREFIX}${DRAWIO_OVERWRITE}`]: `${TOOL_PREFIX}${DRAWIO_OVERWRITE}`,
 };
 
 export type ToolStatusMeta = {

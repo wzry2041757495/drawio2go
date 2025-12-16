@@ -18,6 +18,7 @@ import { normalizeDiagramXml, validateXMLFormat } from "./drawio-xml-utils";
 import {
   persistWipVersion,
   prepareXmlContext,
+  type PersistWipOptions,
   type XmlContext,
 } from "./storage/writers";
 import { createLogger } from "@/lib/logger";
@@ -38,12 +39,13 @@ let _drawioXmlSnapshot: string | null = null;
  */
 async function saveDrawioXMLInternal(
   xmlOrContext: string | XmlContext,
+  options?: PersistWipOptions,
 ): Promise<void> {
   const storage = await getStorage();
   const projectUuid = await resolveCurrentProjectUuid(storage);
   await persistWipVersion(projectUuid, xmlOrContext, {
     name: "WIP",
-    description: "活跃工作区",
+    description: options?.description ?? "活跃工作区",
   });
 }
 
@@ -149,6 +151,7 @@ export async function replaceDrawioXML(
     isRollback?: boolean;
     editorRef?: RefObject<DrawioEditorRef | null>;
     skipExportValidation?: boolean;
+    description?: string;
   },
 ): Promise<ReplaceXMLResult & { xml?: string }> {
   if (typeof window === "undefined") {
@@ -238,7 +241,9 @@ export async function replaceDrawioXML(
     // 4.1) merge 模式跳过 export 验证，直接写入存储
     if (skipExportValidation) {
       try {
-        await saveDrawioXMLInternal(context);
+        await saveDrawioXMLInternal(context, {
+          description: options?.description,
+        });
         return {
           success: true,
           message: "XML 已替换（merge 模式，已跳过一致性验证）",
@@ -321,7 +326,9 @@ export async function replaceDrawioXML(
 
     // 6) 验证通过后再写入存储
     try {
-      await saveDrawioXMLInternal(context);
+      await saveDrawioXMLInternal(context, {
+        description: options?.description,
+      });
     } catch (storageError) {
       logger.error("存储写入失败", { storageError, requestId });
       return {

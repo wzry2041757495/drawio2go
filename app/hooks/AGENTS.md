@@ -4,17 +4,24 @@
 
 封装统一存储层访问与 Socket.IO 通讯的 React Hooks，提供类型安全的状态管理接口。
 
+## Lint 约束（SonarJS）
+
+- `sonarjs/no-nested-functions`: 避免深层回调嵌套（例如 `forEach/map` 内再嵌套 `setState`/回调），优先使用 `for..of` 或提取为模块级辅助函数。
+- 若确实无法提取（如 `setState` 函数式更新必须传回调且局部闭包强依赖），允许使用 `// eslint-disable-next-line sonarjs/no-nested-functions`，并在同一行写明原因。
+- 避免用 `void` 忽略 Promise（`sonarjs/void-use` 会报错），改为显式 `await` 或使用 `.catch(...)` 链式处理。
+
 ## Hooks 清单
 
 ### 1. useStorageSettings
 
-**应用设置持久化 Hook** - 管理 LLM 配置、默认路径等应用级设置
+**应用设置持久化 Hook** - 管理 LLM 配置、通用设置等应用级设置
 
 #### 核心方法
 
 - `getSetting(key)` / `setSetting(key, value)` / `getAllSettings()`
-- `getLLMConfig()` / `saveLLMConfig(config)`: **已废弃**，内部自动映射到 provider/model/agent 级配置，并清理旧的 `llmConfig` 键；请优先使用 `getRuntimeConfig` 与对应的 provider/model/agent 更新接口
-- `getDefaultPath()` / `saveDefaultPath(path)`: 获取/保存默认路径
+- `getGeneralSettings()` / `saveGeneralSettings(settings)` / `updateGeneralSettings(updates)`: 通用设置（`settings.general`，JSON 字符串）
+- `getRuntimeConfig()`: 获取运行时 LLM 配置（基于 provider/model/agent + activeModel 合并并规范化）
+- `getDefaultPath()` / `saveDefaultPath(path)`: 默认路径便捷方法（内部使用通用设置）
 
 **特性**: TypeScript 类型安全，自动规范化配置（补全默认值、验证 provider、规范化 URL）
 
@@ -110,6 +117,7 @@
 
 - 监听后端工具执行请求，自动调用 `drawio-tools.ts`
 - 通过 Socket.IO 回传执行结果/错误
+- **取消保护**: 工具请求携带 `chatRunId`，前端仅处理当前活跃 run；收到 `/api/chat/cancel` 或用户取消后会拒绝执行并回传取消结果（同时监听 `tool:cancel` best-effort 取消事件）
 - **AI 自动版本**: AI 触发 `drawio_overwrite` 时，在设置 `autoVersionOnAIEdit=true` 情况下，串行创建子版本快照后再写入 XML；内部使用 `isCreatingSnapshotRef` 防抖 + `latestMainVersionRef/latestSubVersionRef` 增量计算下一个子版本，避免每次全量拉取版本列表
 
 #### 工作流程
@@ -177,7 +185,7 @@
 
 - **返回**: `llmConfig`、`providers`、`models`、`selectedModelId/Label`、`configLoading`、`selectorLoading`
 - **操作**: `loadModelSelector()`、`handleModelChange(modelId)`
-- **特性**: 自动订阅设置变更（provider/model/activeModel），缺省回退到默认配置
+- **特性**: 自动订阅设置变更（provider/model/activeModel）；未配置 provider/model 时返回 `llmConfig=null`，由上层 UI 提示并引导用户先完成模型配置
 
 ### 15. useOperationToast _(新增，2025-12-08)_
 
@@ -187,23 +195,66 @@
 - `showNotice(message, status)` — status: success/warning/danger
 - `extractErrorMessage(error)` — 从 Error/字符串/对象中抽取 message
 
+### 16. useAttachmentObjectUrl _(新增，2025-12-13)_
+
+**附件 Object URL 生命周期 Hook** - 用于 Milestone 5 图片展示的懒加载与缓存管理。
+
+- **输入**: `attachmentId`（可为空），`options.enabled` 控制是否加载
+- **输出**: `objectUrl` / `isLoading` / `error` / `retry`
+- **特性**:
+  - Promise 去重：同一 `attachmentId` 并发请求共享同一个读取 Promise
+  - 引用计数：多个组件引用同一图片时复用 Object URL，最后一个卸载后延迟 30 秒 `revoke`
+  - LRU 缓存：最多缓存 50 张图片，超出时淘汰最久未使用且未被引用的条目
+  - 跨端读取：Web 端从 IndexedDB Blob 生成 URL；Electron 端通过 `file_path` + `window.electronFS.readFile()` 读取二进制生成 URL
+
+### 17. useIntersection _(新增，2025-12-13)_
+
+**视口交叉观察 Hook** - 为图片/重资源组件提供轻量懒加载触发器（不引入第三方依赖）。
+
+- **输入**: `options`（`root`/`rootMargin`/`threshold`/`disabled`）
+- **输出**: `{ ref, isInView, hasEverBeenInView }`
+  - `ref`: 绑定到需要观察的 DOM 元素
+  - `isInView`: 当前是否在视口（或 root 容器）中
+  - `hasEverBeenInView`: 一旦进入过视口即永久为 `true`，便于“首次进入触发加载”的场景
+- **特性**:
+  - `disabled=true` 时视为始终可见（用于测试或强制加载）
+  - 缺少 `IntersectionObserver` 的环境自动回退为可见
+- 清理阶段 `disconnect` observer，避免泄漏
+
+### 18. useUpdateChecker _(新增，2025-12-15)_
+
+**更新检查 Hook** - 统一管理更新检查状态（手动检查 + Electron 主进程自动检查事件）。
+
+- **返回**: `isChecking` / `lastCheckTime` / `updateInfo` / `checkForUpdates()` / `openReleasePage()`
+- **事件**: 订阅 Electron 主进程 `update:available`（通过 `window.electron.onUpdateAvailable`）
+- **通知**: 检测到新版本时推送 `variant="info"` Toast（10s），并提供打开下载页的操作按钮
+- **使用场景**: `AboutSettingsPanel`（关于面板）
+
 ## 统一导出
 
 所有 Hooks 通过 `app/hooks/index.ts` 统一导出：
 
 ```typescript
-export { useDrawioSocket } from "./useDrawioSocket";
-export { useChatLock } from "./useChatLock";
+// Storage Hooks - 存储层 React Hooks 封装
 export { useStorageSettings } from "./useStorageSettings";
 export { useStorageProjects } from "./useStorageProjects";
-export { useCurrentProject } from "./useCurrentProject";
-export { useStorageConversations } from "./useStorageConversations";
 export { useStorageXMLVersions } from "./useStorageXMLVersions";
+export { useStorageConversations } from "./useStorageConversations";
 export { useVersionCompare } from "./useVersionCompare";
+export { useCurrentProject } from "./useCurrentProject";
+export { useChatLock } from "./useChatLock";
 export { useNetworkStatus } from "./useNetworkStatus";
-export { useDrawioEditor } from "./useDrawioEditor";
 export { useVersionPages } from "./useVersionPages";
 export { usePanZoomStage } from "./usePanZoomStage";
+export { useChatSessionsController } from "./useChatSessionsController";
+export { useLLMConfig } from "./useLLMConfig";
+export { useOperationToast } from "./useOperationToast";
+export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
+export { useUpdateChecker } from "./useUpdateChecker";
+
+// Other Hooks - 其他 Hooks
+export { useDrawioSocket } from "./useDrawioSocket";
+export { useDrawioEditor } from "./useDrawioEditor";
 ```
 
 ## 设计原则

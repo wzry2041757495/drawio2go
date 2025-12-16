@@ -173,6 +173,93 @@ export function VersionTimeline({
     return parts.join(" • ");
   }, [enableVirtualScroll, compareMode, tVersion]);
 
+  const buildQuickCompareHandler = React.useCallback(
+    (current: XMLVersion, currentIndex: number) => {
+      if (!onQuickCompare) return undefined;
+      if (current.semantic_version === WIP_VERSION) return undefined;
+
+      const previous = timelineVersions[currentIndex + 1];
+      if (!previous || previous.semantic_version === WIP_VERSION) {
+        return undefined;
+      }
+
+      return () => {
+        let older = previous;
+        let newer = current;
+        if (current.created_at <= previous.created_at) {
+          older = current;
+          newer = previous;
+        }
+        onQuickCompare({ versionA: older, versionB: newer });
+      };
+    },
+    [onQuickCompare, timelineVersions],
+  );
+
+  const timelineDescriptionText = React.useMemo(() => {
+    if (resolvedViewMode.type === "main") {
+      return mainDescriptionText;
+    }
+    if (resolvedViewMode.parentVersion) {
+      return tVersion("timeline.description.sub", {
+        version: resolvedViewMode.parentVersion,
+      });
+    }
+    return tVersion("timeline.description.subUnknown");
+  }, [mainDescriptionText, resolvedViewMode, tVersion]);
+
+  const timelineStatsText = React.useMemo(() => {
+    if (resolvedViewMode.type === "main") {
+      if (hasWip) {
+        return tVersion("timeline.stats.mainWithWip", {
+          count: mainSnapshotCount,
+        });
+      }
+      return tVersion("timeline.stats.main", { count: mainSnapshotCount });
+    }
+    return tVersion("timeline.stats.sub", { count: timelineVersions.length });
+  }, [
+    hasWip,
+    mainSnapshotCount,
+    resolvedViewMode.type,
+    tVersion,
+    timelineVersions.length,
+  ]);
+
+  const emptyTitleText = React.useMemo(() => {
+    if (resolvedViewMode.type === "main") {
+      return tVersion("timeline.empty.mainTitle");
+    }
+    return tVersion("timeline.empty.subTitle");
+  }, [resolvedViewMode.type, tVersion]);
+
+  const emptyDescriptionText = React.useMemo(() => {
+    if (resolvedViewMode.type === "main") {
+      return tVersion("timeline.empty.createFirst");
+    }
+    if (resolvedViewMode.parentVersion) {
+      return tVersion("timeline.empty.noSubForParent", {
+        parent: resolvedViewMode.parentVersion,
+      });
+    }
+    return tVersion("timeline.empty.selectParent");
+  }, [resolvedViewMode, tVersion]);
+
+  const handleQuickCompareLatestPrevious = React.useCallback(() => {
+    if (!onQuickCompare) return;
+    const latest = displayedHistoricalVersions[0];
+    const previous = displayedHistoricalVersions[1];
+    if (!latest || !previous) return;
+
+    let older = previous;
+    let newer = latest;
+    if (latest.created_at <= previous.created_at) {
+      older = latest;
+      newer = previous;
+    }
+    onQuickCompare({ versionA: older, versionB: newer });
+  }, [displayedHistoricalVersions, onQuickCompare]);
+
   React.useEffect(() => {
     if (!parentRef.current) return;
     parentRef.current.scrollTo({ top: 0 });
@@ -255,23 +342,10 @@ export function VersionTimeline({
                   selected={!isWipEntry && selectedIdSet.has(version.id)}
                   compareOrder={isWipEntry ? null : getCompareOrder(version.id)}
                   onToggleSelect={isWipEntry ? undefined : onToggleSelect}
-                  onQuickCompare={(() => {
-                    if (isWipEntry) return undefined;
-                    const previous = timelineVersions[virtualItem.index + 1];
-                    if (
-                      !previous ||
-                      previous.semantic_version === WIP_VERSION ||
-                      !onQuickCompare
-                    )
-                      return undefined;
-                    return () => {
-                      const [older, newer] =
-                        previous.created_at <= version.created_at
-                          ? [previous, version]
-                          : [version, previous];
-                      onQuickCompare({ versionA: older, versionB: newer });
-                    };
-                  })()}
+                  onQuickCompare={buildQuickCompareHandler(
+                    version,
+                    virtualItem.index,
+                  )}
                   allVersions={allHistoricalVersions}
                   onNavigateToSubVersions={navigateToSubVersions}
                 />
@@ -300,23 +374,7 @@ export function VersionTimeline({
             selected={!isWipEntry && selectedIdSet.has(version.id)}
             compareOrder={isWipEntry ? null : getCompareOrder(version.id)}
             onToggleSelect={isWipEntry ? undefined : onToggleSelect}
-            onQuickCompare={(() => {
-              if (isWipEntry) return undefined;
-              const previous = timelineVersions[index + 1];
-              if (
-                !previous ||
-                previous.semantic_version === WIP_VERSION ||
-                !onQuickCompare
-              )
-                return undefined;
-              return () => {
-                const [older, newer] =
-                  previous.created_at <= version.created_at
-                    ? [previous, version]
-                    : [version, previous];
-                onQuickCompare({ versionA: older, versionB: newer });
-              };
-            })()}
+            onQuickCompare={buildQuickCompareHandler(version, index)}
             allVersions={allHistoricalVersions}
             onNavigateToSubVersions={navigateToSubVersions}
           />
@@ -331,30 +389,18 @@ export function VersionTimeline({
         <div className="empty-state-icon">
           <History className="w-5 h-5" />
         </div>
-        <p>
-          {resolvedViewMode.type === "main"
-            ? tVersion("timeline.empty.mainTitle")
-            : tVersion("timeline.empty.subTitle")}
-        </p>
-        <p>
-          {resolvedViewMode.type === "main"
-            ? tVersion("timeline.empty.createFirst")
-            : resolvedViewMode.parentVersion
-              ? tVersion("timeline.empty.noSubForParent", {
-                  parent: resolvedViewMode.parentVersion,
-                })
-              : tVersion("timeline.empty.selectParent")}
-        </p>
+        <p>{emptyTitleText}</p>
+        <p>{emptyDescriptionText}</p>
       </div>
     </div>
   );
 
-  const listContent =
-    timelineVersions.length === 0
-      ? emptyState
-      : enableVirtualScroll
-        ? renderVirtualList()
-        : renderNormalList();
+  let listContent = emptyState;
+  if (timelineVersions.length > 0) {
+    listContent = enableVirtualScroll
+      ? renderVirtualList()
+      : renderNormalList();
+  }
 
   return (
     <div className="version-timeline">
@@ -378,48 +424,18 @@ export function VersionTimeline({
             ) : (
               <h3>{tVersion("timeline.titleSub")}</h3>
             )}
-            <p className="timeline-description">
-              {resolvedViewMode.type === "main"
-                ? mainDescriptionText
-                : resolvedViewMode.parentVersion
-                  ? tVersion("timeline.description.sub", {
-                      version: resolvedViewMode.parentVersion,
-                    })
-                  : tVersion("timeline.description.subUnknown")}
-            </p>
+            <p className="timeline-description">{timelineDescriptionText}</p>
           </div>
         </div>
         <div className="timeline-header__actions">
-          <span className="timeline-chip">
-            {resolvedViewMode.type === "main"
-              ? hasWip
-                ? tVersion("timeline.stats.mainWithWip", {
-                    count: mainSnapshotCount,
-                  })
-                : tVersion("timeline.stats.main", {
-                    count: mainSnapshotCount,
-                  })
-              : tVersion("timeline.stats.sub", {
-                  count: timelineVersions.length,
-                })}
-          </span>
+          <span className="timeline-chip">{timelineStatsText}</span>
           {compareMode &&
             resolvedViewMode.type === "main" &&
             displayedHistoricalVersions.length >= 2 && (
               <Button
                 size="sm"
                 variant="secondary"
-                onPress={() => {
-                  if (!onQuickCompare) return;
-                  const latest = displayedHistoricalVersions[0];
-                  const previous = displayedHistoricalVersions[1];
-                  if (!latest || !previous) return;
-                  const [older, newer] =
-                    previous.created_at <= latest.created_at
-                      ? [previous, latest]
-                      : [latest, previous];
-                  onQuickCompare({ versionA: older, versionB: newer });
-                }}
+                onPress={handleQuickCompareLatestPrevious}
               >
                 {tVersion("timeline.buttons.quickCompare")}
               </Button>

@@ -12,11 +12,12 @@ LLM 供应商与聊天消息相关的核心类型定义。
 
 #### 核心类型
 
-- **ProviderType**: 支持的供应商枚举（`openai-reasoning`、`openai-compatible`、`deepseek`）。
+- **ProviderType**: 支持的供应商枚举（`openai-reasoning`、`openai-compatible`、`deepseek-native`、`anthropic`）。
 - **LLMConfig**: 设置页与后端共用的 LLM 配置（URL、密钥、温度、模型、系统提示、供应商、工具轮次数）。
 - **ToolInvocation/ToolInvocationState**: AI 工具调用的状态结构。
 - **ChatMessage**: 扩展 AI SDK Message 的聊天消息定义。
 - **MessageMetadata**: 消息元数据（模型名称、创建时间）。
+- **ImagePart**: 图片消息 part（持久化字段引用 Attachment，运行时字段用于 UI/视觉模型输入）。
 - **ChatUIMessage**: 基于 AI SDK UIMessage 的带元数据消息类型。
 - **ChatSession**: 聊天会话定义（ID、标题、消息列表、时间戳）。
 - **ChatSessionsData**: 会话数据管理结构。
@@ -28,7 +29,7 @@ Socket.IO 通讯协议的类型定义。
 
 #### 核心接口
 
-- **ToolCallRequest**: 工具调用请求结构（含 requestId、toolName、input、timeout、description、\_originalTool）
+- **ToolCallRequest**: 工具调用请求结构（含 requestId、toolName、input、timeout、description）
 - **ToolCallResult**: 工具执行结果结构（含 requestId、success、result、error）
 - **ServerToClientEvents**: Socket.IO 服务器到客户端事件类型
 - **ClientToServerEvents**: Socket.IO 客户端到服务器事件类型
@@ -41,7 +42,7 @@ Socket.IO 通讯协议的类型定义。
 
 - 全局 Socket.IO 服务器实例类型（`io`）
 - 待处理工具调用请求 Map（`pendingRequests`）
-- 扩展的 Window 对象属性（`electron` 和 `electronStorage` API）
+- 扩展的 Window 对象属性（`electron`、`electronStorage`、`electronFS` API）
 - `declare module 'xpath'`：为第三方库补充最小化声明
 - `declare module 'pako'`：压缩库类型声明
 

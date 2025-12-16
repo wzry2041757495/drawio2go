@@ -1,10 +1,18 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const { safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
+const { fork } = require("child_process");
+const net = require("net");
 const SQLiteManager = require("./storage/sqlite-manager");
 
 let mainWindow;
 let storageManager = null;
+let serverProcess = null; // 内嵌服务器子进程
+let serverPort = 3000; // 服务器端口
+let updateCheckTimeoutId = null;
+let updateCheckIntervalId = null;
 // 更可靠的开发模式检测：检查是否打包或者环境变量
 const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 
@@ -27,6 +35,137 @@ function convertBlobFields(payload) {
   return normalized;
 }
 
+function resolveUserDataPathSafe(relativePath) {
+  const userDataPath = app.getPath("userData");
+  const base = path.resolve(userDataPath);
+  const baseWithSep = base.endsWith(path.sep) ? base : `${base}${path.sep}`;
+
+  const target = path.resolve(base, relativePath);
+  if (!target.startsWith(baseWithSep)) {
+    throw new Error("非法文件路径：仅允许访问 userData 目录下的文件");
+  }
+  return target;
+}
+
+/**
+ * 查找可用端口（避免端口冲突）
+ * @param {number} startPort 起始端口
+ * @returns {Promise<number>} 可用端口
+ */
+function findAvailablePort(startPort = 3000) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        resolve(findAvailablePort(startPort + 1));
+      } else {
+        reject(err);
+      }
+    });
+    server.listen(startPort, () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * 启动内嵌的 Next.js + Socket.IO 服务器
+ * @returns {Promise<number>} 服务器端口
+ */
+async function startEmbeddedServer() {
+  if (isDev) {
+    // 开发模式：假设外部已启动服务器
+    console.log("[Electron] 开发模式，使用外部服务器 http://localhost:3000");
+    return 3000;
+  }
+
+  // 生产模式：启动内嵌服务器
+  const port = await findAvailablePort(3000);
+
+  // 确定 server.js 和工作目录路径
+  // asarUnpack 会将 server.js 和 .next 解压到 app.asar.unpacked 目录
+  const serverPath = app.isPackaged
+    ? path
+        .join(__dirname, "../server.js")
+        .replace("app.asar", "app.asar.unpacked")
+    : path.join(__dirname, "../server.js");
+
+  const serverCwd = app.isPackaged
+    ? path.join(__dirname, "..").replace("app.asar", "app.asar.unpacked")
+    : path.join(__dirname, "..");
+
+  // node_modules 在 app.asar 中，需要设置 NODE_PATH 让子进程能找到
+  const asarNodeModules = app.isPackaged
+    ? path.join(__dirname, "../node_modules")
+    : null;
+
+  console.log(`[Electron] 启动内嵌服务器: ${serverPath} on port ${port}`);
+  console.log(`[Electron] 服务器工作目录: ${serverCwd}`);
+  if (asarNodeModules) {
+    console.log(`[Electron] NODE_PATH: ${asarNodeModules}`);
+  }
+
+  return new Promise((resolve, reject) => {
+    // 设置环境变量
+    const env = {
+      ...process.env,
+      NODE_ENV: "production",
+      PORT: String(port),
+      // 设置 NODE_PATH 让 server.js 能找到 app.asar 中的 node_modules
+      ...(asarNodeModules && { NODE_PATH: asarNodeModules }),
+    };
+
+    // 使用 fork 启动服务器（共享 Electron 的 Node.js 运行时）
+    serverProcess = fork(serverPath, [], {
+      env,
+      cwd: serverCwd,
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
+    });
+
+    let resolved = false;
+
+    // 监听服务器输出
+    serverProcess.stdout.on("data", (data) => {
+      const message = data.toString();
+      console.log(`[Server] ${message.trim()}`);
+
+      // 检测服务器是否已启动
+      if (!resolved && message.includes("Ready on")) {
+        resolved = true;
+        console.log(`[Electron] 服务器已就绪，端口: ${port}`);
+        resolve(port);
+      }
+    });
+
+    serverProcess.stderr.on("data", (data) => {
+      console.error(`[Server Error] ${data.toString().trim()}`);
+    });
+
+    serverProcess.on("error", (err) => {
+      console.error("[Electron] 服务器启动失败:", err);
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
+    });
+
+    serverProcess.on("exit", (code) => {
+      console.log(`[Electron] 服务器进程退出，代码: ${code}`);
+      serverProcess = null;
+    });
+
+    // 超时检测（30秒）
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("服务器启动超时（30秒）"));
+      }
+    }, 30000);
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -43,10 +182,8 @@ function createWindow() {
     },
   });
 
-  // 加载应用
-  const url = isDev
-    ? "http://localhost:3000"
-    : `file://${path.join(__dirname, "../out/index.html")}`;
+  // 加载应用（统一使用 HTTP URL）
+  const url = `http://localhost:${serverPort}`;
 
   console.log(`加载 URL: ${url} (开发模式: ${isDev})`);
 
@@ -54,6 +191,8 @@ function createWindow() {
     console.error("加载 URL 失败:", err);
     if (isDev) {
       console.error("请确保 Next.js 开发服务器正在运行 (npm run dev)");
+    } else {
+      console.error("内嵌服务器可能未正常启动");
     }
   });
 
@@ -78,6 +217,16 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+
+    // 清理更新检查定时器（防止窗口销毁后继续发送 IPC）
+    if (updateCheckTimeoutId) {
+      clearTimeout(updateCheckTimeoutId);
+      updateCheckTimeoutId = null;
+    }
+    if (updateCheckIntervalId) {
+      clearInterval(updateCheckIntervalId);
+      updateCheckIntervalId = null;
+    }
   });
 
   // 设置会话权限，允许 DrawIO iframe 加载
@@ -109,15 +258,42 @@ function createWindow() {
       console.log(`[Renderer Console] ${message}`);
     },
   );
+
+  // 自动检查更新：窗口加载完成后启动（避免影响启动体验）
+  mainWindow.webContents.once("did-finish-load", () => {
+    scheduleAutoUpdateChecks();
+  });
 }
 
-app.whenReady().then(() => {
-  // 初始化存储
-  storageManager = new SQLiteManager();
-  storageManager.initialize();
+app.whenReady().then(async () => {
+  try {
+    try {
+      const available =
+        safeStorage &&
+        typeof safeStorage.isEncryptionAvailable === "function" &&
+        safeStorage.isEncryptionAvailable();
+      console.log(
+        `[Electron] safeStorage 加密可用: ${available ? "是" : "否"}`,
+      );
+    } catch (error) {
+      console.warn("[Electron] safeStorage 可用性检测失败：", error);
+    }
 
-  // 创建窗口
-  createWindow();
+    // 初始化存储
+    storageManager = new SQLiteManager();
+    storageManager.initialize();
+
+    // 启动内嵌服务器（生产模式）
+    serverPort = await startEmbeddedServer();
+    console.log(`[Electron] 服务器端口: ${serverPort}`);
+
+    // 创建窗口
+    createWindow();
+  } catch (error) {
+    console.error("[Electron] 启动失败:", error);
+    dialog.showErrorBox("启动失败", `无法启动应用服务器: ${error.message}`);
+    app.quit();
+  }
 });
 
 app.on("window-all-closed", () => {
@@ -125,8 +301,34 @@ app.on("window-all-closed", () => {
   if (storageManager) {
     storageManager.close();
   }
+
+  // 关闭服务器进程
+  if (serverProcess && !serverProcess.killed) {
+    console.log("[Electron] 关闭服务器进程...");
+    serverProcess.kill("SIGTERM");
+    serverProcess = null;
+  }
+
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("before-quit", () => {
+  // 确保服务器进程被清理
+  if (serverProcess && !serverProcess.killed) {
+    serverProcess.kill("SIGTERM");
+    serverProcess = null;
+  }
+
+  // 清理更新检查定时器
+  if (updateCheckTimeoutId) {
+    clearTimeout(updateCheckTimeoutId);
+    updateCheckTimeoutId = null;
+  }
+  if (updateCheckIntervalId) {
+    clearInterval(updateCheckIntervalId);
+    updateCheckIntervalId = null;
   }
 });
 
@@ -231,6 +433,249 @@ ipcMain.handle("open-external", async (event, url) => {
   await shell.openExternal(url);
 });
 
+// ==================== Update Check (GitHub Releases) ====================
+
+function normalizeVersion(rawVersion) {
+  if (typeof rawVersion !== "string") return "";
+  return rawVersion.trim().replace(/^[vV]/, "");
+}
+
+function parseSemver(rawVersion) {
+  const normalized = normalizeVersion(rawVersion);
+  const [versionCore, versionPreRelease = ""] = normalized.split("-", 2);
+  const [majorRaw = "0", minorRaw = "0", patchRaw = "0"] =
+    versionCore.split(".");
+
+  const major = Number.parseInt(majorRaw, 10) || 0;
+  const minor = Number.parseInt(minorRaw, 10) || 0;
+  const patch = Number.parseInt(patchRaw, 10) || 0;
+
+  const preRelease = versionPreRelease
+    ? versionPreRelease.split(".").filter(Boolean)
+    : [];
+
+  return { major, minor, patch, preRelease };
+}
+
+function compareNumbers(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function isNumericIdentifier(identifier) {
+  return /^\d+$/.test(identifier);
+}
+
+function comparePreReleaseIdentifiers(a, b) {
+  if (a === b) return 0;
+
+  const aIsNum = isNumericIdentifier(a);
+  const bIsNum = isNumericIdentifier(b);
+
+  if (aIsNum && bIsNum) {
+    return compareNumbers(Number.parseInt(a, 10), Number.parseInt(b, 10));
+  }
+
+  // 数字标识符优先级低于非数字
+  if (aIsNum && !bIsNum) return -1;
+  if (!aIsNum && bIsNum) return 1;
+
+  return a < b ? -1 : 1;
+}
+
+function comparePreRelease(preA, preB) {
+  const aHasPre = preA.length > 0;
+  const bHasPre = preB.length > 0;
+
+  // 无 pre-release 的版本优先级更高
+  if (!aHasPre && !bHasPre) return 0;
+  if (!aHasPre && bHasPre) return 1;
+  if (aHasPre && !bHasPre) return -1;
+
+  const maxLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const ida = preA[i];
+    const idb = preB[i];
+
+    if (ida === undefined) return -1;
+    if (idb === undefined) return 1;
+
+    const cmp = comparePreReleaseIdentifiers(ida, idb);
+    if (cmp !== 0) return cmp;
+  }
+
+  return 0;
+}
+
+/**
+ * 比较两个 semver 版本号
+ * @returns {-1 | 0 | 1} a < b 返回 -1，a > b 返回 1
+ */
+function compareSemver(a, b) {
+  const va = parseSemver(a);
+  const vb = parseSemver(b);
+
+  const majorCmp = compareNumbers(va.major, vb.major);
+  if (majorCmp !== 0) return majorCmp;
+
+  const minorCmp = compareNumbers(va.minor, vb.minor);
+  if (minorCmp !== 0) return minorCmp;
+
+  const patchCmp = compareNumbers(va.patch, vb.patch);
+  if (patchCmp !== 0) return patchCmp;
+
+  return comparePreRelease(va.preRelease, vb.preRelease);
+}
+
+function fetchGitHubLatestRelease() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const requestOptions = {
+    hostname: "api.github.com",
+    path: "/repos/Menghuan1918/drawio2go/releases/latest",
+    method: "GET",
+    headers: {
+      "User-Agent": `DrawIO2Go/${currentVersion || "0.0.0"} (Electron)`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const req = https.request(requestOptions, (res) => {
+      let raw = "";
+
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        raw += chunk;
+      });
+
+      res.on("end", () => {
+        if (res.statusCode !== 200) {
+          console.error(
+            `[Update] GitHub API 返回非 200：${res.statusCode} ${res.statusMessage || ""}`.trim(),
+          );
+          settle(null);
+          return;
+        }
+
+        try {
+          const json = JSON.parse(raw);
+          const tagName = json?.tag_name;
+          const htmlUrl = json?.html_url;
+          const releaseNotes = json?.body;
+
+          if (typeof tagName !== "string" || typeof htmlUrl !== "string") {
+            console.error("[Update] GitHub Release 响应缺少必要字段");
+            settle(null);
+            return;
+          }
+
+          settle({ tagName, htmlUrl, releaseNotes });
+        } catch (error) {
+          console.error("[Update] 解析 GitHub Release JSON 失败:", error);
+          settle(null);
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      console.error("[Update] GitHub Release 请求失败:", error);
+      settle(null);
+    });
+
+    // 超时：静默失败（记录日志）
+    req.setTimeout(8000, () => {
+      console.error("[Update] GitHub Release 请求超时（8s）");
+      req.destroy(new Error("timeout"));
+      settle(null);
+    });
+
+    req.end();
+  });
+}
+
+/**
+ * @returns {Promise<null | { hasUpdate: boolean, currentVersion: string, latestVersion: string, releaseUrl: string, releaseNotes?: string }>}
+ */
+async function checkForUpdates() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const release = await fetchGitHubLatestRelease();
+  if (!release) return null;
+
+  const latestVersion = normalizeVersion(release.tagName);
+  if (!latestVersion) {
+    console.error("[Update] 最新 Release tag_name 无效");
+    return null;
+  }
+
+  const hasUpdate = compareSemver(currentVersion, latestVersion) < 0;
+  return {
+    hasUpdate,
+    currentVersion,
+    latestVersion,
+    releaseUrl: release.htmlUrl,
+    releaseNotes:
+      typeof release.releaseNotes === "string" && release.releaseNotes.trim()
+        ? release.releaseNotes
+        : undefined,
+  };
+}
+
+async function runUpdateCheckAndNotify() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const result = await checkForUpdates();
+  if (!result) return;
+
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("update:available", result);
+  } catch (error) {
+    console.error("[Update] 发送 update:available 失败:", error);
+  }
+}
+
+function scheduleAutoUpdateChecks() {
+  // 防止多次注册（例如 macOS 激活重新创建窗口）
+  if (updateCheckTimeoutId) {
+    clearTimeout(updateCheckTimeoutId);
+    updateCheckTimeoutId = null;
+  }
+  if (updateCheckIntervalId) {
+    clearInterval(updateCheckIntervalId);
+    updateCheckIntervalId = null;
+  }
+
+  // 首次检查延迟 5 秒（避免影响启动体验）
+  updateCheckTimeoutId = setTimeout(() => {
+    updateCheckTimeoutId = null;
+    runUpdateCheckAndNotify();
+  }, 5000);
+
+  // 每小时检查一次
+  updateCheckIntervalId = setInterval(() => {
+    runUpdateCheckAndNotify();
+  }, 3600000);
+}
+
+ipcMain.handle("update:check", async () => {
+  return checkForUpdates();
+});
+
+ipcMain.handle("update:openReleasePage", async (_event, url) => {
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("无效的 Release URL");
+  }
+  await shell.openExternal(url);
+});
+
 // IPC 处理：通用保存对话框
 ipcMain.handle("show-save-dialog", async (event, options) => {
   const result = await dialog.showSaveDialog(mainWindow, options);
@@ -267,6 +712,25 @@ ipcMain.handle("read-file", async (event, filePath) => {
     return data;
   } catch (error) {
     console.error("读取文件错误:", error);
+    throw error;
+  }
+});
+
+// IPC 处理：读取 userData 目录下的二进制文件（用于附件 file_path → ArrayBuffer）
+ipcMain.handle("fs:readFile", async (_event, relativePath) => {
+  try {
+    if (typeof relativePath !== "string" || !relativePath.trim()) {
+      throw new Error("无效的文件路径");
+    }
+
+    const absPath = resolveUserDataPathSafe(relativePath);
+    const data = fs.readFileSync(absPath);
+    return data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength,
+    );
+  } catch (error) {
+    console.error("读取二进制文件错误:", error);
     throw error;
   }
 });
@@ -564,3 +1028,27 @@ ipcMain.handle("storage:deleteMessage", async (event, id) => {
 ipcMain.handle("storage:createMessages", async (event, messages) => {
   return storageManager.createMessages(messages);
 });
+
+// Attachments
+ipcMain.handle("storage:getAttachment", async (_event, id) => {
+  return storageManager.getAttachment(id);
+});
+
+ipcMain.handle("storage:createAttachment", async (_event, attachment) => {
+  return storageManager.createAttachment(attachment);
+});
+
+ipcMain.handle("storage:deleteAttachment", async (_event, id) => {
+  return storageManager.deleteAttachment(id);
+});
+
+ipcMain.handle("storage:getAttachmentsByMessage", async (_event, messageId) => {
+  return storageManager.getAttachmentsByMessage(messageId);
+});
+
+ipcMain.handle(
+  "storage:getAttachmentsByConversation",
+  async (_event, conversationId) => {
+    return storageManager.getAttachmentsByConversation(conversationId);
+  },
+);

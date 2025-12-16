@@ -18,6 +18,8 @@ import type {
   UpdateConversationInput,
   Message,
   CreateMessageInput,
+  Attachment,
+  CreateAttachmentInput,
 } from "./types";
 import {
   DB_NAME,
@@ -37,6 +39,29 @@ import { runIndexedDbMigrations } from "./migrations/indexeddb";
 import { dispatchConversationEvent } from "./event-utils";
 
 const logger = createLogger("IndexedDBStorage");
+
+const ALLOWED_ATTACHMENT_MIMES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10MB
+
+function isQuotaExceededError(error: unknown): boolean {
+  const name = (error as { name?: unknown })?.name;
+  return name === "QuotaExceededError";
+}
+
+function resolveMessageCreatedAt(
+  message: Pick<CreateMessageInput, "created_at" | "createdAt">,
+  fallback: number,
+): number {
+  if (typeof message.created_at === "number") return message.created_at;
+  if (typeof message.createdAt === "number") return message.createdAt;
+  return fallback;
+}
 
 /**
  * IndexedDB 存储实现（Web 环境）
@@ -286,6 +311,7 @@ export class IndexedDBStorage implements StorageAdapter {
         "xml_versions",
         "conversations",
         "messages",
+        "attachments",
         "conversation_sequences",
       ],
       "readwrite",
@@ -306,6 +332,15 @@ export class IndexedDBStorage implements StorageAdapter {
       .index("project_uuid")
       .getAll(uuid);
     for (const conv of conversations) {
+      // 删除对话的附件
+      const attachments = await tx
+        .objectStore("attachments")
+        .index("conversation_id")
+        .getAll(conv.id);
+      for (const att of attachments) {
+        await tx.objectStore("attachments").delete(att.id);
+      }
+
       // 删除对话的消息
       const messages = await tx
         .objectStore("messages")
@@ -393,12 +428,10 @@ export class IndexedDBStorage implements StorageAdapter {
     // 按创建时间倒序，移除大字段
     return versions
       .map((version) => {
-        const {
-          preview_svg: _ignoredPreview,
-          pages_svg: _ignoredPages,
-          ...rest
-        } = version as XMLVersion;
-        return rest as XMLVersion;
+        const rest: XMLVersion = { ...(version as XMLVersion) };
+        delete rest.preview_svg;
+        delete rest.pages_svg;
+        return rest;
       })
       .sort((a, b) => b.created_at - a.created_at);
   }
@@ -603,9 +636,17 @@ export class IndexedDBStorage implements StorageAdapter {
 
     // 级联删除消息
     const tx = db.transaction(
-      ["conversations", "messages", "conversation_sequences"],
+      ["conversations", "messages", "attachments", "conversation_sequences"],
       "readwrite",
     );
+
+    const attachments = await tx
+      .objectStore("attachments")
+      .index("conversation_id")
+      .getAll(id);
+    for (const att of attachments) {
+      await tx.objectStore("attachments").delete(att.id);
+    }
 
     const messages = await tx
       .objectStore("messages")
@@ -634,10 +675,11 @@ export class IndexedDBStorage implements StorageAdapter {
     if (!ids || ids.length === 0) return;
     const db = await this.ensureDB();
     const tx = db.transaction(
-      ["conversations", "messages", "conversation_sequences"],
+      ["conversations", "messages", "attachments", "conversation_sequences"],
       "readwrite",
     );
     const messagesStore = tx.objectStore("messages");
+    const attachmentsStore = tx.objectStore("attachments");
     const convStore = tx.objectStore("conversations");
     const seqStore = tx.objectStore("conversation_sequences");
     const conversationProjects = new Map<string, string | undefined>();
@@ -645,6 +687,18 @@ export class IndexedDBStorage implements StorageAdapter {
     for (const id of ids) {
       const conversation = await convStore.get(id);
       conversationProjects.set(id, conversation?.project_uuid);
+
+      const attRange = IDBKeyRange.only(id);
+      const attCursor = await attachmentsStore
+        .index("conversation_id")
+        .openCursor(attRange);
+      if (attCursor) {
+        let current: typeof attCursor | null = attCursor;
+        while (current) {
+          await attachmentsStore.delete(current.primaryKey);
+          current = await current.continue();
+        }
+      }
 
       const range = IDBKeyRange.only(id);
       const cursor = await messagesStore
@@ -802,12 +856,7 @@ export class IndexedDBStorage implements StorageAdapter {
     const store = tx.objectStore("messages");
     const defaultTimestamp = Date.now();
 
-    const createdAt =
-      typeof message.created_at === "number"
-        ? message.created_at
-        : typeof message.createdAt === "number"
-          ? message.createdAt
-          : defaultTimestamp;
+    const createdAt = resolveMessageCreatedAt(message, defaultTimestamp);
 
     const sequenceNumber =
       typeof message.sequence_number === "number"
@@ -849,7 +898,17 @@ export class IndexedDBStorage implements StorageAdapter {
   async deleteMessage(id: string): Promise<void> {
     const db = await this.ensureDB();
     const existing = await db.get("messages", id);
-    await db.delete("messages", id);
+
+    const tx = db.transaction(["messages", "attachments"], "readwrite");
+    const attachments = await tx
+      .objectStore("attachments")
+      .index("message_id")
+      .getAll(id);
+    for (const att of attachments) {
+      await tx.objectStore("attachments").delete(att.id);
+    }
+    await tx.objectStore("messages").delete(id);
+    await tx.done;
 
     if (existing) {
       const conversation = await db.get(
@@ -876,12 +935,7 @@ export class IndexedDBStorage implements StorageAdapter {
     const inserted: Message[] = [];
 
     for (const msg of messages) {
-      const createdAt =
-        typeof msg.created_at === "number"
-          ? msg.created_at
-          : typeof msg.createdAt === "number"
-            ? msg.createdAt
-            : defaultTimestamp;
+      const createdAt = resolveMessageCreatedAt(msg, defaultTimestamp);
 
       const sequenceNumber =
         typeof msg.sequence_number === "number"
@@ -925,5 +979,106 @@ export class IndexedDBStorage implements StorageAdapter {
     }
 
     return inserted;
+  }
+
+  // ==================== Attachments ====================
+
+  async getAttachment(id: string): Promise<Attachment | null> {
+    const db = await this.ensureDB();
+    const tx = db.transaction("attachments", "readonly");
+    const attachment = (await tx.objectStore("attachments").get(id)) as
+      | Attachment
+      | undefined;
+    await tx.done;
+    return attachment ?? null;
+  }
+
+  async createAttachment(
+    attachment: CreateAttachmentInput,
+  ): Promise<Attachment> {
+    const db = await this.ensureDB();
+
+    if (attachment.type !== "image") {
+      throw new Error(`Unsupported attachment type: ${attachment.type}`);
+    }
+
+    if (
+      !ALLOWED_ATTACHMENT_MIMES.includes(
+        attachment.mime_type as (typeof ALLOWED_ATTACHMENT_MIMES)[number],
+      )
+    ) {
+      throw new Error(`Unsupported MIME type: ${attachment.mime_type}`);
+    }
+
+    if (attachment.file_size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`File size exceeds 10MB: ${attachment.file_size} bytes`);
+    }
+
+    const blobData = (() => {
+      const data = attachment.blob_data as unknown;
+      if (!data) return null;
+      if (data instanceof Blob) return data;
+      try {
+        return new Blob([data as BlobPart], { type: attachment.mime_type });
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!blobData) {
+      throw new Error("blob_data is required for IndexedDB attachments");
+    }
+
+    const now = Date.now();
+    const fullAttachment: Attachment = {
+      ...attachment,
+      blob_data: blobData,
+      created_at: now,
+    };
+
+    try {
+      const tx = db.transaction("attachments", "readwrite");
+      await tx.objectStore("attachments").put(fullAttachment);
+      await tx.done;
+      return fullAttachment;
+    } catch (error) {
+      if (isQuotaExceededError(error)) {
+        throw new Error(
+          "IndexedDB 存储空间不足（QuotaExceededError），无法保存附件；请清理浏览器存储或减少附件大小后重试。",
+        );
+      }
+      throw error;
+    }
+  }
+
+  async deleteAttachment(id: string): Promise<void> {
+    const db = await this.ensureDB();
+    const tx = db.transaction("attachments", "readwrite");
+    await tx.objectStore("attachments").delete(id);
+    await tx.done;
+  }
+
+  async getAttachmentsByMessage(messageId: string): Promise<Attachment[]> {
+    const db = await this.ensureDB();
+    const tx = db.transaction("attachments", "readonly");
+    const items = (await tx
+      .objectStore("attachments")
+      .index("message_id")
+      .getAll(messageId)) as Attachment[];
+    await tx.done;
+    return (items ?? []).sort((a, b) => a.created_at - b.created_at);
+  }
+
+  async getAttachmentsByConversation(
+    conversationId: string,
+  ): Promise<Attachment[]> {
+    const db = await this.ensureDB();
+    const tx = db.transaction("attachments", "readonly");
+    const items = (await tx
+      .objectStore("attachments")
+      .index("conversation_id")
+      .getAll(conversationId)) as Attachment[];
+    await tx.done;
+    return (items ?? []).sort((a, b) => a.created_at - b.created_at);
   }
 }

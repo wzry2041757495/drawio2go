@@ -19,6 +19,8 @@ import type {
   UpdateConversationInput,
   Message,
   CreateMessageInput,
+  Attachment,
+  CreateAttachmentInput,
 } from "./types";
 
 /**
@@ -241,4 +243,11 @@ export interface StorageAdapter {
    * @returns 创建后的完整消息数组
    */
   createMessages(messages: CreateMessageInput[]): Promise<Message[]>;
+
+  // ========== Attachments（附件管理）==========
+  getAttachment(id: string): Promise<Attachment | null>;
+  createAttachment(attachment: CreateAttachmentInput): Promise<Attachment>;
+  deleteAttachment(id: string): Promise<void>;
+  getAttachmentsByMessage(messageId: string): Promise<Attachment[]>;
+  getAttachmentsByConversation(conversationId: string): Promise<Attachment[]>;
 }

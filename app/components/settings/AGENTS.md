@@ -19,16 +19,17 @@
 
 ## 设置面板列表
 
-| 面板                     | 职责            | 核心配置项                                                                 |
-| ------------------------ | --------------- | -------------------------------------------------------------------------- |
-| **GeneralSettingsPanel** | 通用设置        | 语言选择、默认文件路径                                                     |
-| **ModelsSettingsPanel**  | 供应商/模型管理 | 供应商列表（Accordion）、模型预览、删除供应商级联处理、Provider/Model 编辑 |
-| **ProviderEditDialog**   | 供应商新增/编辑 | HeroUI Modal 弹窗，支持新增/编辑供应商、表单校验、连接测试、Toast 反馈     |
-| **ModelEditDialog**      | 模型新增/编辑   | HeroUI Modal 弹窗，模型名称/温度/工具轮次校验，能力（思考/视觉）勾选       |
-| **AgentSettingsPanel**   | Agent 配置      | 全局系统提示词（System Prompt）编辑                                        |
-| **VersionSettingsPanel** | 版本管理        | AI 编辑前自动创建版本快照                                                  |
-| **ConnectionTester**     | 连接测试器      | 测试 LLM API 连接可用性                                                    |
-| **SettingsNav**          | 设置导航栏      | 标签页切换（通用 / 模型 / Agent / 版本，图标导航）                         |
+| 面板                     | 职责            | 核心配置项                                                                                            |
+| ------------------------ | --------------- | ----------------------------------------------------------------------------------------------------- |
+| **GeneralSettingsPanel** | 通用设置        | 语言选择、默认文件路径                                                                                |
+| **ModelsSettingsPanel**  | 供应商/模型管理 | 供应商列表（Accordion）、模型预览、删除供应商级联处理、Provider/Model 编辑                            |
+| **ProviderEditDialog**   | 供应商新增/编辑 | HeroUI Modal 弹窗，支持新增/编辑供应商、表单校验、Toast 反馈                                          |
+| **ModelEditDialog**      | 模型新增/编辑   | HeroUI Modal 弹窗，模型名称/温度/工具轮次校验，能力（思考/视觉/工具）按钮切换（含 Tooltip）、模型测试 |
+| **AgentSettingsPanel**   | Agent 配置      | 全局系统提示词（System Prompt）编辑                                                                   |
+| **VersionSettingsPanel** | 版本管理        | AI 编辑前自动创建版本快照                                                                             |
+| **AboutSettingsPanel**   | 关于            | 应用版本、GitHub 链接、更新检查（含 `update.autoCheck`）                                              |
+| **ConnectionTester**     | 连接测试器      | 测试 LLM API 连接可用性                                                                               |
+| **SettingsNav**          | 设置导航栏      | 标签页切换（通用 / 模型 / Agent / 版本 / 关于，图标导航）                                             |
 
 ---
 
@@ -38,6 +39,8 @@
 
 ```typescript
 interface GeneralSettingsPanelProps {
+  sidebarExpanded: boolean; // 默认展开侧边栏
+  onSidebarExpandedChange: (expanded: boolean) => void;
   defaultPath: string; // 默认文件路径
   onDefaultPathChange: (path: string) => void;
 }
@@ -46,6 +49,7 @@ interface GeneralSettingsPanelProps {
 **配置项：**
 
 - **语言选择** - 切换应用UI语言（中文/英文），使用 LanguageSwitcher 组件
+- **默认展开侧边栏** - 控制启动时右侧侧边栏是否默认展开
 - **默认文件路径** - 设置文件浏览器打开的初始目录（Electron 环境）
 
 ### ModelsSettingsPanel（供应商/模型管理）
@@ -144,6 +148,8 @@ settings.general.defaultPath.label
 settings.general.defaultPath.placeholder
 settings.general.defaultPath.description
 settings.general.defaultPath.selectButton
+settings.general.sidebarExpanded.label
+settings.general.sidebarExpanded.description
 ```
 
 **LLM 设置：**
@@ -156,7 +162,7 @@ settings.llm.apiUrl.placeholder
 settings.llm.apiUrl.description
 settings.llm.provider.label
 settings.llm.provider.description
-settings.llm.providers.[type].label        // openai-compatible, deepseek, openai-reasoning
+settings.llm.providers.[type].label        // openai-compatible, anthropic, deepseek-native, openai-reasoning
 settings.llm.providers.[type].description
 settings.llm.apiKey.label
 settings.llm.apiKey.placeholder
@@ -346,7 +352,8 @@ interface ProviderOption {
 
 const PROVIDER_OPTIONS: ProviderType[] = [
   "openai-compatible",
-  "deepseek",
+  "anthropic",
+  "deepseek-native",
   "openai-reasoning",
 ];
 
@@ -364,7 +371,8 @@ const getProviderOptions = (t: TFunction): ProviderOption[] => {
 type ProviderType =
   | "openai-reasoning"
   | "openai-compatible"
-  | "deepseek-native";
+  | "deepseek-native"
+  | "anthropic";
 
 interface ProviderConfig {
   id: string;
@@ -462,6 +470,7 @@ app/components/settings/
 ├── ProviderEditDialog.tsx        # 供应商新增/编辑对话框
 ├── VersionSettingsPanel.tsx      # 版本管理设置面板
 ├── ConnectionTester.tsx          # 连接测试器（弹窗）
+├── AboutSettingsPanel.tsx        # 关于面板（版本信息 + 更新检查）
 └── constants.ts                  # 常量定义（供应商选项等）
 ```
 
@@ -476,4 +485,4 @@ app/components/settings/
 
 ---
 
-**最后更新:** 2025年12月04日
+**最后更新:** 2025年12月15日

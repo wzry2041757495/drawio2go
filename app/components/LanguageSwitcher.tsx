@@ -13,6 +13,9 @@ import {
 } from "@/app/i18n/config";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("LanguageSwitcher");
 
 interface LanguageSwitcherProps {
   className?: string;
@@ -39,7 +42,9 @@ export default function LanguageSwitcher({ className }: LanguageSwitcherProps) {
       : defaultLocale;
 
     if (nextLocale !== i18n.language) {
-      void i18n.changeLanguage(nextLocale);
+      i18n.changeLanguage(nextLocale).catch((error) => {
+        logger.error("切换语言失败", { nextLocale, error });
+      });
     }
   };
 

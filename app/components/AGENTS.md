@@ -97,12 +97,13 @@
 
 **Props**: `onSettingsChange`
 
-**四个面板**:
+**五个面板**:
 
 - **GeneralSettingsPanel**: 语言切换 + 默认文件路径选择（Electron 环境支持 `selectFolder`）
 - **ModelsSettingsPanel**: 供应商/模型管理（Accordion 列表、级联删除、Provider 编辑占位）
 - **AgentSettingsPanel**: 全局系统提示词（System Prompt）编辑
 - **VersionSettingsPanel**: AI 自动版本快照开关（`autoVersionOnAIEdit`）
+- **AboutSettingsPanel**: 应用信息与更新检查（`update.autoCheck`）
 
 **特性**: 底部操作条（有修改时显示取消/保存）、供应商切换（OpenAI Responses/Chat Completions/DeepSeek）
 
@@ -120,6 +121,7 @@
 - 工具状态卡片（进行中/成功/失败）
 - 模型信息条（图标 + 模型名 + 时间戳）
 - 模型选择 Popover（HeroUI ComboBox 分组），按供应商列出模型，流式期间禁用选择
+- `sendMessage(message, ...)` 仅在“替换既有用户消息”时才传 `message.messageId`；普通发送只需设置 `message.id`
 
 #### 4.1 聊天子组件（app/components/chat/）
 

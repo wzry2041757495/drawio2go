@@ -5,52 +5,16 @@ import { ErrorCodes, type ErrorCode } from "@/app/errors/error-codes";
 import { createLogger } from "@/lib/logger";
 import type { ToolExecutionContext } from "@/app/types/socket";
 import { getStorage } from "@/app/lib/storage";
-import {
-  streamText,
-  stepCountIs,
-  convertToModelMessages,
-  type ModelMessage,
-  type UIMessage,
-} from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { NextRequest, NextResponse } from "next/server";
+import { validateAndExtractChatParams } from "./helpers/request-validator";
+import { createModelFromConfig } from "./helpers/model-factory";
+import { classifyError } from "./helpers/error-classifier";
+import { buildReasoningParams } from "./helpers/reasoning-utils";
+import { processImageAttachments } from "./helpers/image-utils";
+import { generateUUID } from "@/app/lib/utils";
 
 const logger = createLogger("Chat API");
-
-function extractRecentReasoning(messages: ModelMessage[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.role !== "assistant") {
-      continue;
-    }
-
-    const { content } = message;
-    if (!Array.isArray(content)) {
-      return undefined;
-    }
-
-    const reasoningText = content
-      .filter((part) => part.type === "reasoning")
-      .map((part) => part.text ?? "")
-      .join("")
-      .trim();
-
-    return reasoningText || undefined;
-  }
-
-  return undefined;
-}
-
-function isNewUserQuestion(messages: ModelMessage[]): boolean {
-  if (messages.length === 0) {
-    return false;
-  }
-
-  const lastMessage = messages[messages.length - 1];
-  return lastMessage.role === "user";
-}
 
 function apiError(
   code: ErrorCode,
@@ -73,9 +37,38 @@ function apiError(
 export async function POST(req: NextRequest) {
   const abortController = new AbortController();
   const { signal: abortSignal } = abortController;
+  const chatAbortControllers =
+    global.chatAbortControllers ?? (global.chatAbortControllers = new Map());
+  const cancelledChatRunIds =
+    global.cancelledChatRunIds ?? (global.cancelledChatRunIds = new Map());
+  let chatRunId: string | null = null;
+
+  /**
+   * 清理超过 5 分钟的已取消 chatRunId
+   * 避免 Map 无限增长导致内存泄漏
+   */
+  const cleanupOldCancelledRunIds = () => {
+    const now = Date.now();
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    for (const [runId, timestamp] of cancelledChatRunIds.entries()) {
+      if (now - timestamp > FIVE_MINUTES) {
+        cancelledChatRunIds.delete(runId);
+      }
+    }
+  };
+
+  // 每次请求时清理旧条目
+  cleanupOldCancelledRunIds();
 
   const abortListener = () => {
     logger.info("[Chat API] 客户端请求中断，停止流式响应");
+    if (chatRunId) {
+      cancelledChatRunIds.set(chatRunId, Date.now());
+      const current = chatAbortControllers.get(chatRunId);
+      if (current === abortController) {
+        chatAbortControllers.delete(chatRunId);
+      }
+    }
     abortController.abort();
   };
 
@@ -83,80 +76,36 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const messages = body?.messages as UIMessage[] | undefined;
-    const rawConfig = body?.llmConfig;
-    const bodyProjectUuid =
-      typeof body?.projectUuid === "string" &&
-      body.projectUuid.trim().length > 0
-        ? body.projectUuid.trim()
-        : "";
-    const headerProjectUuid =
-      typeof req.headers.get("x-project-uuid") === "string"
-        ? (req.headers.get("x-project-uuid")?.trim() ?? "")
-        : "";
-    const projectUuid = bodyProjectUuid;
-    const conversationId =
-      typeof body?.conversationId === "string" &&
-      body.conversationId.trim().length > 0
-        ? body.conversationId.trim()
-        : "";
-
-    if (!Array.isArray(messages) || !rawConfig) {
+    const validation = validateAndExtractChatParams(body);
+    if (!validation.ok) {
       return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing required parameters: messages or llmConfig",
-        400,
+        validation.error.code,
+        validation.error.message,
+        validation.error.status,
+        validation.error.details,
       );
     }
 
-    if (!projectUuid) {
-      return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing required parameter: projectUuid",
-        400,
-      );
-    }
-
-    if (!conversationId) {
-      return apiError(
-        ErrorCodes.CHAT_MISSING_PARAMS,
-        "Missing conversationId in request body",
-        400,
-        {
-          conversationIdSource: "body",
-        },
-      );
-    }
-
-    const paramSources = {
-      conversationIdSource: "body",
-      projectUuidSource: bodyProjectUuid
-        ? "body"
-        : headerProjectUuid
-          ? "header"
-          : "missing",
-    };
+    const {
+      messages,
+      rawConfig,
+      projectUuid,
+      conversationId,
+      chatRunId: chatRunIdFromBody,
+      paramSources,
+    } = validation;
 
     const isServerEnvironment = typeof window === "undefined";
 
     const requestLogger = logger.withContext({
       projectUuid,
       conversationId,
+      chatRunId: chatRunIdFromBody,
       ...paramSources,
     });
 
-    if (headerProjectUuid && headerProjectUuid !== projectUuid) {
-      requestLogger.warn("拒绝访问：projectUuid 不一致", {
-        bodyProjectUuid,
-        headerProjectUuid,
-      });
-      return apiError(
-        ErrorCodes.CHAT_CONVERSATION_FORBIDDEN,
-        "Project UUID mismatch between body and header",
-        403,
-        paramSources,
-      );
-    }
+    chatRunId = chatRunIdFromBody ?? generateUUID("chat-run");
+    chatAbortControllers.set(chatRunId, abortController);
 
     let conversation;
     if (isServerEnvironment) {
@@ -197,18 +146,18 @@ export async function POST(req: NextRequest) {
     const toolContext: ToolExecutionContext = {
       projectUuid,
       conversationId,
+      chatRunId,
+      abortSignal,
     };
 
     const tools = createDrawioTools(toolContext);
 
-    const modelMessages = convertToModelMessages(messages, {
-      tools,
-    });
-
     let normalizedConfig: LLMConfig;
 
     try {
-      normalizedConfig = normalizeLLMConfig(rawConfig);
+      normalizedConfig = normalizeLLMConfig(
+        rawConfig as Partial<LLMConfig> | null,
+      );
     } catch {
       return apiError(
         ErrorCodes.CHAT_INVALID_CONFIG,
@@ -223,79 +172,46 @@ export async function POST(req: NextRequest) {
       maxRounds: normalizedConfig.maxToolRounds,
       projectUuid,
       conversationId,
+      chatRunId,
     });
+
+    // ==================== 图片消息处理（Milestone 3） ====================
+    const imageResult = processImageAttachments(
+      messages,
+      normalizedConfig,
+      configAwareLogger,
+    );
+
+    if (!imageResult.ok) {
+      return apiError(
+        imageResult.error.code,
+        imageResult.error.message,
+        imageResult.error.status,
+      );
+    }
+
+    const modelMessages = convertToModelMessages(
+      imageResult.processedMessages,
+      {
+        tools,
+      },
+    );
 
     configAwareLogger.info("收到请求", {
       messagesCount: modelMessages.length,
+      imageCount: imageResult.allImageParts.length,
       capabilities: normalizedConfig.capabilities,
       enableToolsInThinking: normalizedConfig.enableToolsInThinking,
       paramSources,
     });
 
-    // 根据 providerType 选择合适的 provider
-    let model;
+    const model = createModelFromConfig(normalizedConfig);
 
-    if (normalizedConfig.providerType === "openai-reasoning") {
-      // OpenAI Reasoning 模型：使用原生 @ai-sdk/openai
-      const openaiProvider = createOpenAI({
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      model = openaiProvider.chat(normalizedConfig.modelName);
-    } else if (normalizedConfig.providerType === "deepseek-native") {
-      // DeepSeek Native：使用 @ai-sdk/deepseek
-      const deepseekProvider = createDeepSeek({
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      // deepseekProvider 直接返回模型调用函数（无需 .chat）
-      model = deepseekProvider(normalizedConfig.modelName);
-    } else {
-      // OpenAI Compatible：使用 @ai-sdk/openai-compatible
-      const compatibleProvider = createOpenAICompatible({
-        name: normalizedConfig.providerType,
-        baseURL: normalizedConfig.apiUrl,
-        apiKey: normalizedConfig.apiKey || "dummy-key",
-      });
-      model = compatibleProvider(normalizedConfig.modelName);
-    }
-
-    let experimentalParams: Record<string, unknown> | undefined;
-    let reasoningContent: string | undefined;
-
-    try {
-      if (
-        normalizedConfig.enableToolsInThinking &&
-        normalizedConfig.capabilities?.supportsThinking
-      ) {
-        const isNewQuestion = isNewUserQuestion(modelMessages);
-
-        if (!isNewQuestion) {
-          reasoningContent = extractRecentReasoning(modelMessages);
-
-          if (reasoningContent) {
-            experimentalParams = { reasoning_content: reasoningContent };
-
-            configAwareLogger.debug("复用 reasoning_content", {
-              length: reasoningContent.length,
-            });
-          } else {
-            configAwareLogger.debug("无可复用的 reasoning_content");
-          }
-        } else {
-          configAwareLogger.debug("新用户问题，跳过 reasoning_content 复用");
-        }
-      }
-    } catch (reasoningError) {
-      configAwareLogger.error("构建 reasoning_content 失败，已降级为普通模式", {
-        error:
-          reasoningError instanceof Error
-            ? reasoningError.message
-            : reasoningError,
-        stack:
-          reasoningError instanceof Error ? reasoningError.stack : undefined,
-      });
-    }
+    const { experimentalParams } = buildReasoningParams(
+      normalizedConfig,
+      modelMessages,
+      configAwareLogger,
+    );
 
     const result = streamText({
       model,
@@ -327,33 +243,17 @@ export async function POST(req: NextRequest) {
     }
 
     logger.error("Chat API error", error);
-
-    let statusCode = 500;
-    let code: ErrorCode = ErrorCodes.CHAT_SEND_FAILED;
-    let message = "Failed to send request";
-
     const err = error as Error;
-    if (err.message?.includes("Anthropic")) {
-      message = err.message;
-      statusCode = 400;
-    } else if (err.message?.includes("API key")) {
-      code = ErrorCodes.CHAT_API_KEY_INVALID;
-      message = "API key is missing or invalid";
-      statusCode = 401;
-    } else if (err.message?.includes("model")) {
-      code = ErrorCodes.CHAT_MODEL_NOT_FOUND;
-      message = "Model does not exist or is unavailable";
-      statusCode = 400;
-    } else if (err.message?.includes("配置参数")) {
-      code = ErrorCodes.CHAT_INVALID_CONFIG;
-      message = "Invalid LLM configuration";
-      statusCode = 400;
-    } else if (err.message) {
-      message = err.message;
-    }
+    const classified = classifyError(err);
 
-    return apiError(code, message, statusCode);
+    return apiError(classified.code, classified.message, classified.statusCode);
   } finally {
     req.signal.removeEventListener("abort", abortListener);
+    if (chatRunId) {
+      const current = chatAbortControllers.get(chatRunId);
+      if (current === abortController) {
+        chatAbortControllers.delete(chatRunId);
+      }
+    }
   }
 }

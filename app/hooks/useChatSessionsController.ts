@@ -348,7 +348,11 @@ export function useChatSessionsController(
         }
 
         setActiveConversationId((prev) => {
-          if (prev && list.some((conv) => conv.id === prev)) return prev;
+          if (prev) {
+            for (const conv of list) {
+              if (conv.id === prev) return prev;
+            }
+          }
           return list[0]?.id ?? null;
         });
       },

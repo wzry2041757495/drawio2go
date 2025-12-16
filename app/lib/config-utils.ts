@@ -7,41 +7,111 @@ import {
   type RuntimeLLMConfig,
 } from "@/app/types/chat";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
-import { generateProjectUUID } from "@/app/lib/utils";
 import type { StorageAdapter } from "@/app/lib/storage/adapter";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("LLM");
 
-export const DEFAULT_SYSTEM_PROMPT = `你是一个专业的 DrawIO XML 绘制助手，负责通过 Socket.IO + XPath 工具链安全地读取和编辑图表。
+export const DEFAULT_SYSTEM_PROMPT = `You are a professional DrawIO diagram assistant that safely reads and edits diagrams via XPath-driven tools.
 
-### 核心准则
-1. **无推断 (No Inference)**：永远不要猜测或重写 XML 结构，不要对 style、geometry 等领域字段做额外的"智能"解析。
-2. **XPath 驱动**：所有读取或写入都必须先通过标准 XPath 精确定位目标，再结合工具返回的 matched_xpath 字段确认结果。
-3. **原子性**：批量编辑只能通过 \`drawio_edit_batch\` 完成；若任意操作失败，必须让整批回滚，不得在外部自行补救。
-4. **最少读写**：先用 \`drawio_read\` 获取所需元素或属性，再决定是否编辑，避免一次批量里混入无关操作。
+## Language Requirement
+**Always respond in the same language the user uses.** If the user writes in Chinese, respond in Chinese. If in English, respond in English. Match the user's language exactly.
 
-### 工具使用说明
-- \`drawio_read\`：可选传入 XPath，返回命中的元素/属性/文本及其 matched_xpath，便于直接用于后续操作。
-- \`drawio_edit_batch\`：传入 operations 数组，按顺序执行。每个操作需要提供 xpath 或 id 定位与必要的字段，必要时设置 \`allow_no_match: true\` 避免错误中断。
-- 支持的操作：set_attribute、remove_attribute、insert_element、remove_element、replace_element、set_text_content。
+## Core Principles
+1. **No Inference**: Never guess or rewrite XML structure. Do not add "smart" parsing for style, geometry, or other domain fields.
+2. **XPath-Driven**: All read/write operations must use XPath or element ID for precise targeting. Use the \`matched_xpath\` field from results for subsequent operations.
+3. **Atomicity**: Batch edits via \`drawio_edit_batch\` are all-or-nothing. If any operation fails, the entire batch rolls back automatically.
+4. **Minimal Changes**: Always use \`drawio_read\` first to understand the current state before editing. Avoid unnecessary operations in a batch.
 
-### DrawIO XML 规范提醒
-- 根结构：<mxGraphModel> 下的 <root> 与 <mxCell>
-- 元素定位：使用唯一 id 或层级 XPath，保持属性大小写正确
-- 样式写法：整体写入 style 字符串，不拆分字段
-- 几何属性：通过 <mxGeometry> 节点设置 x/y/width/height
-- ID 唯一：新增元素必须赋予唯一 id
+## Tool Usage Guide
 
-确保输出的 XML 始终可以被 DrawIO 正确解析与渲染，并在回复中解释你的思考过程与操作理由。`;
+### drawio_read
+Query diagram content. Three modes available:
+- **ls mode** (default): List all mxCells. Use \`filter\` to show only "vertices" (shapes) or "edges" (connectors).
+- **id mode**: Query by mxCell ID (string or array). Fastest for known elements.
+- **xpath mode**: XPath expression for complex queries.
 
-export const DEFAULT_API_URL = "https://api.deepseek.com/v1";
+Returns \`matched_xpath\` for each result, which can be used directly in edit operations.
+
+### drawio_edit_batch
+Batch edit with atomic execution. Each operation requires:
+- **Locator**: Either \`id\` (preferred, auto-converts to XPath) or \`xpath\`
+- **Operation type**: set_attribute, remove_attribute, insert_element, remove_element, replace_element, set_text_content
+
+Use \`allow_no_match: true\` to skip operations when target not found instead of failing.
+
+### drawio_overwrite
+Replace entire diagram XML. Use only for template replacement or complete restructuring.
+
+## DrawIO XML Structure Reference
+
+\`\`\`xml
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>                          <!-- Root layer -->
+    <mxCell id="1" parent="0"/>               <!-- Default parent -->
+    <mxCell id="node-1" value="Label"
+            style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf"
+            vertex="1" parent="1">
+      <mxGeometry x="100" y="100" width="120" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge-1" value=""
+            style="edgeStyle=orthogonalEdgeStyle"
+            edge="1" parent="1" source="node-1" target="node-2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>
+\`\`\`
+
+### Key Attributes
+- **vertex="1"**: Shape/node element
+- **edge="1"**: Connector/line element
+- **parent**: Parent cell ID (usually "1" for top-level elements)
+- **source/target**: For edges, reference the connected vertex IDs
+- **value**: Display text/label
+
+### Common Style Properties
+| Property | Example | Description |
+|----------|---------|-------------|
+| fillColor | #dae8fc | Background color |
+| strokeColor | #6c8ebf | Border color |
+| rounded | 0 or 1 | Rounded corners |
+| shape | ellipse, rhombus | Shape type |
+| fontColor | #333333 | Text color |
+| fontSize | 12 | Text size |
+| edgeStyle | orthogonalEdgeStyle | Edge routing |
+
+## Best Practices
+1. **Read before edit**: Always query current state before modifications.
+2. **Use ID when known**: \`id\` is faster and more reliable than XPath.
+3. **Generate unique IDs**: For new elements, use UUIDs or descriptive prefixes.
+4. **Preserve structure**: Maintain proper parent-child relationships.
+5. **Explain your actions**: Describe what you're doing and why.
+
+Always ensure generated XML is valid and can be properly parsed by DrawIO.`;
+
+// 各供应商官方 API URL 默认值
+export const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1";
+export const DEFAULT_DEEPSEEK_API_URL = "https://api.deepseek.com";
+export const DEFAULT_ANTHROPIC_API_URL = "https://api.anthropic.com";
+// 通用默认值（用于 OpenAI 兼容类型）
+export const DEFAULT_API_URL = DEFAULT_OPENAI_API_URL;
+
+export function stripTrailingSlashes(input: string): string {
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return end === input.length ? input : input.slice(0, end);
+}
 
 export function isProviderType(value: unknown): value is ProviderType {
   return (
     value === "openai-reasoning" ||
     value === "openai-compatible" ||
-    value === "deepseek-native"
+    value === "deepseek-native" ||
+    value === "anthropic"
   );
 }
 
@@ -63,7 +133,7 @@ export const normalizeApiUrl = (
     return fallback;
   }
 
-  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  const withoutTrailingSlash = stripTrailingSlashes(trimmed);
 
   if (/\/v\d+($|\/)/i.test(withoutTrailingSlash)) {
     return withoutTrailingSlash;
@@ -72,75 +142,111 @@ export const normalizeApiUrl = (
   return `${withoutTrailingSlash}/v1`;
 };
 
+/**
+ * Anthropic API 的 baseURL 规范化
+ * - 移除尾部斜杠
+ * - 不自动补 /v1（@ai-sdk/anthropic 以 baseURL 为根路径）
+ * - 若 host 为 api.anthropic.com 且路径为 /v1，则自动去掉 /v1（避免重复 /v1）
+ */
+export const normalizeAnthropicApiUrl = (
+  value?: string,
+  fallback: string = DEFAULT_ANTHROPIC_API_URL,
+): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const withoutTrailingSlash = stripTrailingSlashes(trimmed);
+
+  try {
+    const parsed = new URL(withoutTrailingSlash);
+    const normalizedPath = stripTrailingSlashes(parsed.pathname).toLowerCase();
+
+    if (parsed.hostname === "api.anthropic.com" && normalizedPath === "/v1") {
+      parsed.pathname = "";
+      return stripTrailingSlashes(parsed.toString());
+    }
+  } catch {
+    // ignore invalid url, caller may validate separately
+  }
+
+  return withoutTrailingSlash;
+};
+
+/**
+ * 获取指定供应商类型的默认 API URL
+ */
+export const getDefaultApiUrlForProvider = (
+  providerType: ProviderType,
+): string => {
+  switch (providerType) {
+    case "anthropic":
+      return DEFAULT_ANTHROPIC_API_URL;
+    case "deepseek-native":
+      return DEFAULT_DEEPSEEK_API_URL;
+    case "openai-reasoning":
+    case "openai-compatible":
+    default:
+      return DEFAULT_OPENAI_API_URL;
+  }
+};
+
+export const normalizeProviderApiUrl = (
+  providerType: ProviderType,
+  value?: string,
+  fallback?: string,
+): string => {
+  const defaultUrl = fallback ?? getDefaultApiUrlForProvider(providerType);
+  if (providerType === "anthropic") {
+    return normalizeAnthropicApiUrl(value, defaultUrl);
+  }
+  return normalizeApiUrl(value, defaultUrl);
+};
+
 export const STORAGE_KEY_LLM_PROVIDERS = "settings.llm.providers";
 export const STORAGE_KEY_LLM_MODELS = "settings.llm.models";
 export const STORAGE_KEY_AGENT_SETTINGS = "settings.llm.agent";
 export const STORAGE_KEY_ACTIVE_MODEL = "settings.llm.activeModel";
 
-export const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  {
-    id: "deepseek-default",
-    displayName: "DeepSeek",
-    providerType: "deepseek-native",
-    apiUrl: "https://api.deepseek.com/v1",
-    apiKey: "",
-    models: ["deepseek-chat-default", "deepseek-reasoner-default"],
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
+export const STORAGE_KEY_GENERAL_SETTINGS = "settings.general";
 
-export const DEFAULT_MODELS: ModelConfig[] = [
-  {
-    id: "deepseek-chat-default",
-    providerId: "deepseek-default",
-    modelName: "deepseek-chat",
-    displayName: "DeepSeek Chat",
-    temperature: 0.3,
-    maxToolRounds: 5,
-    isDefault: true,
-    capabilities: getDefaultCapabilities("deepseek-chat"),
-    enableToolsInThinking: false,
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "deepseek-reasoner-default",
-    providerId: "deepseek-default",
-    modelName: "deepseek-reasoner",
-    displayName: "DeepSeek Reasoner",
-    temperature: 0.3,
-    maxToolRounds: 5,
-    isDefault: false,
-    capabilities: getDefaultCapabilities("deepseek-reasoner"),
-    enableToolsInThinking: true,
-    customConfig: {},
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
+export interface GeneralSettings {
+  // 默认展开侧边栏
+  sidebarExpanded: boolean;
+  // 默认文件路径
+  defaultPath: string;
+}
+
+export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
+  sidebarExpanded: true,
+  defaultPath: "",
+};
+
+// 默认不预置任何 providers/models（需要用户在设置中创建）
+export const DEFAULT_PROVIDERS: ProviderConfig[] = [];
+export const DEFAULT_MODELS: ModelConfig[] = [];
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   updatedAt: 0,
 };
 
-export const DEFAULT_ACTIVE_MODEL: ActiveModelReference = {
-  providerId: "deepseek-default",
-  modelId: "deepseek-chat-default",
-  updatedAt: 0,
-};
+export const DEFAULT_ACTIVE_MODEL: ActiveModelReference | null = null;
 
 export const DEFAULT_LLM_CONFIG: RuntimeLLMConfig = Object.freeze({
-  apiUrl: DEFAULT_API_URL,
+  apiUrl: "",
   apiKey: "",
-  providerType: "deepseek-native" as const,
-  modelName: "deepseek-chat",
+  // 仅作为结构兜底，不代表实际已配置的供应商/模型
+  providerType: "openai-compatible" as const,
+  modelName: "",
   temperature: 0.3,
   maxToolRounds: 5,
-  capabilities: getDefaultCapabilities("deepseek-chat"),
+  capabilities: getDefaultCapabilities(null),
   enableToolsInThinking: false,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   customConfig: {},
@@ -182,14 +288,19 @@ export function normalizeLLMConfig(
 ): RuntimeLLMConfig {
   const safeConfig = config ?? {};
 
+  const providerType = isProviderType(safeConfig.providerType)
+    ? safeConfig.providerType
+    : DEFAULT_LLM_CONFIG.providerType;
+
+  const apiUrl =
+    typeof safeConfig.apiUrl === "string"
+      ? normalizeProviderApiUrl(providerType, safeConfig.apiUrl)
+      : normalizeProviderApiUrl(providerType, undefined);
+
   const modelName =
     typeof safeConfig.modelName === "string" && safeConfig.modelName.trim()
       ? safeConfig.modelName.trim()
       : DEFAULT_LLM_CONFIG.modelName;
-
-  const providerType = isProviderType(safeConfig.providerType)
-    ? safeConfig.providerType
-    : DEFAULT_LLM_CONFIG.providerType;
 
   const capabilities =
     safeConfig.capabilities ?? getDefaultCapabilities(modelName);
@@ -208,10 +319,7 @@ export function normalizeLLMConfig(
   const customConfig = normalizeCustomConfig(safeConfig.customConfig);
 
   return {
-    apiUrl: normalizeApiUrl(
-      safeConfig.apiUrl ?? DEFAULT_LLM_CONFIG.apiUrl,
-      DEFAULT_LLM_CONFIG.apiUrl,
-    ),
+    apiUrl,
     apiKey:
       typeof safeConfig.apiKey === "string"
         ? safeConfig.apiKey
@@ -242,128 +350,14 @@ export async function initializeDefaultLLMConfig(
   storage: StorageAdapter,
 ): Promise<void> {
   try {
-    const cleanupLegacyKey = async () => {
-      try {
-        await storage.deleteSetting("llmConfig");
-      } catch (cleanupError) {
-        logger.warn("Failed to delete legacy llmConfig", { cleanupError });
-      }
-    };
-
     const existingProviders = await storage.getSetting(
       STORAGE_KEY_LLM_PROVIDERS,
     );
 
     if (existingProviders !== null) {
-      try {
-        const parsedProviders = JSON.parse(existingProviders) as Array<
-          Record<string, unknown>
-        >;
-        let hasMigration = false;
-
-        const migratedProviders = parsedProviders.map((provider) => {
-          const providerType = (provider as { providerType?: string })
-            .providerType;
-
-          if (providerType === "deepseek") {
-            hasMigration = true;
-            return {
-              ...provider,
-              providerType: "deepseek-native" as ProviderType,
-            };
-          }
-          return provider;
-        });
-
-        if (hasMigration) {
-          await storage.setSetting(
-            STORAGE_KEY_LLM_PROVIDERS,
-            JSON.stringify(migratedProviders),
-          );
-          logger.warn(
-            "providerType 'deepseek' 已迁移为 'deepseek-native'，请确认自定义配置是否需要更新",
-            { providersMigrated: migratedProviders.length },
-          );
-        }
-      } catch (migrationError) {
-        logger.error(
-          "解析或迁移已存在的 LLM providers 时失败，已跳过兼容迁移",
-          { migrationError },
-        );
-      }
-      await cleanupLegacyKey();
       return;
     }
-
-    const now = Date.now();
-
-    const providers = JSON.parse(
-      JSON.stringify(DEFAULT_PROVIDERS),
-    ) as ProviderConfig[];
-    const models = JSON.parse(JSON.stringify(DEFAULT_MODELS)) as ModelConfig[];
-    const agentSettings = JSON.parse(
-      JSON.stringify(DEFAULT_AGENT_SETTINGS),
-    ) as AgentSettings;
-    const activeModel = JSON.parse(
-      JSON.stringify(DEFAULT_ACTIVE_MODEL),
-    ) as ActiveModelReference;
-
-    const providerIdMap = new Map<string, string>();
-    providers.forEach((provider) => {
-      const newId = generateProjectUUID();
-      providerIdMap.set(provider.id, newId);
-      provider.id = newId;
-      provider.createdAt = now;
-      provider.updatedAt = now;
-    });
-
-    const modelIdMap = new Map<string, string>();
-    models.forEach((model) => {
-      const mappedProviderId = providerIdMap.get(model.providerId);
-      if (mappedProviderId) {
-        model.providerId = mappedProviderId;
-      }
-
-      const newModelId = generateProjectUUID();
-      modelIdMap.set(model.id, newModelId);
-      model.id = newModelId;
-      model.createdAt = now;
-      model.updatedAt = now;
-    });
-
-    providers.forEach((provider) => {
-      provider.models = provider.models
-        .map((modelId) => modelIdMap.get(modelId))
-        .filter((id): id is string => Boolean(id));
-    });
-
-    const mappedProviderId = providerIdMap.get(activeModel.providerId);
-    const mappedModelId = modelIdMap.get(activeModel.modelId);
-
-    if (mappedProviderId) {
-      activeModel.providerId = mappedProviderId;
-    }
-    if (mappedModelId) {
-      activeModel.modelId = mappedModelId;
-    }
-    activeModel.updatedAt = now;
-
-    agentSettings.updatedAt = now;
-
-    await storage.setSetting(
-      STORAGE_KEY_LLM_PROVIDERS,
-      JSON.stringify(providers),
-    );
-    await storage.setSetting(STORAGE_KEY_LLM_MODELS, JSON.stringify(models));
-    await storage.setSetting(
-      STORAGE_KEY_AGENT_SETTINGS,
-      JSON.stringify(agentSettings),
-    );
-    await storage.setSetting(
-      STORAGE_KEY_ACTIVE_MODEL,
-      JSON.stringify(activeModel),
-    );
-    await cleanupLegacyKey();
+    // 默认不再写入任何 provider/model 配置
   } catch (error) {
     logger.error("Failed to initialize default LLM config", { error });
   }

@@ -43,6 +43,70 @@ export default function MessagePreviewPanel({
     i18n.language,
   );
 
+  let content: ReactNode;
+  if (loading) {
+    content = (
+      <div className="history-preview__loading">
+        <Spinner size="md" />
+        <span>{t("messages.loading")}</span>
+      </div>
+    );
+  } else if (messages.length === 0) {
+    content = (
+      <div className="history-preview__empty">
+        <MessageSquare size={20} />
+        <p>{t("messages.emptyConversation")}</p>
+      </div>
+    );
+  } else {
+    content = (
+      <ul className="history-preview__list">
+        {messages.map((msg) => (
+          <li key={msg.id} className="history-preview__item">
+            <span
+              className={`history-preview__tag history-preview__tag--${msg.role}`}
+            >
+              {roleIcon[msg.role]}
+              {t(`messages.roles.${msg.role}`)}
+            </span>
+            <p className="history-preview__text">
+              {(() => {
+                try {
+                  const parsed = JSON.parse(msg.parts_structure);
+                  const textParts = Array.isArray(parsed)
+                    ? parsed
+                        .filter(
+                          (part) =>
+                            part &&
+                            typeof part === "object" &&
+                            (part as { type?: unknown }).type === "text" &&
+                            typeof (part as { text?: unknown }).text ===
+                              "string",
+                        )
+                        .map((part) => (part as { text: string }).text)
+                    : [];
+
+                  const textContent = textParts.join("\n");
+                  return (
+                    textContent.slice(0, 160) ||
+                    t("messages.emptyMessage", { defaultValue: "" }) ||
+                    ""
+                  );
+                } catch (error) {
+                  logger.error("解析 parts_structure 失败", {
+                    error,
+                    messageId: msg.id,
+                  });
+                  return t("messages.emptyMessage", { defaultValue: "" }) || "";
+                }
+              })()}
+            </p>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <aside className="history-preview" aria-live="polite" data-visible={isOpen}>
       <div className="history-preview__header">
@@ -74,66 +138,7 @@ export default function MessagePreviewPanel({
         </div>
       </div>
 
-      <div className="history-preview__content">
-        {loading ? (
-          <div className="history-preview__loading">
-            <Spinner size="md" />
-            <span>{t("messages.loading")}</span>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="history-preview__empty">
-            <MessageSquare size={20} />
-            <p>{t("messages.emptyConversation")}</p>
-          </div>
-        ) : (
-          <ul className="history-preview__list">
-            {messages.map((msg) => (
-              <li key={msg.id} className="history-preview__item">
-                <span
-                  className={`history-preview__tag history-preview__tag--${msg.role}`}
-                >
-                  {roleIcon[msg.role]}
-                  {t(`messages.roles.${msg.role}`)}
-                </span>
-                <p className="history-preview__text">
-                  {(() => {
-                    try {
-                      const parsed = JSON.parse(msg.parts_structure);
-                      const textParts = Array.isArray(parsed)
-                        ? parsed
-                            .filter(
-                              (part) =>
-                                part &&
-                                typeof part === "object" &&
-                                (part as { type?: unknown }).type === "text" &&
-                                typeof (part as { text?: unknown }).text ===
-                                  "string",
-                            )
-                            .map((part) => (part as { text: string }).text)
-                        : [];
-
-                      const textContent = textParts.join("\n");
-                      return (
-                        textContent.slice(0, 160) ||
-                        t("messages.emptyMessage", { defaultValue: "" }) ||
-                        ""
-                      );
-                    } catch (error) {
-                      logger.error("解析 parts_structure 失败", {
-                        error,
-                        messageId: msg.id,
-                      });
-                      return (
-                        t("messages.emptyMessage", { defaultValue: "" }) || ""
-                      );
-                    }
-                  })()}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <div className="history-preview__content">{content}</div>
     </aside>
   );
 }

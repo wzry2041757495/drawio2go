@@ -8,29 +8,56 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { ToolCallRequest } from "@/app/types/socket-protocol";
+import { TOOL_TIMEOUT_CONFIG } from "@/lib/constants/tool-config";
+import type { ClientToolName } from "@/lib/constants/tool-names";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("Tool Executor");
 
+export type ExecuteToolOnClientOptions = {
+  signal?: AbortSignal;
+  chatRunId?: string;
+};
+
+function createAbortError(message: string): Error {
+  const error = new Error(message);
+  (error as Error & { name?: string }).name = "AbortError";
+  return error;
+}
+
+function getCancelledChatRunIds(): Map<string, number> {
+  if (!global.cancelledChatRunIds) {
+    global.cancelledChatRunIds = new Map();
+  }
+  return global.cancelledChatRunIds;
+}
+
 /**
  * 通过 Socket.IO 在客户端执行工具
  *
- * @param toolName - 工具名称
+ * @param toolName - 工具名称（前端执行工具）
  * @param input - 工具输入参数
  * @param projectUuid - 所属项目 ID
  * @param conversationId - 当前会话 ID
- * @param timeout - 超时时间（毫秒），默认 30000ms (30秒)
+ * @param description - 工具调用描述
+ * @param options - 可选的取消/运行上下文
  * @returns Promise<unknown> - 工具执行结果
  *
  * @throws Error - 当 Socket.IO 未初始化、连接断开或执行超时时抛出错误
  */
 export async function executeToolOnClient(
-  toolName: string,
+  toolName: ClientToolName,
   input: Record<string, unknown>,
   projectUuid: string,
   conversationId: string,
-  timeout: number = 60000,
+  description?: string,
+  options?: ExecuteToolOnClientOptions,
 ): Promise<unknown> {
+  const timeout =
+    TOOL_TIMEOUT_CONFIG[toolName] ??
+    (TOOL_TIMEOUT_CONFIG as Record<string, number>)[toolName] ??
+    60000;
+
   // 默认超时增加到 60 秒，以支持版本创建等耗时操作
   // 获取全局 Socket.IO 实例
   const io = global.io;
@@ -47,55 +74,137 @@ export async function executeToolOnClient(
 
   const normalizedProjectUuid = projectUuid.trim();
   const normalizedConversationId = conversationId.trim();
+  const normalizedChatRunId = options?.chatRunId?.trim() || undefined;
+  const abortSignal = options?.signal;
 
   if (!normalizedProjectUuid || !normalizedConversationId) {
     throw new Error("缺少项目或会话上下文，无法执行工具");
   }
 
+  if (
+    normalizedChatRunId &&
+    getCancelledChatRunIds().has(normalizedChatRunId)
+  ) {
+    throw createAbortError("聊天已取消，停止工具调用");
+  }
+
+  if (abortSignal?.aborted) {
+    throw createAbortError("请求已中止，停止工具调用");
+  }
+
   // 检查是否有客户端连接
   const connectedClients = io.sockets.sockets.size;
   if (connectedClients === 0) {
-    throw new Error(
-      "没有客户端连接，无法执行工具。请确保前端已连接到 Socket.IO 服务器。",
-    );
+    throw new Error("目标项目没有客户端在线");
   }
 
   const requestId = uuidv4();
 
   return new Promise((resolve, reject) => {
+    let cleanedUp = false;
+
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      if (abortSignal) {
+        abortSignal.removeEventListener("abort", onAbort);
+      }
+    };
+
+    const rejectWith = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    const resolveWith = (result: unknown) => {
+      cleanup();
+      resolve(result);
+    };
+
+    const onAbort = () => {
+      if (cleanedUp) return;
+      pendingRequests.delete(requestId);
+      clearTimeout(timeoutId);
+
+      try {
+        io.to(normalizedProjectUuid).emit("tool:cancel", {
+          requestId,
+          projectUuid: normalizedProjectUuid,
+          conversationId: normalizedConversationId,
+          chatRunId: normalizedChatRunId,
+          reason: "chat_aborted",
+        });
+      } catch {
+        // best-effort
+      }
+
+      rejectWith(createAbortError("请求已中止，停止等待工具结果"));
+    };
+
     // 设置超时
     const timeoutId = setTimeout(() => {
       pendingRequests.delete(requestId);
-      reject(new Error(`工具执行超时 (${timeout}ms)，前端未响应`));
+      rejectWith(new Error(`工具执行超时 (${timeout}ms)，前端未响应`));
     }, timeout);
 
     // 存储 Promise 回调
     pendingRequests.set(requestId, {
       resolve: (result: unknown) => {
         clearTimeout(timeoutId);
-        resolve(result);
+        resolveWith(result);
       },
       reject: (error: Error) => {
         clearTimeout(timeoutId);
-        reject(error);
+        rejectWith(error);
       },
+      projectUuid: normalizedProjectUuid,
+      conversationId: normalizedConversationId,
+      chatRunId: normalizedChatRunId,
+      toolName,
     });
 
     // 构造请求消息
     const request: ToolCallRequest = {
       requestId,
-      toolName: toolName as ToolCallRequest["toolName"],
+      toolName,
       input,
       timeout,
       projectUuid: normalizedProjectUuid,
       conversationId: normalizedConversationId,
+      chatRunId: normalizedChatRunId,
+      description,
     };
 
-    // 广播到所有连接的客户端
-    if (typeof emitToolExecute === "function") {
-      emitToolExecute(request);
-    } else {
-      io.emit("tool:execute", request);
+    if (abortSignal) {
+      abortSignal.addEventListener("abort", onAbort);
+    }
+
+    // 按项目房间投递
+    try {
+      if (typeof emitToolExecute === "function") {
+        emitToolExecute(request);
+      } else {
+        // 兜底：如果缺失全局封装，直接使用房间广播
+        const roomSize = io.sockets.adapter.rooms.get(
+          normalizedProjectUuid,
+        )?.size;
+
+        if (!roomSize || roomSize === 0) {
+          pendingRequests.delete(requestId);
+          clearTimeout(timeoutId);
+          rejectWith(new Error("目标项目没有客户端在线"));
+          return;
+        }
+
+        io.to(normalizedProjectUuid).emit("tool:execute", request);
+      }
+    } catch (error) {
+      pendingRequests.delete(requestId);
+      clearTimeout(timeoutId);
+      const message =
+        error instanceof Error ? error.message : String(error ?? "未知错误");
+      rejectWith(new Error(message));
+      return;
     }
 
     logger.info("已发送工具调用请求", {
@@ -103,7 +212,9 @@ export async function executeToolOnClient(
       requestId,
       projectUuid: normalizedProjectUuid,
       conversationId: normalizedConversationId,
+      chatRunId: normalizedChatRunId,
       connectedClients,
+      description,
     });
   });
 }

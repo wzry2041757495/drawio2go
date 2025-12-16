@@ -112,6 +112,18 @@ export function applyIndexedDbV1Migration(
     { unique: false },
   );
 
+  // attachments
+  const attachmentsStore = getOrCreateStore(db, tx, "attachments", {
+    keyPath: "id",
+  });
+  ensureIndex(attachmentsStore, "message_id", "message_id", { unique: false });
+  ensureIndex(attachmentsStore, "conversation_id", "conversation_id", {
+    unique: false,
+  });
+  ensureIndex(attachmentsStore, "created_at", "created_at", {
+    unique: false,
+  });
+
   // conversation_sequences
   if (!db.objectStoreNames.contains("conversation_sequences")) {
     db.createObjectStore("conversation_sequences", {

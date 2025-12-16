@@ -34,7 +34,6 @@
   display: inline-flex;
   margin: 0 auto var(--spacing-md);
   color: var(--success);
-  animation: spin var(--duration-medium) linear infinite;
 }
 
 .loading-overlay__title,

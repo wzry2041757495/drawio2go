@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 import { Button, Skeleton } from "@heroui/react";
 import {
   VersionTimeline,
@@ -55,42 +49,8 @@ export function VersionSidebar({
 
   const { subscribeVersions, getAllXMLVersions } = useStorageXMLVersions();
   const compare = useVersionCompare();
-  const {
-    isCompareMode,
-    selectedIds,
-    toggleCompareMode,
-    resetSelection,
-    toggleSelection,
-    isDialogOpen,
-    activePair,
-    openDialogWithPair,
-    closeDialog,
-  } = compare;
+  const { isDialogOpen, activePair, openDialogWithPair, closeDialog } = compare;
 
-  const selectedVersions = useMemo(
-    () =>
-      selectedIds
-        .map((id) => versions.find((item) => item.id === id))
-        .filter(Boolean) as XMLVersion[],
-    [selectedIds, versions],
-  );
-
-  useEffect(() => {
-    if (!selectedIds.length) return;
-    if (selectedVersions.length !== selectedIds.length) {
-      resetSelection();
-    }
-  }, [selectedIds, selectedVersions.length, resetSelection]);
-
-  const comparePair = useMemo(() => {
-    if (selectedVersions.length !== 2) return null;
-    const sorted = [...selectedVersions].sort(
-      (a, b) => a.created_at - b.created_at,
-    );
-    return { versionA: sorted[0], versionB: sorted[1] };
-  }, [selectedVersions]);
-
-  const canStartCompare = Boolean(comparePair);
   const activeParentVersion =
     timelineViewMode.type === "sub"
       ? timelineViewMode.parentVersion
@@ -259,18 +219,6 @@ export function VersionSidebar({
           </div>
         </div>
         <div className="sidebar-header__actions">
-          {versions.length > 1 && (
-            <Button
-              size="sm"
-              variant={isCompareMode ? "secondary" : "ghost"}
-              onPress={toggleCompareMode}
-              className="version-sidebar__compare-btn"
-            >
-              {isCompareMode
-                ? tVersion("sidebar.actions.compareOn")
-                : tVersion("sidebar.actions.compareOff")}
-            </Button>
-          )}
           <Button
             size="sm"
             variant="primary"
@@ -301,67 +249,16 @@ export function VersionSidebar({
             />
           </div>
         ) : (
-          <>
-            {isCompareMode && (
-              <div className="compare-mode-banner">
-                <div className="compare-mode-banner__info">
-                  <p>
-                    {tVersion("sidebar.compareBanner.title")} ·{" "}
-                    {tVersion("sidebar.compareBanner.selected", {
-                      count: selectedVersions.length,
-                    })}
-                  </p>
-                  <span>
-                    {canStartCompare
-                      ? tVersion("sidebar.compareBanner.ready")
-                      : tVersion("sidebar.compareBanner.needTwo")}
-                  </span>
-                </div>
-                {selectedVersions.length > 0 && (
-                  <div className="compare-mode-chips">
-                    {selectedVersions.map((v, index) => (
-                      <span key={v.id} className="compare-mode-chip">
-                        #{index + 1} · v{v.semantic_version}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="compare-mode-actions">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onPress={() =>
-                      comparePair && openDialogWithPair(comparePair)
-                    }
-                    isDisabled={!canStartCompare}
-                  >
-                    {tVersion("sidebar.compareBanner.start")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onPress={resetSelection}
-                    isDisabled={!selectedIds.length}
-                  >
-                    {tVersion("sidebar.compareBanner.clear")}
-                  </Button>
-                </div>
-              </div>
-            )}
-            <VersionTimeline
-              projectUuid={projectUuid}
-              versions={versions}
-              onVersionRestore={onVersionRestore}
-              onVersionCreated={handleVersionCreated}
-              compareMode={isCompareMode}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelection}
-              onQuickCompare={openDialogWithPair}
-              viewMode={timelineViewMode}
-              onViewModeChange={handleTimelineViewModeChange}
-              onNavigateToSubVersions={handleNavigateToSubVersions}
-            />
-          </>
+          <VersionTimeline
+            projectUuid={projectUuid}
+            versions={versions}
+            onVersionRestore={onVersionRestore}
+            onVersionCreated={handleVersionCreated}
+            onQuickCompare={openDialogWithPair}
+            viewMode={timelineViewMode}
+            onViewModeChange={handleTimelineViewModeChange}
+            onNavigateToSubVersions={handleNavigateToSubVersions}
+          />
         )}
       </div>
 

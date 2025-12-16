@@ -27,17 +27,14 @@ export function runIndexedDbMigrations(
   });
 
   for (let next = oldVersion + 1; next <= targetVersion; next += 1) {
-    switch (next) {
-      case 1:
-        logger.info("Applying IndexedDB V1 migration");
-        applyIndexedDbV1Migration(db, tx);
-        logger.info("IndexedDB V1 migration done");
-        break;
-      default:
-        logger.warn("No IndexedDB migration handler for version", {
-          version: next,
-        });
-        break;
+    if (next === 1) {
+      logger.info("Applying IndexedDB V1 migration");
+      applyIndexedDbV1Migration(db, tx);
+      logger.info("IndexedDB V1 migration done");
+    } else {
+      logger.warn("No IndexedDB migration handler for version", {
+        version: next,
+      });
     }
   }
 }

@@ -18,6 +18,8 @@ import type {
   UpdateConversationInput,
   Message,
   CreateMessageInput,
+  Attachment,
+  CreateAttachmentInput,
 } from "@/lib/storage/types";
 import type { ToolCallRequest } from "@/app/types/socket";
 
@@ -38,6 +40,10 @@ declare global {
         {
           resolve: (value: unknown) => void;
           reject: (error: Error) => void;
+          projectUuid?: string;
+          conversationId?: string;
+          chatRunId?: string;
+          toolName?: string;
         }
       >
     | undefined;
@@ -47,11 +53,41 @@ declare global {
   var emitToolExecute: ((request: ToolCallRequest) => void) | undefined;
 
   /**
+   * Chat 运行中的 AbortController（key = chatRunId）。
+   * 用于在用户点击“取消”时，通过 /api/chat/cancel 主动中止后端请求。
+   */
+  var chatAbortControllers: Map<string, AbortController> | undefined;
+
+  /**
+   * 已取消的 chatRunId 集合（用于阻断后续工具调用）。
+   * 使用 Map 存储添加时间戳，自动清理超过 5 分钟的旧条目。
+   * key = chatRunId, value = 添加时的时间戳（毫秒）
+   */
+  var cancelledChatRunIds: Map<string, number> | undefined;
+
+  /**
    * Electron API
    * 通过 preload.js 注入的 API
    */
   interface Window {
     electron?: {
+      checkForUpdates: () => Promise<null | {
+        hasUpdate: boolean;
+        currentVersion: string;
+        latestVersion: string;
+        releaseUrl: string;
+        releaseNotes?: string;
+      }>;
+      openReleasePage: (url: string) => Promise<void>;
+      onUpdateAvailable: (
+        callback: (result: {
+          hasUpdate: boolean;
+          currentVersion: string;
+          latestVersion: string;
+          releaseUrl: string;
+          releaseNotes?: string;
+        }) => void,
+      ) => () => void;
       selectFolder: () => Promise<string | null>;
       saveDiagram: (
         xml: string,
@@ -81,6 +117,18 @@ declare global {
         success: boolean;
         message?: string;
       }>;
+    };
+
+    /**
+     * Electron 文件系统 IPC 接口（二进制）
+     * 仅在 Electron 环境下可用
+     */
+    electronFS?: {
+      /**
+       * 读取 userData 目录下的二进制文件（返回 ArrayBuffer）
+       * 主要用于 attachments.file_path（相对路径）
+       */
+      readFile: (filePath: string) => Promise<ArrayBuffer>;
     };
 
     /**
@@ -149,6 +197,19 @@ declare global {
       createMessage: (message: CreateMessageInput) => Promise<Message>;
       deleteMessage: (id: string) => Promise<void>;
       createMessages: (messages: CreateMessageInput[]) => Promise<Message[]>;
+
+      // Attachments
+      getAttachment: (id: string) => Promise<Attachment | null>;
+      createAttachment: (
+        attachment: Omit<CreateAttachmentInput, "blob_data"> & {
+          blob_data?: ArrayBuffer;
+        },
+      ) => Promise<Attachment>;
+      deleteAttachment: (id: string) => Promise<void>;
+      getAttachmentsByMessage: (messageId: string) => Promise<Attachment[]>;
+      getAttachmentsByConversation: (
+        conversationId: string,
+      ) => Promise<Attachment[]>;
     };
   }
 }

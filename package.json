@@ -11,8 +11,9 @@
     "test": "vitest run",
     "format": "prettier --write .",
     "electron": "electron .",
-    "electron:dev": "concurrently \"pnpm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "pnpm run build && electron-builder",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "npm run build && npm run electron:prepare && electron-builder",
+    "electron:prepare": "node scripts/prepare-electron.js",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
@@ -22,9 +23,13 @@
     "drawio",
     "heroui"
   ],
-  "author": "",
+  "author": {
+    "name": "menghuan",
+    "email": "menghaun2003@outlook.com"
+  },
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.56",
     "@ai-sdk/deepseek": "^1.0.31",
     "@ai-sdk/openai": "^2.0.77",
     "@ai-sdk/openai-compatible": "^1.0.28",
@@ -80,35 +85,40 @@
     "electron-builder": "^24.13.3",
     "eslint": "^9.39.1",
     "eslint-config-next": "^15.5.7",
+    "eslint-plugin-sonarjs": "^3.0.5",
     "jsdom": "^27.2.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15",
     "wait-on": "^7.2.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron"
-    ],
-    "ignoredBuiltDependencies": [
-      "electron",
-      "esbuild",
-      "sharp"
-    ]
-  },
   "build": {
     "appId": "com.drawio2go.app",
     "productName": "DrawIO2Go",
-    "files": [
-      "out/**/*",
-      "electron/**/*",
-      "node_modules/**/*",
-      "package.json"
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "server.js",
+      ".next/**/*",
+      "public/**/*"
     ],
-    "extraFiles": [
+    "files": [
+      ".next/**/*",
+      "!.next/cache/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "server.js",
+      "next.config.mjs",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
       {
         "from": "node_modules/better-sqlite3/build/Release",
-        "to": "."
+        "to": ".",
+        "filter": [
+          "*.node"
+        ]
       }
     ],
     "directories": {

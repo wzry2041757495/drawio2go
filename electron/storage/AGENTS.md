@@ -54,6 +54,13 @@ db.pragma("foreign_keys = ON"); // 启用外键约束
 - `getSetting(key)`, `setSetting(key, value)`, `deleteSetting(key)`, `getAllSettings()`
 - 使用 UPSERT 逻辑（ON CONFLICT）处理插入或更新
 
+##### API Key 安全存储（safeStorage，2025-12）
+
+- **作用范围**：仅对 `settings.llm.providers`（兼容 `llm.providers`）中的 `ProviderConfig[].apiKey` 字段做加密存储/解密读取
+- **存储格式**：`enc:v1:<base64>`（base64 是 `safeStorage.encryptString()` 的 Buffer 编码）
+- **向后兼容**：未加密值仍按明文原样存储；读取时遇到非 `enc:v1:` 前缀会直接返回原始值
+- **降级策略**：`safeStorage.isEncryptionAvailable()` 不可用时回退为明文存储并打印警告；已加密值在无法解密或数据损坏时返回空字符串并打印警告
+
 **Projects（工程管理）**
 
 - `getProject(uuid)`, `createProject(project)`, `updateProject(uuid, updates)`, `deleteProject(uuid)`, `getAllProjects()`

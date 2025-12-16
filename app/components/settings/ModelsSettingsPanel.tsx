@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Accordion,
   Button,
@@ -110,6 +110,28 @@ export default function ModelsSettingsPanel({
       provider: null,
     });
   const [modelDeletingId, setModelDeletingId] = useState<string | null>(null);
+  const [providerActionsOpenId, setProviderActionsOpenId] = useState<
+    string | null
+  >(null);
+  const [modelActionsOpenId, setModelActionsOpenId] = useState<string | null>(
+    null,
+  );
+
+  const closeAllActionPopovers = useCallback(() => {
+    setProviderActionsOpenId(null);
+    setModelActionsOpenId(null);
+  }, []);
+
+  const isAnyBlockingDialogOpen =
+    isEditDialogOpen ||
+    modelDialogState.isOpen ||
+    deleteModelState.isOpen ||
+    deleteProviderState.isOpen;
+
+  useEffect(() => {
+    if (!isAnyBlockingDialogOpen) return;
+    closeAllActionPopovers();
+  }, [closeAllActionPopovers, isAnyBlockingDialogOpen]);
 
   const showToast = useCallback(
     (variant: Parameters<typeof push>[0]["variant"], description: string) => {
@@ -361,8 +383,8 @@ export default function ModelsSettingsPanel({
                 key={provider.id}
                 className="rounded-xl border border-default-200 bg-content1"
               >
-                <Accordion.Heading className="px-2">
-                  <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-2">
+                <Accordion.Heading className="px-0">
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2">
                     <Accordion.Trigger className="flex flex-1 items-center justify-between gap-2 text-left">
                       <div className="flex items-center gap-2">
                         <ModelIcon
@@ -387,8 +409,18 @@ export default function ModelsSettingsPanel({
                       <Accordion.Indicator />
                     </Accordion.Trigger>
 
-                    <Popover>
-                      <Popover.Trigger className="flex items-center">
+                    <Popover
+                      isOpen={providerActionsOpenId === provider.id}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setModelActionsOpenId(null);
+                          setProviderActionsOpenId(provider.id);
+                          return;
+                        }
+                        setProviderActionsOpenId(null);
+                      }}
+                    >
+                      <Popover.Trigger className="ml-auto flex items-center">
                         <Button
                           variant="tertiary"
                           size="sm"
@@ -405,11 +437,12 @@ export default function ModelsSettingsPanel({
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </Popover.Trigger>
-                      <Popover.Content className="min-w-[160px] rounded-xl border border-default-200 bg-content1 p-1 shadow-2xl">
+                      <Popover.Content className="z-[1000] min-w-[160px] rounded-xl border border-default-200 bg-content1 p-1 shadow-2xl">
                         <ListBox
                           aria-label="provider-actions"
                           selectionMode="single"
                           onAction={(key) => {
+                            closeAllActionPopovers();
                             if (key === "edit") {
                               handleEditProvider(provider);
                             } else if (key === "delete") {
@@ -446,31 +479,31 @@ export default function ModelsSettingsPanel({
                   </div>
                 </Accordion.Heading>
 
-                <Accordion.Panel className="px-2 pb-3">
+                <Accordion.Panel className="px-3 pb-3">
                   <Accordion.Body>
                     <div className="rounded-lg border border-default-200 bg-content1 px-3 py-2">
-                      <div className="flex flex-col gap-1.5 text-sm text-foreground">
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                      <div className="grid gap-2 text-xs text-foreground">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="shrink-0 text-default-500">
                             {t("models.provider.type")}
                           </span>
-                          <span className="font-medium min-w-0 break-words">
+                          <span className="min-w-0 text-right font-medium break-words">
                             {provider.providerType}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="shrink-0 text-default-500">
                             {t("models.provider.apiUrl")}
                           </span>
-                          <span className="font-medium min-w-0 break-all">
+                          <span className="min-w-0 text-right font-medium break-all">
                             {provider.apiUrl || "—"}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                          <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="shrink-0 text-default-500">
                             {t("models.provider.apiKey")}
                           </span>
-                          <span className="font-medium min-w-0 break-words">
+                          <span className="min-w-0 text-right font-medium break-words">
                             {provider.apiKey
                               ? "••••••"
                               : t("models.provider.noApiKey")}
@@ -528,211 +561,235 @@ export default function ModelsSettingsPanel({
                                 key={model.id}
                                 className="border border-default-200 bg-content1"
                               >
-                                <Card.Content className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="flex flex-col gap-1.5">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <ModelIcon
-                                        size={18}
-                                        modelId={model.id}
-                                        modelName={modelDisplayName}
-                                        providerId={provider.id}
-                                        providerType={provider.providerType}
-                                        className="text-primary"
-                                      />
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="text-sm font-semibold text-foreground">
-                                          {modelDisplayName}
-                                        </span>
-                                        <div className="flex items-center gap-1">
-                                          {[
-                                            {
-                                              key: "thinking",
-                                              enabled:
-                                                model.capabilities
-                                                  .supportsThinking,
-                                              icon: Brain,
-                                              label: t(
-                                                "models.capabilities.thinking",
-                                                "思考",
-                                              ),
-                                            },
-                                            {
-                                              key: "vision",
-                                              enabled:
-                                                model.capabilities
-                                                  .supportsVision,
-                                              icon: Eye,
-                                              label: t(
-                                                "models.capabilities.vision",
-                                                "视觉",
-                                              ),
-                                            },
-                                            {
-                                              key: "tools",
-                                              enabled:
-                                                model.enableToolsInThinking,
-                                              icon: Wrench,
-                                              label: t(
-                                                "models.capabilities.tools",
-                                                "工具",
-                                              ),
-                                            },
-                                          ].map(
-                                            ({
-                                              key,
-                                              enabled,
-                                              icon: Icon,
-                                              label,
-                                            }) => (
-                                              <TooltipRoot
-                                                key={`${model.id}-${key}`}
-                                                delay={0}
+                                <Card.Content className="flex flex-col gap-2 px-3 py-2">
+                                  <div className="flex min-w-0 flex-col gap-1.5">
+                                    <div className="flex min-w-0 items-start justify-between gap-2">
+                                      <div className="flex min-w-0 flex-1 items-start gap-2">
+                                        <ModelIcon
+                                          size={18}
+                                          modelId={model.id}
+                                          modelName={modelDisplayName}
+                                          providerId={provider.id}
+                                          providerType={provider.providerType}
+                                          className="shrink-0 text-primary"
+                                        />
+                                        <div className="flex min-w-0 flex-col">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                            <span className="text-sm font-semibold text-foreground min-w-0 break-words">
+                                              {modelDisplayName}
+                                            </span>
+                                            {model.isDefault ? (
+                                              <Chip
+                                                size="sm"
+                                                variant="secondary"
+                                                color="accent"
                                               >
-                                                <span
-                                                  aria-label={label}
-                                                  className={`flex h-7 w-7 items-center justify-center rounded-md border border-default-200 bg-content2 text-sm transition-colors ${
-                                                    enabled
-                                                      ? "text-primary"
-                                                      : "text-default-400 opacity-50"
-                                                  }`}
-                                                >
-                                                  <Icon className="h-4 w-4" />
-                                                </span>
-                                                <TooltipContent placement="top">
-                                                  {enabled
-                                                    ? label
-                                                    : `${t(
-                                                        "models.capabilities.disabled",
-                                                        "未开启",
-                                                      )} ${label}`}
-                                                </TooltipContent>
-                                              </TooltipRoot>
-                                            ),
-                                          )}
+                                                {t("models.default")}
+                                              </Chip>
+                                            ) : null}
+                                            {isActiveModel ? (
+                                              <Chip
+                                                size="sm"
+                                                variant="secondary"
+                                                color="success"
+                                              >
+                                                {t("models.active")}
+                                              </Chip>
+                                            ) : null}
+                                            <div className="flex flex-wrap gap-1 self-start">
+                                              {[
+                                                {
+                                                  key: "thinking",
+                                                  enabled:
+                                                    model.capabilities
+                                                      .supportsThinking,
+                                                  icon: Brain,
+                                                  label: t(
+                                                    "models.capabilities.thinking",
+                                                    "思考",
+                                                  ),
+                                                },
+                                                {
+                                                  key: "vision",
+                                                  enabled:
+                                                    model.capabilities
+                                                      .supportsVision,
+                                                  icon: Eye,
+                                                  label: t(
+                                                    "models.capabilities.vision",
+                                                    "视觉",
+                                                  ),
+                                                },
+                                                {
+                                                  key: "tools",
+                                                  enabled:
+                                                    model.enableToolsInThinking,
+                                                  icon: Wrench,
+                                                  label: t(
+                                                    "models.capabilities.tools",
+                                                    "工具",
+                                                  ),
+                                                },
+                                              ].map(
+                                                ({
+                                                  key,
+                                                  enabled,
+                                                  icon: Icon,
+                                                  label,
+                                                }) => (
+                                                  <TooltipRoot
+                                                    key={`${model.id}-${key}`}
+                                                    delay={0}
+                                                  >
+                                                    <span
+                                                      aria-label={label}
+                                                      className={`flex h-6 w-6 items-center justify-center rounded-md border border-default-200 bg-content2 text-sm transition-colors ${
+                                                        enabled
+                                                          ? "text-primary"
+                                                          : "text-default-400 opacity-50"
+                                                      }`}
+                                                    >
+                                                      <Icon className="h-3.5 w-3.5" />
+                                                    </span>
+                                                    <TooltipContent placement="top">
+                                                      {enabled
+                                                        ? label
+                                                        : `${t(
+                                                            "models.capabilities.disabled",
+                                                            "未开启",
+                                                          )} ${label}`}
+                                                    </TooltipContent>
+                                                  </TooltipRoot>
+                                                ),
+                                              )}
+                                            </div>
+                                          </div>
+                                          <span className="text-xs text-default-500 break-all">
+                                            {model.modelName}
+                                          </span>
                                         </div>
                                       </div>
+
+                                      <div className="shrink-0">
+                                        <Popover
+                                          isOpen={
+                                            modelActionsOpenId === model.id
+                                          }
+                                          onOpenChange={(open) => {
+                                            if (open) {
+                                              setProviderActionsOpenId(null);
+                                              setModelActionsOpenId(model.id);
+                                              return;
+                                            }
+                                            setModelActionsOpenId(null);
+                                          }}
+                                        >
+                                          <Popover.Trigger>
+                                            <Button
+                                              className="flex items-center"
+                                              variant="tertiary"
+                                              size="sm"
+                                              isIconOnly
+                                              aria-label={t(
+                                                "models.actions.more",
+                                                "更多操作",
+                                              )}
+                                              isDisabled={isModelOperating}
+                                            >
+                                              <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                          </Popover.Trigger>
+                                          <Popover.Content className="z-[1000] min-w-[180px] rounded-xl border border-default-200 bg-content1 p-1 shadow-2xl">
+                                            <ListBox
+                                              aria-label="model-actions"
+                                              selectionMode="single"
+                                              onAction={(key) => {
+                                                closeAllActionPopovers();
+                                                if (key === "edit") {
+                                                  handleEditModel(model);
+                                                } else if (
+                                                  key === "set-default"
+                                                ) {
+                                                  void handleSetDefaultModel(
+                                                    provider.id,
+                                                    model,
+                                                  );
+                                                } else if (key === "delete") {
+                                                  handleDeleteModel(
+                                                    provider.id,
+                                                    model,
+                                                  );
+                                                }
+                                              }}
+                                            >
+                                              <ListBox.Item
+                                                id="edit"
+                                                key="edit"
+                                                textValue="edit"
+                                                className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-primary-50"
+                                                isDisabled={isModelOperating}
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                                {t("models.actions.edit")}
+                                              </ListBox.Item>
+                                              <ListBox.Item
+                                                id="set-default"
+                                                key="set-default"
+                                                textValue="set-default"
+                                                className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-primary-50"
+                                                isDisabled={
+                                                  isModelOperating ||
+                                                  model.isDefault
+                                                }
+                                              >
+                                                <Star className="h-4 w-4" />
+                                                {t(
+                                                  "models.actions.setDefault",
+                                                  "设为默认",
+                                                )}
+                                              </ListBox.Item>
+                                              <ListBox.Item
+                                                id="delete"
+                                                key="delete"
+                                                textValue="delete"
+                                                className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-50"
+                                                isDisabled={isModelOperating}
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                                {t("models.actions.delete")}
+                                              </ListBox.Item>
+                                            </ListBox>
+                                          </Popover.Content>
+                                        </Popover>
+                                      </div>
                                     </div>
-                                    <span className="text-xs text-default-500">
-                                      {model.modelName}
-                                    </span>
                                   </div>
 
-                                  <div className="flex flex-col gap-1.5 text-xs text-default-500 sm:min-w-[200px]">
-                                    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-default-500">
+                                    <div className="flex items-center gap-1.5">
+                                      <span>
                                         {t(
                                           "llm.temperature.label",
                                           "Temperature",
                                         )}
+                                        :
                                       </span>
                                       <span className="text-default-600">
                                         {model.temperature}
                                       </span>
                                     </div>
-                                    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[96px_1fr] sm:items-center sm:gap-2">
-                                      <span className="text-default-500 sm:w-24 sm:flex-shrink-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span>
                                         {t(
                                           "llm.maxToolRounds.label",
                                           "最大工具调用轮次",
                                         )}
+                                        :
                                       </span>
                                       <span className="text-default-600">
                                         {unlimitedRounds}
                                       </span>
                                     </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {model.isDefault && (
-                                      <Chip
-                                        size="sm"
-                                        variant="secondary"
-                                        color="accent"
-                                      >
-                                        {t("models.default")}
-                                      </Chip>
-                                    )}
-                                    {isActiveModel && (
-                                      <Chip
-                                        size="sm"
-                                        variant="secondary"
-                                        color="success"
-                                      >
-                                        {t("models.active")}
-                                      </Chip>
-                                    )}
-                                    <Popover>
-                                      <Popover.Trigger>
-                                        <Button
-                                          className="flex items-center"
-                                          variant="tertiary"
-                                          size="sm"
-                                          isIconOnly
-                                          aria-label={t("models.actions.edit")}
-                                          isDisabled={isModelOperating}
-                                        >
-                                          <MoreVertical className="h-4 w-4" />
-                                        </Button>
-                                      </Popover.Trigger>
-                                      <Popover.Content className="min-w-[180px] rounded-xl border border-default-200 bg-content1 p-1 shadow-2xl">
-                                        <ListBox
-                                          aria-label="model-actions"
-                                          selectionMode="single"
-                                          onAction={(key) => {
-                                            if (key === "edit") {
-                                              handleEditModel(model);
-                                            } else if (key === "set-default") {
-                                              void handleSetDefaultModel(
-                                                provider.id,
-                                                model,
-                                              );
-                                            } else if (key === "delete") {
-                                              handleDeleteModel(
-                                                provider.id,
-                                                model,
-                                              );
-                                            }
-                                          }}
-                                        >
-                                          <ListBox.Item
-                                            id="edit"
-                                            key="edit"
-                                            textValue="edit"
-                                            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-primary-50"
-                                            isDisabled={isModelOperating}
-                                          >
-                                            <Edit className="h-4 w-4" />
-                                            {t("models.actions.edit")}
-                                          </ListBox.Item>
-                                          <ListBox.Item
-                                            id="set-default"
-                                            key="set-default"
-                                            textValue="set-default"
-                                            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-primary-50"
-                                            isDisabled={
-                                              isModelOperating ||
-                                              model.isDefault
-                                            }
-                                          >
-                                            <Star className="h-4 w-4" />
-                                            {t(
-                                              "models.actions.setDefault",
-                                              "设为默认",
-                                            )}
-                                          </ListBox.Item>
-                                          <ListBox.Item
-                                            id="delete"
-                                            key="delete"
-                                            textValue="delete"
-                                            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-50"
-                                            isDisabled={isModelOperating}
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                            {t("models.actions.delete")}
-                                          </ListBox.Item>
-                                        </ListBox>
-                                      </Popover.Content>
-                                    </Popover>
                                   </div>
                                 </Card.Content>
                               </Card.Root>
@@ -749,7 +806,7 @@ export default function ModelsSettingsPanel({
         </Accordion>
       )}
 
-      <Button variant="secondary" className="mt-6" onPress={handleAddProvider}>
+      <Button variant="secondary" className="mt-4" onPress={handleAddProvider}>
         <Plus className="h-4 w-4" />
         {t("models.addProvider")}
       </Button>

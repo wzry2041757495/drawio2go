@@ -4,11 +4,11 @@
   background: rgba(156, 163, 175, 0.04);
   border-radius: 0.75rem;
   padding: 0.6rem;
+  margin: 0.5rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   transition: all 0.25s var(--ease-out-cubic);
-  margin-bottom: 0.5rem;
 }
 
 .thinking-block:hover {
@@ -74,6 +74,16 @@
 
 .thinking-block-icon {
   font-size: 1rem;
+}
+
+.thinking-block-icon--spinning {
+  animation: spin 1.25s linear infinite;
+}
+
+.thinking-block-timer {
+  color: var(--foreground-secondary, #6b7280);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
 }
 
 /* 思考框箭头 */

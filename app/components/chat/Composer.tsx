@@ -1,34 +1,9 @@
 "use client";
 
-import type { FormEvent } from "react";
 import ChatInputArea from "./ChatInputArea";
-import type { LLMConfig, ModelConfig, ProviderConfig } from "@/app/types/chat";
+import type { ComponentProps } from "react";
 
-interface ComposerProps {
-  input: string;
-  setInput: (value: string) => void;
-  isChatStreaming: boolean;
-  configLoading: boolean;
-  llmConfig: LLMConfig | null;
-  canSendNewMessage: boolean;
-  lastMessageIsUser: boolean;
-  isOnline: boolean;
-  isSocketConnected: boolean;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onCancel?: () => void;
-  onNewChat: () => void;
-  onHistory: () => void;
-  onRetry: () => void;
-  modelSelectorProps: {
-    providers: ProviderConfig[];
-    models: ModelConfig[];
-    selectedModelId: string | null;
-    onSelectModel: (modelId: string) => Promise<void> | void;
-    isDisabled: boolean;
-    isLoading: boolean;
-    modelLabel: string;
-  };
-}
+type ComposerProps = ComponentProps<typeof ChatInputArea>;
 
 /**
  * 底部输入区域容器

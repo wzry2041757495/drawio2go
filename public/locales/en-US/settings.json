@@ -3,7 +3,36 @@
     "general": "General",
     "models": "Models",
     "agent": "Agent",
-    "version": "Version Settings"
+    "version": "Version Settings",
+    "about": "About"
+  },
+  "about": {
+    "title": "About",
+    "description": "Application information and update checks",
+    "appVersionLabel": "Version",
+    "github": {
+      "open": "Open GitHub"
+    },
+    "update": {
+      "currentVersion": "Current version",
+      "latestVersion": "Latest version",
+      "unknownVersion": "—",
+      "checkNow": "Check for updates",
+      "checking": "Checking...",
+      "lastChecked": "Last checked",
+      "neverChecked": "Never",
+      "desktopOnly": "Update checks are available in the desktop app.",
+      "statusUnknown": "Unknown",
+      "statusUpToDate": "Up to date",
+      "statusAvailable": "Update available",
+      "autoCheck": {
+        "label": "Auto check updates",
+        "description": "Automatically check for updates in the background."
+      },
+      "toastTitle": "New version available",
+      "toastDescription": "v{{latest}} is available (current v{{current}}).",
+      "toastAction": "Open download page"
+    }
   },
   "general": {
     "title": "General Settings",
@@ -17,6 +46,10 @@
       "placeholder": "/home/user/drawio",
       "selectButton": "Select Directory",
       "description": "Default directory for saving new projects"
+    },
+    "sidebarExpanded": {
+      "label": "Expand Sidebar by Default",
+      "description": "Open the right sidebar on startup"
     }
   },
   "llm": {
@@ -53,6 +86,14 @@
       "openai-compatible": {
         "label": "OpenAI Compatible",
         "description": "Works with most OpenAI-compatible services"
+      },
+      "anthropic": {
+        "label": "Anthropic / Claude",
+        "description": "Official Anthropic API for Claude models (vision supported)"
+      },
+      "deepseek-native": {
+        "label": "DeepSeek",
+        "description": "Official DeepSeek API with chat and reasoning models"
       },
       "deepseek": {
         "label": "DeepSeek",
@@ -117,14 +158,15 @@
         "placeholder": "My OpenAI Provider",
         "description": "A friendly name for this provider",
         "required": "Provider name is required",
-        "minLength": "Provider name must be at least {min} characters",
-        "maxLength": "Provider name must be at most {max} characters"
+        "minLength": "Provider name must be at least {{min}} characters",
+        "maxLength": "Provider name must be at most {{max}} characters"
       },
       "type": {
         "label": "Provider Type",
         "description": "Select the type of provider",
         "options": {
           "openaiCompatible": "Standard OpenAI-compatible API",
+          "anthropic": "Official Anthropic Claude API",
           "deepseekNative": "DeepSeek native API with reasoning support",
           "openaiReasoning": "OpenAI reasoning models (o1, o3)"
         }
@@ -141,9 +183,10 @@
         "label": "API Key",
         "placeholder": "sk-...",
         "description": "Optional. Leave blank to use without authentication.",
-        "minLength": "API Key must be at least {min} characters"
+        "minLength": "API Key must be at least {{min}} characters"
       },
       "testConnection": "Test Connection",
+      "testModel": "Test Model",
       "modelName": {
         "label": "Model Name",
         "placeholder": "e.g., gpt-4o",
@@ -187,34 +230,36 @@
       }
     },
     "test": {
-      "success": "Connection successful",
-      "error": "Connection failed",
-      "networkError": "Network error. Please check your URL."
+      "success": "Test succeeded (response: {{response}})",
+      "error": "Test failed. Please check your configuration.",
+      "networkError": "Network error. Please check your configuration.",
+      "missingModelName": "Please enter a model name first.",
+      "missingProvider": "Provider configuration not found. Please save the provider first."
     },
     "save": {
-      "createSuccess": "Provider \"{name}\" created",
-      "updateSuccess": "Provider \"{name}\" updated",
+      "createSuccess": "Provider \"{{name}}\" created",
+      "updateSuccess": "Provider \"{{name}}\" updated",
       "error": "Failed to save provider",
-      "modelCreateSuccess": "Model \"{name}\" created successfully",
-      "modelUpdateSuccess": "Model \"{name}\" updated successfully",
+      "modelCreateSuccess": "Model \"{{name}}\" created successfully",
+      "modelUpdateSuccess": "Model \"{{name}}\" updated successfully",
       "modelError": "Failed to save model, please try again"
     },
     "delete": {
       "confirmTitle": "Delete Provider",
-      "confirmMessage": "Are you sure you want to delete \"{name}\"? This will also delete all associated models.",
-      "success": "Provider \"{name}\" deleted",
-      "successWithSwitch": "Provider \"{name}\" deleted. Switched to \"{newModel}\"",
-      "successNoActiveModel": "Provider \"{name}\" deleted. No active model available. Please configure a model.",
+      "confirmMessage": "Are you sure you want to delete \"{{name}}\"? This will also delete all associated models.",
+      "success": "Provider \"{{name}}\" deleted",
+      "successWithSwitch": "Provider \"{{name}}\" deleted. Switched to \"{{newModel}}\"",
+      "successNoActiveModel": "Provider \"{{name}}\" deleted. No active model available. Please configure a model.",
       "error": "Failed to delete provider"
     },
     "deleteModel": {
       "title": "Delete Model",
-      "description": "Are you sure you want to delete \"{name}\"?",
-      "success": "Model \"{name}\" deleted",
+      "description": "Are you sure you want to delete \"{{name}}\"?",
+      "success": "Model \"{{name}}\" deleted",
       "error": "Failed to delete model"
     },
     "setDefault": {
-      "success": "\"{name}\" set as default model",
+      "success": "\"{{name}}\" set as default model",
       "error": "Failed to set default model"
     }
   },
@@ -256,10 +301,11 @@
       "description": "Create a sub-version snapshot before AI bulk edits or XML overwrite"
     }
   },
-  "actionBar": {
-    "unsavedChanges": "Unsaved changes",
-    "cancel": "Cancel",
-    "save": "Save"
+  "saveIndicator": {
+    "saving": "Saving...",
+    "saved": "Saved",
+    "failed": "Failed",
+    "retry": "Retry"
   },
   "toasts": {
     "saveSuccess": "Settings saved",

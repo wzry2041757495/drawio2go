@@ -19,6 +19,18 @@ import { createLogger } from "@/lib/logger";
 const logger = createLogger("useStorageConversations");
 const ABNORMAL_STREAMING_TIMEOUT_MS = 2 * 60 * 1000;
 
+const ERR_KEYS = {
+  conversationLoadFailed: "errors:conversation.loadFailed",
+  conversationCreateFailed: "errors:conversation.createFailed",
+  conversationUpdateFailed: "errors:conversation.updateFailed",
+  conversationDeleteFailed: "errors:conversation.deleteFailed",
+  conversationMessageSaveFailed: "errors:conversation.messageSaveFailed",
+  conversationExportFailed: "errors:conversation.exportFailed",
+} as const;
+
+const createConversationLoadFailedError = () =>
+  new Error(i18n.t(ERR_KEYS.conversationLoadFailed));
+
 /**
  * 对话管理 Hook
  *
@@ -189,9 +201,7 @@ export function useStorageConversations() {
               projectUuid,
               error: subscribeError,
             });
-            const localizedError = new Error(
-              i18n.t("errors:conversation.loadFailed"),
-            );
+            const localizedError = createConversationLoadFailedError();
             setError(localizedError);
             if (active && onError) onError(localizedError);
           });
@@ -237,9 +247,7 @@ export function useStorageConversations() {
               conversationId,
               error: subscribeError,
             });
-            const localizedError = new Error(
-              i18n.t("errors:conversation.loadFailed"),
-            );
+            const localizedError = createConversationLoadFailedError();
             setError(localizedError);
             if (active && onError) onError(localizedError);
           });
@@ -283,9 +291,7 @@ export function useStorageConversations() {
           projectUuid: targetProject,
           error: eventError,
         });
-        const localizedError = new Error(
-          i18n.t("errors:conversation.loadFailed"),
-        );
+        const localizedError = createConversationLoadFailedError();
         setError(localizedError);
       });
     };
@@ -305,18 +311,16 @@ export function useStorageConversations() {
         (detail.conversationId ? [detail.conversationId] : null) ??
         Array.from(messageSubscribersRef.current.keys());
 
-      targetConversationIds.forEach((conversationId) => {
+      for (const conversationId of targetConversationIds) {
         loadMessagesForConversation(conversationId).catch((eventError) => {
           logger.error("refresh message cache failed", {
             conversationId,
             error: eventError,
           });
-          const localizedError = new Error(
-            i18n.t("errors:conversation.loadFailed"),
-          );
+          const localizedError = createConversationLoadFailedError();
           setError(localizedError);
         });
-      });
+      }
     };
 
     window.addEventListener("conversation-created", handleConversationEvent);
@@ -377,7 +381,7 @@ export function useStorageConversations() {
               projectUuid,
               error,
             });
-            throw new Error(i18n.t("errors:conversation.createFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationCreateFailed));
           }
         },
         { setLoading, setError },
@@ -398,7 +402,7 @@ export function useStorageConversations() {
             return conversation;
           } catch (error) {
             logger.error("get conversation failed", { id, error });
-            throw new Error(i18n.t("errors:conversation.loadFailed"));
+            throw createConversationLoadFailedError();
           }
         },
         { setLoading, setError },
@@ -425,7 +429,7 @@ export function useStorageConversations() {
               id,
               error,
             });
-            throw new Error(i18n.t("errors:conversation.loadFailed"));
+            throw createConversationLoadFailedError();
           }
         },
         { setLoading, setError },
@@ -451,7 +455,7 @@ export function useStorageConversations() {
             );
           } catch (error) {
             logger.error("update conversation failed", { id, error });
-            throw new Error(i18n.t("errors:conversation.updateFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationUpdateFailed));
           }
         },
         { setLoading, setError },
@@ -505,7 +509,7 @@ export function useStorageConversations() {
             );
           } catch (error) {
             logger.error("delete conversation failed", { id, error });
-            throw new Error(i18n.t("errors:conversation.deleteFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationDeleteFailed));
           }
         },
         { setLoading, setError },
@@ -533,7 +537,7 @@ export function useStorageConversations() {
               ids,
               error,
             });
-            throw new Error(i18n.t("errors:conversation.deleteFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationDeleteFailed));
           }
         },
         { setLoading, setError },
@@ -565,7 +569,7 @@ export function useStorageConversations() {
               projectUuid,
               error,
             });
-            throw new Error(i18n.t("errors:conversation.loadFailed"));
+            throw createConversationLoadFailedError();
           }
         },
         { setLoading, setError },
@@ -590,7 +594,7 @@ export function useStorageConversations() {
             return messages;
           } catch (error) {
             logger.error("load messages failed", { conversationId, error });
-            throw new Error(i18n.t("errors:conversation.loadFailed"));
+            throw createConversationLoadFailedError();
           }
         },
         { setLoading, setError },
@@ -634,7 +638,7 @@ export function useStorageConversations() {
               conversationId,
               error,
             });
-            throw new Error(i18n.t("errors:conversation.messageSaveFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationMessageSaveFailed));
           }
         },
         { setLoading, setError },
@@ -662,7 +666,7 @@ export function useStorageConversations() {
               ids: messages.map((m) => m.conversation_id),
               error,
             });
-            throw new Error(i18n.t("errors:conversation.messageSaveFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationMessageSaveFailed));
           }
         },
         { setLoading, setError },
@@ -687,7 +691,7 @@ export function useStorageConversations() {
             return blob;
           } catch (error) {
             logger.error("export conversations failed", { ids, error });
-            throw new Error(i18n.t("errors:conversation.exportFailed"));
+            throw new Error(i18n.t(ERR_KEYS.conversationExportFailed));
           }
         },
         { setLoading, setError },

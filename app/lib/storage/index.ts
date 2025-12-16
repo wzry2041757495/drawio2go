@@ -45,6 +45,8 @@ export type {
   Message,
   MessageRole,
   CreateMessageInput,
+  Attachment,
+  CreateAttachmentInput,
   PreviewImageData,
   ConversationExportItem,
 } from "./types";

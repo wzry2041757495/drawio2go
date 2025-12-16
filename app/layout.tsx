@@ -3,6 +3,8 @@ import "./globals.css";
 import I18nProvider from "@/app/components/I18nProvider";
 import { AlertDialogProvider } from "@/app/components/alert";
 import { ToastProvider } from "@/app/components/toast";
+import ErrorBoundary from "@/app/components/ErrorBoundary";
+import { defaultLocale } from "@/app/i18n/config";
 
 export const metadata: Metadata = {
   title: "DrawIO2Go - Electron DrawIO Editor",
@@ -15,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={defaultLocale} suppressHydrationWarning>
       <head>
         {/* 主题初始化脚本 - 在首次渲染前执行，避免闪烁 */}
         <script
@@ -47,9 +49,11 @@ export default function RootLayout({
       <body className="bg-background text-foreground antialiased transition-colors duration-300">
         {/* 国际化上下文：同步 i18n 状态并维护 <html lang> */}
         <I18nProvider>
-          <AlertDialogProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </AlertDialogProvider>
+          <ErrorBoundary>
+            <AlertDialogProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </AlertDialogProvider>
+          </ErrorBoundary>
         </I18nProvider>
       </body>
     </html>

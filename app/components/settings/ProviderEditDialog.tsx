@@ -20,7 +20,6 @@ import {
   Surface,
   TextField,
 } from "@heroui/react";
-import { Zap } from "lucide-react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
@@ -32,7 +31,10 @@ import {
   type CreateProviderInput,
   useStorageSettings,
 } from "@/app/hooks/useStorageSettings";
-import { normalizeApiUrl } from "@/app/lib/config-utils";
+import {
+  getDefaultApiUrlForProvider,
+  normalizeProviderApiUrl,
+} from "@/app/lib/config-utils";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
 import { useToast } from "@/app/components/toast";
 import type { ProviderConfig, ProviderType } from "@/app/types/chat";
@@ -50,7 +52,7 @@ const logger = createLogger("ProviderEditDialog");
 const defaultForm: CreateProviderInput = {
   displayName: "",
   providerType: "openai-compatible",
-  apiUrl: "",
+  apiUrl: getDefaultApiUrlForProvider("openai-compatible"),
   apiKey: "",
 };
 
@@ -74,11 +76,6 @@ export function ProviderEditDialog({
     apiKey?: string;
   }>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
 
   const isFormValid = useMemo(
     () =>
@@ -100,9 +97,7 @@ export function ProviderEditDialog({
       setFormData(defaultForm);
     }
     setErrors({});
-    setTestResult(null);
     setIsSaving(false);
-    setIsTesting(false);
   }, [provider]);
 
   useEffect(() => {
@@ -113,7 +108,24 @@ export function ProviderEditDialog({
 
   const handleFieldChange = useCallback(
     (field: EditableFieldKey, value: string) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
+      setFormData((prev) => {
+        const next = { ...prev, [field]: value };
+
+        // 当供应商类型变化时，自动更新 apiUrl（如果是默认 URL 或为空）
+        if (field === "providerType") {
+          const newType = value as ProviderType;
+          const currentUrl = prev.apiUrl.trim();
+          const oldDefaultUrl = getDefaultApiUrlForProvider(prev.providerType);
+          const newDefaultUrl = getDefaultApiUrlForProvider(newType);
+
+          // 如果当前 URL 为空或等于旧供应商的默认 URL，则自动填入新供应商的默认 URL
+          if (!currentUrl || currentUrl === oldDefaultUrl) {
+            next.apiUrl = newDefaultUrl;
+          }
+        }
+
+        return next;
+      });
       if (errors[field]) {
         setErrors((prev) => {
           const next = { ...prev };
@@ -165,7 +177,7 @@ export function ProviderEditDialog({
       const payload: CreateProviderInput = {
         displayName: formData.displayName.trim(),
         providerType: formData.providerType,
-        apiUrl: normalizeApiUrl(formData.apiUrl),
+        apiUrl: normalizeProviderApiUrl(formData.providerType, formData.apiUrl),
         apiKey: formData.apiKey,
       };
 
@@ -219,46 +231,6 @@ export function ProviderEditDialog({
     },
     [handleSave],
   );
-
-  const handleTestConnection = useCallback(async () => {
-    setIsTesting(true);
-    setTestResult(null);
-
-    try {
-      const response = await fetch("/api/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiUrl: normalizeApiUrl(formData.apiUrl),
-          apiKey: formData.apiKey,
-          providerType: formData.providerType,
-          modelName: "gpt-3.5-turbo",
-          temperature: 0.3,
-        }),
-      });
-
-      const result = await response.json();
-      if (response.ok && result?.success) {
-        setTestResult({
-          success: true,
-          message: t("models.test.success"),
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: result?.message ?? t("models.test.error"),
-        });
-      }
-    } catch (error) {
-      logger.error("[ProviderEditDialog] 连接测试失败", error);
-      setTestResult({
-        success: false,
-        message: t("models.test.networkError"),
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  }, [formData.apiKey, formData.apiUrl, formData.providerType, t]);
 
   return (
     <ModalOverlay
@@ -325,6 +297,12 @@ export function ProviderEditDialog({
                           {t("models.form.type.options.openaiCompatible")}
                         </Description>
                       </ListBox.Item>
+                      <ListBox.Item id="anthropic">
+                        Anthropic
+                        <Description>
+                          {t("models.form.type.options.anthropic")}
+                        </Description>
+                      </ListBox.Item>
                       <ListBox.Item id="deepseek-native">
                         DeepSeek Native
                         <Description>
@@ -381,41 +359,6 @@ export function ProviderEditDialog({
                     <FieldError>{errors.apiKey}</FieldError>
                   ) : null}
                 </TextField>
-
-                {formData.apiUrl ? (
-                  <div className="space-y-2 rounded-xl border border-default-200 bg-content1 px-3 py-3">
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onPress={handleTestConnection}
-                        isDisabled={isTesting || !formData.apiUrl}
-                      >
-                        {isTesting ? (
-                          <Spinner size="sm" />
-                        ) : (
-                          <Zap className="h-4 w-4" />
-                        )}
-                        {t("models.form.testConnection")}
-                      </Button>
-                    </div>
-                    {testResult ? (
-                      <div
-                        className="rounded-lg px-3 py-2 text-sm"
-                        style={{
-                          background: testResult.success
-                            ? "oklch(var(--success-100))"
-                            : "oklch(var(--danger-100))",
-                          color: testResult.success
-                            ? "oklch(var(--success-700))"
-                            : "oklch(var(--danger-700))",
-                        }}
-                      >
-                        {testResult.success ? "✓" : "✗"} {testResult.message}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </form>
             </div>
 

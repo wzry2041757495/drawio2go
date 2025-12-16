@@ -158,3 +158,32 @@ export type CreateMessageInput = Omit<Message, "created_at"> & {
   created_at?: number;
   createdAt?: number;
 };
+
+// ==================== Attachments ====================
+
+/**
+ * 附件实体（Milestone 1）
+ *
+ * 当前仅支持图片类型：
+ * - Web 环境：blob_data 为 Blob
+ * - Electron 环境：blob_data 不返回，使用 file_path 指向本地文件
+ */
+export interface Attachment {
+  id: string; // UUID
+  message_id: string; // 外键 → messages.id
+  conversation_id: string; // 冗余字段（方便查询）
+  type: "image"; // 当前仅支持图片
+  mime_type: string; // image/png, image/jpeg, image/gif, image/webp
+  file_name: string; // 原始文件名
+  file_size: number; // 字节数
+  width?: number; // 图片宽度（可选）
+  height?: number; // 图片高度（可选）
+  blob_data?: Blob | Buffer; // Web: Blob, Electron: undefined（返回时为空）
+  file_path?: string; // Electron 文件相对路径
+  created_at: number; // 毫秒时间戳
+}
+
+/**
+ * 创建附件时的输入类型
+ */
+export type CreateAttachmentInput = Omit<Attachment, "created_at">;

@@ -87,6 +87,25 @@ function applySQLiteV1Migration(db, logger = defaultLogger) {
       CREATE INDEX IF NOT EXISTS idx_messages_xml_version ON messages(xml_version_id);
       CREATE INDEX IF NOT EXISTS idx_messages_sequence ON messages(conversation_id, sequence_number);
 
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'image',
+        mime_type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        width INTEGER,
+        height INTEGER,
+        file_path TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON attachments(message_id);
+      CREATE INDEX IF NOT EXISTS idx_attachments_conversation_id ON attachments(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_attachments_created_at ON attachments(created_at);
+
       CREATE TABLE IF NOT EXISTS conversation_sequences (
         conversation_id TEXT PRIMARY KEY,
         last_sequence INTEGER NOT NULL,
