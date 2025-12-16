@@ -19,6 +19,7 @@
 ---
 
 一款现代化的 DrawIO 编辑器应用，致力于在AI加持下构建更好的**人机协同**建模工具。以用户为中心，不追求简单替代，探索如何让更好与AI取长补短。
+
 <div align="center">
 <img alt="image" src="https://github.com/user-attachments/assets/4ede9b64-dfe0-4aa7-be5c-4440ca520db7" width="60%" />
 </div>
@@ -147,6 +148,7 @@ npm run dev
 - [ ] WEB端中，对话可能会无法取消
 - [ ] 支持自定义drawio控件URL
 - [ ] 直接导出为png/svg
+- [ ] 增加更多LLM API支持
 
 ## 项目结构
 
