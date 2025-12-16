@@ -220,7 +220,9 @@ export default function ModelComboBox({
                         </div>
                         <div className="model-option-meta flex flex-wrap items-center gap-2 text-xs text-default-500">
                           <span className="model-params">
-                            温度: {model.temperature} | 工具轮次:{" "}
+                            {t("modelSelector.temperature")}:{" "}
+                            {model.temperature} |{" "}
+                            {t("modelSelector.maxToolRounds")}:{" "}
                             {model.maxToolRounds}
                           </span>
                           <span className="provider-name inline-flex items-center gap-1">

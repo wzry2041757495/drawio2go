@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * DrawIO AI 工具参数的统一 Zod Schema 定义。
- * 作为 drawio_read / drawio_edit_batch / drawio_overwrite 的单一真源，避免分散校验逻辑。
+ * Unified Zod Schema definitions for DrawIO AI tool parameters.
+ * Single source of truth for drawio_read / drawio_edit_batch / drawio_overwrite validation.
  */
 
 export const operationSchema = z
@@ -17,40 +17,52 @@ export const operationSchema = z
         "set_text_content",
       ])
       .describe(
-        "批量编辑的操作类型：设置/移除属性、插入/删除/替换元素或设置文本内容",
+        "Operation type: set/remove attribute, insert/delete/replace element, or set text content",
       ),
     xpath: z
       .string()
       .optional()
-      .describe("XPath 定位表达式，与 id 二选一；若同时提供将优先使用 id"),
+      .describe(
+        "XPath expression for targeting. Use either xpath OR id, not both. If both provided, id takes precedence",
+      ),
     id: z
       .string()
       .optional()
-      .describe("mxCell id 定位，快捷匹配元素；提供后优先于 xpath"),
+      .describe(
+        "mxCell ID for quick targeting (auto-converts to XPath). Preferred over xpath for single elements",
+      ),
     key: z
       .string()
       .optional()
-      .describe("属性名，仅 set_attribute / remove_attribute 需要"),
+      .describe(
+        "Attribute name. Required for set_attribute and remove_attribute operations",
+      ),
     value: z
       .string()
       .optional()
-      .describe("属性值或文本内容，set_attribute / set_text_content 使用"),
+      .describe(
+        "Attribute value or text content. Required for set_attribute and set_text_content",
+      ),
     new_xml: z
       .string()
       .optional()
-      .describe("插入或替换时的新 XML 片段，须为合法 mxCell 节点"),
+      .describe(
+        "New XML fragment to insert or replace with. Must be valid mxCell XML. Required for insert_element and replace_element",
+      ),
     position: z
       .enum(["append_child", "prepend_child", "before", "after"])
       .optional()
       .describe(
-        "insert_element 时的插入位置：作为子节点追加/前置，或作为兄弟节点前后插入",
+        "Insert position for insert_element: append_child (default, as last child), prepend_child (as first child), before (as previous sibling), after (as next sibling)",
       ),
     allow_no_match: z
       .boolean()
       .optional()
-      .describe("是否允许定位无匹配时跳过操作而不报错，默认 false"),
+      .describe(
+        "If true, skip this operation when target not found instead of failing. Default: false (fail on no match)",
+      ),
   })
-  .describe("drawio_edit_batch 的单条原子操作定义")
+  .describe("Single atomic operation for drawio_edit_batch")
   .superRefine((operation, ctx) => {
     const ensureNonEmptyIfProvided = (
       value: string | undefined,
@@ -76,12 +88,17 @@ export const operationSchema = z
     if (!hasXpath && !hasId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "xpath 或 id 至少需要提供一个定位方式",
+        message:
+          "Either 'xpath' or 'id' must be provided for element targeting",
       });
     }
 
-    ensureNonEmptyIfProvided(operation.xpath, ["xpath"], "xpath 不能为空");
-    ensureNonEmptyIfProvided(operation.id, ["id"], "id 不能为空");
+    ensureNonEmptyIfProvided(
+      operation.xpath,
+      ["xpath"],
+      "xpath cannot be empty string",
+    );
+    ensureNonEmptyIfProvided(operation.id, ["id"], "id cannot be empty string");
 
     switch (operation.type) {
       case "set_attribute": {
@@ -89,15 +106,19 @@ export const operationSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["key"],
-            message: "key 不能为空",
+            message: "'key' is required for set_attribute operation",
           });
         }
-        ensureNonEmptyIfProvided(operation.key, ["key"], "key 不能为空");
+        ensureNonEmptyIfProvided(
+          operation.key,
+          ["key"],
+          "key cannot be empty string",
+        );
         if (typeof operation.value !== "string") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["value"],
-            message: "value 必须是字符串",
+            message: "'value' must be a string for set_attribute operation",
           });
         }
         break;
@@ -107,26 +128,29 @@ export const operationSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["key"],
-            message: "key 不能为空",
+            message: "'key' is required for remove_attribute operation",
           });
         }
-        ensureNonEmptyIfProvided(operation.key, ["key"], "key 不能为空");
+        ensureNonEmptyIfProvided(
+          operation.key,
+          ["key"],
+          "key cannot be empty string",
+        );
         break;
       }
       case "insert_element":
       case "replace_element": {
-        // insert_element 和 replace_element 都需要 new_xml
         if (operation.new_xml === undefined) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["new_xml"],
-            message: "new_xml 不能为空",
+            message: `'new_xml' is required for ${operation.type} operation`,
           });
         }
         ensureNonEmptyIfProvided(
           operation.new_xml,
           ["new_xml"],
-          "new_xml 不能为空",
+          "new_xml cannot be empty string",
         );
         break;
       }
@@ -138,7 +162,7 @@ export const operationSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["value"],
-            message: "value 必须是字符串",
+            message: "'value' must be a string for set_text_content operation",
           });
         }
         break;
@@ -153,35 +177,43 @@ export const drawioReadInputSchema = z
     xpath: z
       .string()
       .optional()
-      .describe("XPath 精确查询表达式，用于直接匹配目标节点"),
+      .describe(
+        "XPath expression for querying. Example: //mxCell[@vertex='1'] to find all shapes",
+      ),
     id: z
       .union([z.string(), z.array(z.string())])
       .optional()
-      .describe("按 mxCell id 查询，支持单个字符串或字符串数组"),
+      .describe(
+        "Query by mxCell ID. Accepts single string or array of strings. Example: 'node-1' or ['node-1', 'node-2']",
+      ),
     filter: z
       .enum(["all", "vertices", "edges"])
       .optional()
-      .describe("ls 模式下的类型过滤：全部/顶点/连线，默认 all"),
+      .describe(
+        "Filter for ls mode (when no xpath/id provided): 'all' (default), 'vertices' (shapes only), 'edges' (connectors only)",
+      ),
     description: z
       .string()
       .optional()
       .describe(
-        '可选的操作描述。简要说明此次读取操作的目的，例如："查询登录按钮样式"、"检查页面布局结构"。如不提供将使用默认描述。',
+        "Optional description of this read operation for logging. Example: 'Query login button style'",
       ),
   })
-  .describe("drawio_read 工具的输入参数定义")
+  .describe("Input parameters for drawio_read tool")
   .superRefine((data, ctx) => {
     if (data.xpath && data.id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "xpath 和 id 不能同时提供，请仅使用其中一个定位方式",
+        message:
+          "Cannot use both 'xpath' and 'id' together. Choose one locator method",
       });
     }
 
     if (data.filter && (data.xpath || data.id)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "filter 参数仅在 ls 模式（未提供 xpath 或 id）时生效",
+        message:
+          "'filter' is only valid in ls mode (when neither xpath nor id is provided)",
       });
     }
   });
@@ -190,46 +222,51 @@ export const drawioEditBatchInputSchema = z
   .object({
     operations: z
       .array(operationSchema)
-      .min(1, "operations 至少包含一项操作")
-      .describe("按顺序执行的原子操作列表，全部成功或全部回滚"),
+      .min(1, "operations must contain at least one operation")
+      .describe(
+        "Array of atomic operations to execute in order. All succeed or all rollback",
+      ),
     description: z
       .string()
       .optional()
       .describe(
-        '可选操作描述。简要说明此次批量编辑的目的和内容，例如："将登录按钮颜色改为红色"、"调整页面布局间距"。如不提供将使用默认描述。',
+        "Optional description of this batch edit for logging. Example: 'Change login button to red'",
       ),
   })
-  .describe("drawio_edit_batch 工具的输入：批量编辑请求体");
+  .describe("Input for drawio_edit_batch: batch edit request body");
 
 export const drawioOverwriteInputSchema = z
   .object({
     drawio_xml: z
       .string()
-      .min(1, "drawio_xml 不能为空")
-      .describe("完整的 DrawIO XML 字符串，提交前会进行格式校验"),
+      .min(1, "drawio_xml cannot be empty")
+      .describe(
+        "Complete DrawIO XML string. Must be valid XML with mxGraphModel root structure",
+      ),
     description: z
       .string()
       .optional()
       .describe(
-        '可选操作描述。简要说明此次覆写操作的目的，例如："应用新模板"、"重构整体架构"。如不提供将使用默认描述。',
+        "Optional description of this overwrite for logging. Example: 'Apply new template'",
       ),
   })
-  .describe("drawio_overwrite 工具的输入：用于完整替换图表内容");
+  .describe("Input for drawio_overwrite: complete diagram replacement");
 
-// --------- 类型导出（供外部使用的单一真源）---------
+// --------- Type exports (single source of truth) ---------
 /**
- * 批量编辑的单条原子操作类型，替代原先 app/types/drawio-tools.ts 中的定义。
+ * Single atomic operation type for batch editing.
+ * Replaces the original definition in app/types/drawio-tools.ts.
  */
 export type DrawioEditOperation = z.infer<typeof operationSchema>;
 /**
- * drawio_read 输入参数类型（zod 推导）。
+ * drawio_read input parameter type (inferred from zod).
  */
 export type DrawioReadInput = z.infer<typeof drawioReadInputSchema>;
 /**
- * 批量编辑输入类型（operations 数组包装）。
+ * Batch edit input type (operations array wrapper).
  */
 export type DrawioEditBatchRequest = z.infer<typeof drawioEditBatchInputSchema>;
 /**
- * 覆写 XML 的输入类型。
+ * Overwrite XML input type.
  */
 export type DrawioOverwriteInput = z.infer<typeof drawioOverwriteInputSchema>;

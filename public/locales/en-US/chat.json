@@ -242,7 +242,9 @@
     "empty": "No models available. Add providers and models in Settings first.",
     "noResult": "No available models",
     "selectFailedTitle": "Model switch failed",
-    "selectFailedDescription": "Please choose another model or try again later."
+    "selectFailedDescription": "Please choose another model or try again later.",
+    "temperature": "Temperature",
+    "maxToolRounds": "Tool rounds"
   },
   "errors": {
     "loadFailed": "Failed to load messages",

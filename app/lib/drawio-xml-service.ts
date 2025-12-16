@@ -33,7 +33,9 @@ function ensureContext(
   const chatRunId =
     typeof context?.chatRunId === "string" ? context.chatRunId.trim() : "";
   if (!projectUuid || !conversationId) {
-    throw new Error("缺少项目或会话上下文，无法执行工具");
+    throw new Error(
+      "Missing project or conversation context. Ensure both projectUuid and conversationId are provided.",
+    );
   }
   return {
     projectUuid,
@@ -46,7 +48,9 @@ function ensureContext(
 function ensureParser(): DOMParser {
   const parser = getDomParser();
   if (!parser) {
-    throw new Error("当前环境不支持 DOMParser");
+    throw new Error(
+      "DOMParser not available in current environment. This tool requires a browser or Node.js environment with DOM support.",
+    );
   }
   return parser;
 }
@@ -54,21 +58,23 @@ function ensureParser(): DOMParser {
 function ensureSerializer(): XMLSerializer {
   const serializer = getXmlSerializer();
   if (!serializer) {
-    throw new Error("当前环境不支持 XMLSerializer");
+    throw new Error(
+      "XMLSerializer not available in current environment. This tool requires a browser or Node.js environment with DOM support.",
+    );
   }
   return serializer;
 }
 
 /**
- * 将 id 或 xpath 解析为标准化的 XPath 表达式
- * - 优先使用 id（如果同时提供）
- * - id 转换为 //mxCell[@id='xxx']，注意转义单引号
+ * Resolve id or xpath to a standardized XPath expression
+ * - Prioritizes id if both provided
+ * - id converts to //mxCell[@id='xxx'], with proper escaping
  */
 function resolveLocator(locator: { xpath?: string; id?: string }): string {
   if (locator.id && locator.id.trim() !== "") {
     const id = locator.id.trim();
 
-    // XPath 1.0 字符串转义规则
+    // XPath 1.0 string escaping rules
     if (!id.includes("'")) {
       return `//mxCell[@id='${id}']`;
     }
@@ -83,7 +89,9 @@ function resolveLocator(locator: { xpath?: string; id?: string }): string {
   if (locator.xpath && locator.xpath.trim() !== "") {
     return locator.xpath;
   }
-  throw new Error("resolveLocator: xpath 或 id 必须至少提供一个");
+  throw new Error(
+    "Locator requires either 'xpath' or 'id'. Provide at least one targeting method.",
+  );
 }
 
 function executeQueryById(
@@ -118,8 +126,10 @@ function executeQueryByXpath(
   try {
     evaluation = select(trimmedXpath, document);
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid XPath expression: "${trimmedXpath}". ${errorMsg}. ` +
+        `Common issues: unbalanced quotes, invalid axis, typos in node names.`,
     );
   }
 
@@ -154,24 +164,26 @@ export async function executeDrawioRead(
   const xmlString = await fetchDiagramXml(resolvedContext, description);
   const document = parseXml(xmlString);
 
-  // 模式 1：列表查询（无 xpath/id）
+  // Mode 1: List query (no xpath/id)
   if (!xpath && !id) {
     return executeListMode(document, filter);
   }
 
-  // 模式 2：ID 查询
+  // Mode 2: ID query
   if (id) {
     const results = executeQueryById(document, id);
     return { success: true, results };
   }
 
-  // 模式 3：XPath 查询
+  // Mode 3: XPath query
   if (xpath) {
     const results = executeQueryByXpath(document, xpath);
     return { success: true, results };
   }
 
-  throw new Error(`${DRAWIO_READ}: 未提供有效的查询参数`);
+  throw new Error(
+    `${DRAWIO_READ}: No valid query parameters provided. Use 'id', 'xpath', or leave empty for ls mode.`,
+  );
 }
 
 export async function executeDrawioEditBatch(
@@ -197,8 +209,14 @@ export async function executeDrawioEditBatch(
     try {
       applyOperation(document, operation);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      const locatorInfo = operation.id
+        ? 'id="' + operation.id + '"'
+        : 'xpath="' + operation.xpath + '"';
       throw new Error(
-        `操作 ${index} 失败: ${error instanceof Error ? error.message : "未知错误"}`,
+        `Operation ${index + 1}/${operations.length} failed (${operation.type}): ${errorMsg}. ` +
+          `Locator: ${locatorInfo}. ` +
+          `All changes have been rolled back.`,
       );
     }
   }
@@ -206,7 +224,7 @@ export async function executeDrawioEditBatch(
   const serializer = ensureSerializer();
   const updatedXml = serializer.serializeToString(document);
 
-  const finalDescription = description?.trim() || "批量编辑图表元素";
+  const finalDescription = description?.trim() || "Batch edit diagram";
 
   const replaceResult = (await executeToolOnClient(
     REPLACE_DRAWIO_XML,
@@ -221,15 +239,15 @@ export async function executeDrawioEditBatch(
   )) as ReplaceXMLResult;
 
   if (!replaceResult?.success) {
-    logger.error("批量编辑写回失败", { replaceResult });
+    logger.error("Batch edit write-back failed", { replaceResult });
 
-    // drawio_syntax_error 表示前端在解析失败时已自行回滚，避免重复回滚
+    // drawio_syntax_error means frontend already rolled back on parse failure
     const alreadyRolledBack = replaceResult?.error === "drawio_syntax_error";
 
     if (alreadyRolledBack) {
       throw new Error(
         replaceResult?.message ||
-          "批量编辑失败：DrawIO 报告语法错误，已自动回滚到修改前状态",
+          "Batch edit failed: DrawIO reported syntax error. Automatically rolled back to previous state.",
       );
     }
 
@@ -242,7 +260,7 @@ export async function executeDrawioEditBatch(
         { drawio_xml: originalXml },
         resolvedContext.projectUuid,
         resolvedContext.conversationId,
-        "批量编辑失败回滚原始 XML",
+        "Rollback after batch edit failure",
         {
           signal: resolvedContext.abortSignal,
           chatRunId: resolvedContext.chatRunId,
@@ -251,30 +269,32 @@ export async function executeDrawioEditBatch(
 
       if (rollbackResult?.success) {
         rollbackSucceeded = true;
-        logger.warn(`${REPLACE_DRAWIO_XML} 失败后已回滚到原始 XML`);
+        logger.warn(
+          `${REPLACE_DRAWIO_XML} failed, rolled back to original XML`,
+        );
       } else {
         rollbackErrorMessage =
           rollbackResult?.error ||
           rollbackResult?.message ||
-          "未知原因导致回滚失败";
-        logger.error("回滚到原始 XML 失败", { rollbackResult });
+          "Unknown rollback failure reason";
+        logger.error("Rollback to original XML failed", { rollbackResult });
       }
     } catch (rollbackError) {
       rollbackErrorMessage =
         rollbackError instanceof Error
           ? rollbackError.message
           : String(rollbackError);
-      logger.error("回滚过程异常", { rollbackError });
+      logger.error("Rollback process error", { rollbackError });
     }
 
     const originalError =
       replaceResult?.error ||
       replaceResult?.message ||
-      "前端替换 XML 失败（未知原因）";
+      "Frontend XML replacement failed (unknown reason)";
 
     const errorMessage = rollbackSucceeded
-      ? `批量编辑失败：${originalError}，已自动回滚到修改前状态。\n原始错误：${originalError}`
-      : `批量编辑失败：${originalError}，回滚失败：${rollbackErrorMessage ?? "未知原因"}。\n原始错误：${originalError}`;
+      ? `Batch edit failed: ${originalError}. Successfully rolled back to previous state.`
+      : `Batch edit failed: ${originalError}. Rollback also failed: ${rollbackErrorMessage ?? "unknown reason"}. Diagram may be in inconsistent state.`;
 
     throw new Error(errorMessage);
   }
@@ -290,7 +310,7 @@ async function fetchDiagramXml(
   description?: string,
 ): Promise<string> {
   const resolvedContext = ensureContext(context);
-  const finalDescription = description?.trim() || "读取图表内容";
+  const finalDescription = description?.trim() || "Read diagram content";
   const response = (await executeToolOnClient(
     GET_DRAWIO_XML,
     {},
@@ -304,7 +324,10 @@ async function fetchDiagramXml(
   )) as GetXMLResult;
 
   if (!response?.success || typeof response.xml !== "string") {
-    throw new Error(response?.error || "无法获取当前 DrawIO XML");
+    throw new Error(
+      response?.error ||
+        "Failed to retrieve current DrawIO XML. Ensure the diagram is loaded and accessible.",
+    );
   }
 
   return normalizeDiagramXml(response.xml);
@@ -315,7 +338,9 @@ function parseXml(xml: string): Document {
   const document = parser.parseFromString(xml, "text/xml");
   const parseErrors = document.getElementsByTagName("parsererror");
   if (parseErrors.length > 0) {
-    throw new Error(parseErrors[0].textContent || "XML 解析失败");
+    throw new Error(
+      `XML parsing failed: ${parseErrors[0].textContent || "Invalid XML structure"}. Ensure the XML is well-formed.`,
+    );
   }
   return document;
 }
@@ -491,7 +516,9 @@ function applyOperation(
     return;
   }
 
-  throw new Error(`未知操作类型: ${(operation as { type: string }).type}`);
+  throw new Error(
+    `Unknown operation type: "${(operation as { type: string }).type}". Valid types: set_attribute, remove_attribute, insert_element, remove_element, replace_element, set_text_content`,
+  );
 }
 
 function setAttribute(
@@ -508,12 +535,16 @@ function setAttribute(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the element exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
+      throw new Error(
+        `${locatorLabel} matched a non-element node (type: ${node.nodeType}). Only element nodes can have attributes.`,
+      );
     }
     (node as Element).setAttribute(key, value);
   }
@@ -532,12 +563,16 @@ function removeAttribute(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the element exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
+      throw new Error(
+        `${locatorLabel} matched a non-element node (type: ${node.nodeType}). Only element nodes can have attributes.`,
+      );
     }
     (node as Element).removeAttribute(key);
   }
@@ -557,7 +592,9 @@ function insertElement(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the target exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   const insertPosition: InsertPosition = position ?? "append_child";
@@ -568,14 +605,18 @@ function insertElement(
     switch (insertPosition) {
       case "append_child": {
         if (target.nodeType !== target.ELEMENT_NODE) {
-          throw new Error(`${locatorLabel} 仅支持元素节点作为父节点。`);
+          throw new Error(
+            `${locatorLabel} matched a non-element node. append_child requires an element as parent.`,
+          );
         }
         (target as Element).appendChild(newNode);
         break;
       }
       case "prepend_child": {
         if (target.nodeType !== target.ELEMENT_NODE) {
-          throw new Error(`${locatorLabel} 仅支持元素节点作为父节点。`);
+          throw new Error(
+            `${locatorLabel} matched a non-element node. prepend_child requires an element as parent.`,
+          );
         }
         const element = target as Element;
         element.insertBefore(newNode, element.firstChild);
@@ -584,7 +625,9 @@ function insertElement(
       case "before": {
         const parent = target.parentNode;
         if (!parent) {
-          throw new Error("目标节点没有父节点，无法执行 before 插入。");
+          throw new Error(
+            `Cannot insert 'before' ${locatorLabel}: target has no parent node.`,
+          );
         }
         parent.insertBefore(newNode, target);
         break;
@@ -592,13 +635,17 @@ function insertElement(
       case "after": {
         const parent = target.parentNode;
         if (!parent) {
-          throw new Error("目标节点没有父节点，无法执行 after 插入。");
+          throw new Error(
+            `Cannot insert 'after' ${locatorLabel}: target has no parent node.`,
+          );
         }
         parent.insertBefore(newNode, target.nextSibling);
         break;
       }
       default:
-        throw new Error(`未知的插入位置: ${String(insertPosition)}`);
+        throw new Error(
+          `Unknown insert position: "${String(insertPosition)}". Valid values: append_child, prepend_child, before, after`,
+        );
     }
   }
 }
@@ -615,13 +662,17 @@ function removeElement(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the element exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   for (const node of nodes) {
     const parent = node.parentNode;
     if (!parent) {
-      throw new Error("无法删除根节点。");
+      throw new Error(
+        `Cannot remove root node matched by ${locatorLabel}. Only child nodes can be removed.`,
+      );
     }
     parent.removeChild(node);
   }
@@ -640,13 +691,17 @@ function replaceElement(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the element exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   for (const node of nodes) {
     const parent = node.parentNode;
     if (!parent) {
-      throw new Error("无法替换根节点。");
+      throw new Error(
+        `Cannot replace root node matched by ${locatorLabel}. Only child nodes can be replaced.`,
+      );
     }
     const replacement = createElementFromXml(document, newXml);
     parent.replaceChild(replacement, node);
@@ -666,12 +721,16 @@ function setTextContent(
     if (allowNoMatch) {
       return;
     }
-    throw new Error(`${locatorLabel} did not match any elements.`);
+    throw new Error(
+      `No elements matched ${locatorLabel}. Use drawio_read first to verify the element exists, or set allow_no_match: true to skip.`,
+    );
   }
 
   for (const node of nodes) {
     if (node.nodeType !== node.ELEMENT_NODE) {
-      throw new Error(`${locatorLabel} 匹配的节点不是元素。`);
+      throw new Error(
+        `${locatorLabel} matched a non-element node (type: ${node.nodeType}). Only element nodes can have text content set.`,
+      );
     }
 
     const element = node as Element;
@@ -687,11 +746,15 @@ function createElementFromXml(document: Document, xml: string): Element {
   const fragment = parser.parseFromString(xml, "text/xml");
   const parseErrors = fragment.getElementsByTagName("parsererror");
   if (parseErrors.length > 0) {
-    throw new Error(parseErrors[0].textContent || "new_xml 解析失败");
+    throw new Error(
+      `Failed to parse new_xml: ${parseErrors[0].textContent || "Invalid XML"}. Ensure the XML fragment is well-formed.`,
+    );
   }
   const element = fragment.documentElement;
   if (!element) {
-    throw new Error("new_xml 必须包含一个元素节点");
+    throw new Error(
+      "new_xml must contain a root element node. Received empty or text-only content.",
+    );
   }
 
   if (typeof document.importNode === "function") {
@@ -703,12 +766,12 @@ function createElementFromXml(document: Document, xml: string): Element {
 
 function buildLocatorLabel(locator: { xpath?: string; id?: string }): string {
   if (locator.id?.trim()) {
-    return `id '${locator.id.trim()}'`;
+    return `id="${locator.id.trim()}"`;
   }
   if (locator.xpath?.trim()) {
-    return `XPath '${locator.xpath.trim()}'`;
+    return `xpath="${locator.xpath.trim()}"`;
   }
-  return "未提供定位器";
+  return "no locator provided";
 }
 
 function selectNodes(document: Document, expression: string): Node[] {
@@ -716,9 +779,8 @@ function selectNodes(document: Document, expression: string): Node[] {
   try {
     evaluation = select(expression, document);
   } catch (error) {
-    throw new Error(
-      `Invalid XPath expression: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid XPath expression: "${expression}". ${errorMsg}`);
   }
 
   if (!Array.isArray(evaluation)) {

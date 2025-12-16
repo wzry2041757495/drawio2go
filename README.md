@@ -1,7 +1,7 @@
 # DrawIO2Go
 
 <p align="center">
-  <strong>AI-Powered Cross-Platform DrawIO Editor</strong>
+  <strong>AI-Powered, Human-AI Collaboration</strong>
 </p>
 
 <p align="center">
@@ -18,38 +18,102 @@
 
 ---
 
-A modern, cross-platform DrawIO editor application built with Electron, Next.js 15, and HeroUI v3. Features AI-assisted diagram editing, version control, and a beautiful Material Design interface.
+A modern DrawIO editor application dedicated to building better **human-AI collaborative** modeling tools with AI assistance. User-centered, not seeking simple replacement, but exploring how to best complement each other with AI.
 
-## Features
+<div align="center">
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>Version Management</h3>
+      <p>Manual creation of major versions + automatic sub-versions on AI modifications</p>
+      <img src="111" alt="Version Control" width="100%" />
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Multi-Provider Management</h3>
+      <p>Support for multiple LLM providers/models switching</p>
+      <img src="111" alt="Multi-Provider Control" width="100%" />
+      <br />
+      <sub>Currently only supports OpenAI/DeepSeek/Anthropic formats</sub>
+    </td>
+  </tr>
+    <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>Version Comparison</h3>
+      <p>Easily compare/rollback differences between modified versions</p>
+      <img src="111" alt="Comparison Page" width="100%" />
+      <br />
+      <sub>Smart comparison is currently in beta, may have suboptimal effects/slow rendering</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>AI-Powered Editing</h3>
+      <p>Precise modification tools based on XPath/DrawIO element IDs</p>
+      <img src="111" alt="Demo" width="100%" />
+      <br />
+    </td>
+  </tr>
+</table>
+</div>
 
-- **AI-Powered Editing** - Chat with AI to create, modify, and understand your diagrams
-- **Version Control** - Full version history with diff comparison and rollback support
-- **Cross-Platform** - Runs on Windows, macOS, Linux, and in web browsers
-- **Modern UI** - Material Design interface with HeroUI v3 components
-- **Multi-Language** - Supports English, Chinese (zh-CN), and Japanese (ja-JP)
-- **Real-time Sync** - Socket.IO powered communication between AI and editor
-- **Dark Mode** - System-aware theme switching
+Provides ready-to-use Electron APP. Can also be deployed as a web application, see the Quick Start section below for details.
 
-## Tech Stack
+Here are some actual demos and their prompts:
 
-| Category           | Technology                                |
-| ------------------ | ----------------------------------------- |
-| **Frontend**       | Next.js 15 (App Router) + React 19        |
-| **UI Library**     | HeroUI v3 (Beta) - React Aria Components  |
-| **Styling**        | Tailwind CSS v4                           |
-| **Desktop**        | Electron 38.x                             |
-| **AI Integration** | Vercel AI SDK with multi-provider support |
-| **Storage**        | SQLite (Electron) / IndexedDB (Web)       |
-| **Language**       | TypeScript                                |
+<div align="center">
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>U-net Architecture Diagram</h3>
+      <p>Draw a U-net network</p>
+      <img src="111" alt="Version Control" width="100%" />
+      <br />
+      <sub>Drawn using glm-4.6</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Image to DrawIO</h3>
+      <p>Support for multiple LLM providers/models switching</p>
+      <img src="111" alt="Multi-Provider Control" width="100%" />
+      <br />
+      <sub>Drawn using claude-sonnet-4.5, image conversation support is still in beta</sub>
+    </td>
+  </tr>
+    <tr>
+    <td width="50%" valign="top" align="center">
+      <h3>UML Architecture Diagram</h3>
+      <p>Draw a classic front-end and back-end web application UML architecture diagram</p>
+      <img src="111" alt="Comparison Page" width="100%" />
+      <br />
+      <sub>Drawn using glm-4.6</sub>
+      <br />
+    </td>
+    <td width="50%" valign="top" align="center">
+      <h3>Pure Element Drawing</h3>
+      <p>Draw a laptop</p>
+      <img src="111" alt="Demo" width="100%" />
+      <br />
+      <sub>Drawn using claude-sonnet-4.5</sub>
+      <br />
+    </td>
+  </tr>
+</table>
+</div>
 
 ## Quick Start
 
-### Prerequisites
+### Using Electron APP
+
+Go to [Releases](https://github.com/Menghuan1918/drawio2go/releases) to download and install the latest version
+
+### Deploy as Web Application
+
+Requirements:
 
 - Node.js 20.x or higher
 - npm
 
-### Installation
+Then run the following commands
 
 ```bash
 # Clone the repository
@@ -60,31 +124,24 @@ cd drawio2go
 npm install
 ```
 
-### Development
-
 **Web Mode (Browser):**
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser
 
-**Desktop Mode (Electron):**
+> [!IMPORTANT]
+> Please note that there is currently no authentication mechanism for the web version. Do not deploy it to the public internet (LLM keys are stored in the browser, but DrawIO tool callbacks are not authenticated, others may be able to obtain DrawIO tool call information)
 
-```bash
-npm run electron:dev
-```
+## Known Issues / Upcoming Features
 
-### Production Build
-
-```bash
-# Build Next.js
-npm run build
-
-# Build Electron app (outputs to dist/)
-npm run electron:build
-```
+- [ ] Support for passing selected elements from canvas to AI in Electron
+- [ ] Full image/file conversation support
+- [ ] Support for exporting projects to files
+- [ ] In web version, conversations may not be cancellable
+- [ ] Support for custom DrawIO widget URL
 
 ## Project Structure
 
@@ -106,64 +163,27 @@ drawio2go/
 └── server.js              # Socket.IO + Next.js server
 ```
 
-## Configuration
+## Development Guide
 
-### AI Provider Setup
-
-1. Open the sidebar and navigate to **Settings** tab
-2. Configure your preferred AI provider:
-   - **Anthropic Claude** - API key from [anthropic.com](https://anthropic.com)
-   - **OpenAI** - API key from [openai.com](https://openai.com)
-   - **DeepSeek** - API key from [deepseek.com](https://deepseek.com)
-   - **OpenAI Compatible** - Custom endpoint for local models (LM Studio, etc.)
-
-### Supported AI Models
-
-- Claude 3.5 Sonnet / Claude 3 Opus
-- GPT-4o / GPT-4 Turbo
-- DeepSeek V3 / DeepSeek Reasoner
-- Any OpenAI-compatible model
-
-## Usage
-
-### Interface Overview
-
-- **Editor Area** - Main DrawIO canvas for diagram editing
-- **Top Bar** - Project selector, save/load actions, sidebar toggle
-- **Sidebar** - Tabbed interface for Chat, Settings, and Version history
-
-### AI Chat
-
-1. Click the sidebar icon to expand
-2. Select the **Chat** tab
-3. Describe what you want to create or modify
-4. AI will execute changes directly on your diagram
-
-### Version Management
-
-1. Navigate to the **Version** tab in sidebar
-2. View version timeline with thumbnails
-3. Compare versions with smart diff visualization
-4. Restore any previous version with one click
-
-## Development
-
-### Commands
+### Common Commands
 
 ```bash
 npm run dev          # Start development server
 npm run build        # Build for production
-npm run lint         # Run ESLint + TypeScript check
+npm run lint         # Run ESLint + TypeScript check + complexity check
 npm run test         # Run tests
 npm run format       # Format code with Prettier
 ```
 
-### Architecture Notes
+### Production Build
 
-- Uses **npm** as package manager (for Electron build compatibility)
-- Must use `npm run dev` (not `next dev`) for Socket.IO support
-- HeroUI v3 requires Tailwind CSS v4
-- Components use `onPress` instead of `onClick` (React Aria convention)
+```bash
+# Build Next.js application
+npm run build
+
+# Build Electron installer (outputs to dist/)
+npm run electron:build
+```
 
 ## Contributing
 
@@ -177,11 +197,11 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License
 
 ## Acknowledgments
 
+- [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) - Inspiration source, excellent DrawIO AI generation implementation
 - [DrawIO](https://www.drawio.com/) - Diagram editing engine
 - [HeroUI](https://heroui.com/) - UI component library
 - [Vercel AI SDK](https://sdk.vercel.ai/) - AI integration framework
-- [Electron](https://www.electronjs.org/) - Desktop application framework

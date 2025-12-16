@@ -31,7 +31,10 @@ import {
   type CreateProviderInput,
   useStorageSettings,
 } from "@/app/hooks/useStorageSettings";
-import { normalizeProviderApiUrl } from "@/app/lib/config-utils";
+import {
+  getDefaultApiUrlForProvider,
+  normalizeProviderApiUrl,
+} from "@/app/lib/config-utils";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
 import { useToast } from "@/app/components/toast";
 import type { ProviderConfig, ProviderType } from "@/app/types/chat";
@@ -49,7 +52,7 @@ const logger = createLogger("ProviderEditDialog");
 const defaultForm: CreateProviderInput = {
   displayName: "",
   providerType: "openai-compatible",
-  apiUrl: "",
+  apiUrl: getDefaultApiUrlForProvider("openai-compatible"),
   apiKey: "",
 };
 
@@ -105,7 +108,24 @@ export function ProviderEditDialog({
 
   const handleFieldChange = useCallback(
     (field: EditableFieldKey, value: string) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
+      setFormData((prev) => {
+        const next = { ...prev, [field]: value };
+
+        // 当供应商类型变化时，自动更新 apiUrl（如果是默认 URL 或为空）
+        if (field === "providerType") {
+          const newType = value as ProviderType;
+          const currentUrl = prev.apiUrl.trim();
+          const oldDefaultUrl = getDefaultApiUrlForProvider(prev.providerType);
+          const newDefaultUrl = getDefaultApiUrlForProvider(newType);
+
+          // 如果当前 URL 为空或等于旧供应商的默认 URL，则自动填入新供应商的默认 URL
+          if (!currentUrl || currentUrl === oldDefaultUrl) {
+            next.apiUrl = newDefaultUrl;
+          }
+        }
+
+        return next;
+      });
       if (errors[field]) {
         setErrors((prev) => {
           const next = { ...prev };

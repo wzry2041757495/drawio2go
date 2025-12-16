@@ -249,7 +249,7 @@ export function useDrawioSocket(
           await createHistoricalVersion(
             currentProjectId,
             DEFAULT_FIRST_VERSION,
-            "AI 自动创建的首个主版本",
+            "Auto create by AI",
             editorRef,
             { onExportProgress: undefined },
           );
