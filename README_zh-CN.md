@@ -19,6 +19,9 @@
 ---
 
 一款现代化的 DrawIO 编辑器应用，致力于在AI加持下构建更好的**人机协同**建模工具。以用户为中心，不追求简单替代，探索如何让更好与AI取长补短。
+<div align="center">
+<img alt="image" src="https://github.com/user-attachments/assets/4ede9b64-dfe0-4aa7-be5c-4440ca520db7" width="60%" />
+</div>
 
 <div align="center">
 <table width="100%">
@@ -26,13 +29,13 @@
     <td width="50%" valign="top" align="center">
       <h3>版本管理</h3>
       <p>手动创建主要版本+AI修改时自动创建子版本</p>
-      <img src="111" alt="版本控制" width="100%" />
+      <img src="https://github.com/user-attachments/assets/59d8c33a-af5c-4433-ae94-99827509e632" alt="版本控制" width="60%" />
       <br />
     </td>
     <td width="50%" valign="top" align="center">
       <h3>多提供商管理</h3>
       <p>支持多LLM提供商/多模型切换</p>
-      <img src="111" alt="多供应商控制" width="100%" />
+      <img src="https://github.com/user-attachments/assets/eeda8d0e-0d80-45c6-a51b-104724bf2094" alt="多供应商控制" width="50%" />
       <br />
       <sub>目前仅支持Openai/Deepseek/Anthropic格式</sub>
     </td>
@@ -41,7 +44,7 @@
     <td width="50%" valign="top" align="center">
       <h3>版本对比</h3>
       <p>轻松对比/回滚不同修改版本之间的差异</p>
-      <img src="111" alt="对比页面" width="100%" />
+      <img src="https://github.com/user-attachments/assets/b264ee8f-dedd-429d-8501-fb02efe12b44" alt="对比页面" width="100%" />
       <br />
       <sub>智能对比目前处于beta阶段，可能存在效果不佳/渲染慢的问题</sub>
       <br />
@@ -49,7 +52,7 @@
     <td width="50%" valign="top" align="center">
       <h3>AI加持修改</h3>
       <p>基于Xpath/drawio元素ID的精准修改工具</p>
-      <img src="111" alt="演示" width="100%" />
+      <img src="https://github.com/user-attachments/assets/db4c17b7-49f9-407d-a046-227092e70708" alt="演示" width="60%" />
       <br />
     </td>
   </tr>
@@ -66,15 +69,15 @@
     <td width="50%" valign="top" align="center">
       <h3>U-net框架图</h3>
       <p>绘制一个unet网络</p>
-      <img src="111" alt="版本控制" width="100%" />
+      <img src="https://github.com/user-attachments/assets/5fae95e9-573c-4ced-8841-7b27dd8cc97b" alt="unet" width="100%" />
       <br />
       <sub>使用glm-4.6绘制</sub>
       <br />
     </td>
     <td width="50%" valign="top" align="center">
       <h3>图转drawio</h3>
-      <p>支持多LLM提供商/多模型切换</p>
-      <img src="111" alt="多供应商控制" width="100%" />
+      <p>传入使用gemini-3-pro-image生成的图片，要求其复刻</p>
+      <img src="https://github.com/user-attachments/assets/1b5be219-0dc6-48c8-abdc-f0a2946bf148" alt="image" width="100%" />
       <br />
       <sub>使用claude-sonnet-4.5绘制，目前图片对话支持仍处于beta阶段</sub>
     </td>
@@ -83,7 +86,7 @@
     <td width="50%" valign="top" align="center">
       <h3>UML框架图</h3>
       <p>绘制一个经典的前后端的WEB应用UML框架图</p>
-      <img src="111" alt="对比页面" width="100%" />
+      <img src="https://github.com/user-attachments/assets/2c15fd37-4f8f-4a65-9ade-52176ae487e1" alt="UML" width="100%" />
       <br />
       <sub>使用glm-4.6绘制</sub>
       <br />
@@ -91,7 +94,7 @@
     <td width="50%" valign="top" align="center">
       <h3>纯元素绘制</h3>
       <p>画一个笔记本电脑</p>
-      <img src="111" alt="演示" width="100%" />
+      <img src="https://github.com/user-attachments/assets/719e33e3-b7bc-4e0c-bae1-28896b63e23d" alt="演示" width="80%" />
       <br />
       <sub>使用claude-sonnet-4.5绘制</sub>
       <br />
@@ -139,9 +142,11 @@ npm run dev
 
 - [ ] Electron中支持将画布中选中的元素传递给AI
 - [ ] 完全的图形/文件对话支持
+- [ ] 对话保存目前有一些问题，可能会导致历史对话加载异常
 - [ ] 支持将项目导出为文件
 - [ ] WEB端中，对话可能会无法取消
 - [ ] 支持自定义drawio控件URL
+- [ ] 直接导出为png/svg
 
 ## 项目结构
 
