@@ -875,6 +875,18 @@ function createDrawioEditBatchTool(context: FrontendToolContext) {
 
 **Insert Positions:** append_child (default), prepend_child, before, after
 
+**insert_element Rules:**
+- \`new_xml\` must be a valid single-root XML fragment
+- Style: semicolon-separated, NO trailing semicolon
+  - ✓ \`ellipse;fillColor=#ffffff;strokeColor=#000000\`
+  - ✗ \`ellipse;fillColor=#ffffff;strokeColor=#000000;\`
+- Self-closing tags: NO space before />
+  - ✓ \`as="geometry"/>\`
+  - ✗ \`as="geometry" />\`
+- Avoid style props: \`whiteSpace=wrap\`, \`html=1\`, \`aspect=fixed\`
+- **NEVER** use \`id: "1"\` (reserved internal parent node)
+- Use \`xpath: "/mxfile/diagram/mxGraphModel/root"\` for top-level elements
+
 **Options:**
 - \`allow_no_match: true\`: Skip operation if target not found (instead of failing)
 - \`description\`: Human-readable description for logging
@@ -883,10 +895,14 @@ function createDrawioEditBatchTool(context: FrontendToolContext) {
 \`\`\`json
 {
   "operations": [
-    { "type": "set_attribute", "id": "node-1", "key": "value", "value": "New Label" },
-    { "type": "set_attribute", "id": "node-1", "key": "style", "value": "fillColor=#ff0000" }
+    {
+      "type": "insert_element",
+      "xpath": "/mxfile/diagram/mxGraphModel/root",
+      "position": "append_child",
+      "new_xml": "<mxCell id=\\"circle-1\\" value=\\"Label\\" style=\\"ellipse;fillColor=#ffffff;strokeColor=#000000\\" vertex=\\"1\\" parent=\\"1\\"><mxGeometry x=\\"100\\" y=\\"100\\" width=\\"80\\" height=\\"80\\" as=\\"geometry\\"/></mxCell>"
+    }
   ],
-  "description": "Update node label and color"
+  "description": "Add circle shape"
 }
 \`\`\`
 

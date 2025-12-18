@@ -47,7 +47,11 @@ export const operationSchema = z
       .string()
       .optional()
       .describe(
-        "New XML fragment to insert or replace with. Must be valid mxCell XML. Required for insert_element and replace_element",
+        `XML fragment for insert/replace. Format rules:
+- Style: semicolon-separated, NO trailing semicolon (e.g., "ellipse;fillColor=#fff")
+- Self-closing tags: NO space before /> (e.g., as="geometry"/>)
+- Avoid: whiteSpace=wrap, html=1, aspect=fixed in style
+Example: <mxCell id="x" style="ellipse;fillColor=#fff" vertex="1" parent="1"><mxGeometry x="0" y="0" width="80" height="80" as="geometry"/></mxCell>`,
       ),
     position: z
       .enum(["append_child", "prepend_child", "before", "after"])

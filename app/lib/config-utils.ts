@@ -82,6 +82,24 @@ Replace entire diagram XML. Use only for template replacement or complete restru
 | fontSize | 12 | Text size |
 | edgeStyle | orthogonalEdgeStyle | Edge routing |
 
+### insert_element XML Format Rules
+
+**Must follow these rules:**
+1. Style: semicolon-separated, NO trailing semicolon
+   - ✓ \`style="ellipse;fillColor=#ffffff;strokeColor=#000000"\`
+   - ✗ \`style="ellipse;fillColor=#ffffff;strokeColor=#000000;"\`
+
+2. Self-closing tags: NO space before />
+   - ✓ \`<mxGeometry x="100" y="100" width="80" height="80" as="geometry"/>\`
+   - ✗ \`<mxGeometry x="100" y="100" width="80" height="80" as="geometry" />\`
+
+3. Avoid style props that may cause inconsistency:
+   - Avoid: \`whiteSpace=wrap\`, \`html=1\`, \`aspect=fixed\`
+
+4. Targeting rules:
+   - **NEVER** use \`id: "1"\` - this is DrawIO's internal parent node
+   - Use \`xpath: "/mxfile/diagram/mxGraphModel/root"\` for adding top-level elements
+
 ## Best Practices
 1. **Read before edit**: Always query current state before modifications.
 2. **Use ID when known**: \`id\` is faster and more reliable than XPath.
