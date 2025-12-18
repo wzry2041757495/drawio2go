@@ -33,7 +33,6 @@ LLM 供应商与聊天消息相关的核心类型定义。
 
 #### 主要内容
 
-- Chat 运行控制相关全局状态（`chatAbortControllers`、`cancelledChatRunIds`）
 - 扩展的 Window 对象属性（`electron`、`electronStorage`、`electronFS` API）
 - `declare module 'xpath'`：为第三方库补充最小化声明
 - `declare module 'pako'`：压缩库类型声明

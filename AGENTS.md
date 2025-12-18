@@ -112,7 +112,8 @@ app/
 │   ├── useVersionCompare.ts     # 版本对比状态管理 Hook
 │   └── useDrawioEditor.ts       # DrawIO 编辑器操作封装 Hook
 ├── api/                # API 路由
-│   ├── chat/                    # 聊天 API 路由
+│   ├── ai-proxy/                # 纯 AI 代理端点（仅转发，不含业务逻辑）
+│   ├── health/                  # 健康检查（在线心跳）
 │   └── test/                    # 测试 API 路由
 ├── styles/             # 模块化样式系统 [详细文档 → app/styles/AGENTS.md]
 │   ├── base/                    # 基础样式（reset、变量）
@@ -236,10 +237,9 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 
 - **目标**: 后端不再执行任何 DrawIO 工具；工具执行迁移到前端（浏览器/ Electron 渲染进程）。
 - **当前形态**:
-  - `/api/chat`：流式聊天 HTTP API（v1.1 起不注入/不执行 DrawIO 工具）
   - `/api/ai-proxy`：纯 HTTP/BFF 代理转发（不注入 DrawIO 工具）
   - `frontend-tools.ts`：前端执行 `drawio_read` / `drawio_edit_batch` / `drawio_overwrite`
-  - `useAIChat.ts`：前端接收 tool-call 并调用 `frontend-tools.ts` 执行，然后把结果回传给对话流
+  - `app/components/ChatSidebar.tsx`：前端接收 tool-call（`useChat.onToolCall`）并调用 `frontend-tools.ts` 执行，然后把结果回传给对话流
 - **（已废弃并删除）Socket.IO 工具调用架构**：v1.1 起不再提供/连接 Socket.IO，相关文档仅保留为历史背景。
 
 ### 6. 检查测试

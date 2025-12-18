@@ -9,8 +9,6 @@ app/api/
 ├── AGENTS.md           # 本文档
 ├── ai-proxy/
 │   └── route.ts        # 纯 AI 代理端点（仅转发，不含业务逻辑）
-├── chat/
-│   └── route.ts        # 聊天 API（流式响应）
 ├── health/
 │   └── route.ts        # 轻量级健康检查（在线心跳）
 └── test/
@@ -21,7 +19,6 @@ app/api/
 
 | 端点            | 方法       | 功能                       | 运行时  |
 | --------------- | ---------- | -------------------------- | ------- |
-| `/api/chat`     | POST       | 流式聊天（无 DrawIO 工具） | Node.js |
 | `/api/ai-proxy` | POST       | 纯代理：转发到 AI Provider | Node.js |
 | `/api/test`     | POST       | LLM 配置连接测试           | Edge    |
 | `/api/health`   | HEAD / GET | 健康检查（<100ms 心跳）    | Edge    |
@@ -52,6 +49,13 @@ app/api/
     temperature?: number;
     maxToolRounds?: number;
   };
+  // 可选：前端上送 tools schema，BFF 纯透传给 AI SDK（后端不执行工具）
+  tools?: {
+    [toolName: string]: {
+      description?: string;
+      inputJsonSchema: unknown; // JSON Schema
+    };
+  };
 }
 ```
 
@@ -59,86 +63,8 @@ app/api/
 
 - 不做会话校验/项目隔离
 - 纯 HTTP 代理转发：不注入/不执行 DrawIO 工具
-
-### `/api/chat` - 聊天端点
-
-**文件**: `drawio2go/app/api/chat/route.ts`
-
-#### 功能描述
-
-基于 Vercel AI SDK 的流式聊天 API（v1.1 起不再注入/执行 DrawIO 工具）。
-
-#### 请求格式
-
-```typescript
-interface ChatRequest {
-  messages: UIMessage[]; // @ai-sdk/react 的 UIMessage 类型
-  projectUuid: string; // 当前项目 ID（用于工具转发过滤）
-  conversationId: string; // 必填，会话 ID，仅接受 body 提供的值
-  llmConfig: {
-    apiUrl: string; // API 端点 URL（自动添加 /v1）
-    apiKey: string; // API 密钥
-    temperature: number; // 温度参数（默认 0.3）
-    modelName: string; // 模型名称（如 deepseek-chat）
-    systemPrompt: string; // 系统提示词
-    providerType: ProviderType; // 见下方类型定义
-    maxToolRounds: number; // 最大工具调用轮次（默认 5）
-  };
-}
-
-type ProviderType =
-  | "openai-reasoning"
-  | "openai-compatible"
-  | "deepseek-native"
-  | "anthropic";
-```
-
-#### 响应格式
-
-- 返回 `UIMessageStreamResponse`（Vercel AI SDK 标准流式响应）
-- 包含推理过程（`sendReasoning: true`）
-
-#### 处理流程
-
-```
-1. 解析请求 → 验证 messages + llmConfig
-2. 规范化配置 → normalizeLLMConfig()
-3. 转换消息 → convertToModelMessages()
-4. 校验会话所有权 → conversationId 必须属于当前 projectUuid
-5. 创建 Provider → 根据 providerType 选择
-6. 执行流式生成 → streamText()
-7. 返回流响应 → toUIMessageStreamResponse()
-```
-
-#### Provider 选择逻辑
-
-```typescript
-if (providerType === "openai-reasoning") {
-  // OpenAI 原生推理模型（o1/o3 系列）
-  // 使用 @ai-sdk/openai
-  model = createOpenAI({...}).chat(modelName);
-} else if (providerType === "deepseek-native") {
-  // DeepSeek Native：使用 @ai-sdk/deepseek
-  model = createDeepSeek({...})(modelName);
-} else if (providerType === "anthropic") {
-  // Anthropic Claude：使用 @ai-sdk/anthropic
-  model = createAnthropic({...})(modelName);
-} else {
-  // OpenAI Compatible
-  // 使用 @ai-sdk/openai-compatible
-  model = createOpenAICompatible({...})(modelName);
-}
-```
-
-#### 错误处理
-
-| 状态码 | 场景                             |
-| ------ | -------------------------------- |
-| 400    | 缺少参数 / 配置无效 / 模型不存在 |
-| 401    | API 密钥无效                     |
-| 500    | 服务器内部错误                   |
-
----
+- `tools` 仅用于让模型产出 tool-call；后端不会为 tool 提供 `execute`
+- 对 `tools` 整体 payload 做 64KB 上限保护，避免异常输入
 
 ### `/api/test` - 连接测试端点
 
@@ -202,8 +128,8 @@ interface TestRequest {
 
 ## DrawIO 工具（v1.1）
 
-- 后端端点（`/api/chat`、`/api/ai-proxy`）不再注入/执行任何 DrawIO 工具。
-- DrawIO 工具执行已迁移到前端：见 `app/lib/frontend-tools.ts` 与 `app/hooks/useAIChat.ts`。
+- 后端端点（`/api/ai-proxy`）不再注入/执行任何 DrawIO 工具。
+- DrawIO 工具执行已迁移到前端：见 `app/lib/frontend-tools.ts` 与 `app/components/ChatSidebar.tsx`（`useChat` 的 `onToolCall`）。
 
 ## 类型定义
 
@@ -295,8 +221,8 @@ import { NextRequest, NextResponse } from "next/server";
 开发环境（`NODE_ENV === "development"`）自动启用日志：
 
 ```typescript
-console.log("[Chat API] 收到请求:", {...});
-console.log("[Chat API] 步骤完成:", {...});
+console.log("[AI Proxy API] 收到请求:", {...});
+console.log("[AI Proxy API] 步骤完成:", {...});
 ```
 
 ### 3. 添加新端点
@@ -336,10 +262,6 @@ return NextResponse.json({ error: "错误描述" }, { status: 400 | 401 | 500 })
 ---
 
 ## 常见问题
-
-### Q: 为什么 `/api/chat` 不使用 Edge Runtime？
-
-A: 当前端点默认运行在 Node.js Runtime（未声明 `runtime = "edge"`），以保持现有依赖与行为一致。
 
 ### Q: 如何支持新的 LLM 提供者？
 

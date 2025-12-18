@@ -198,6 +198,7 @@ export default function UnifiedSidebar({
               isOpen={activeTab === "chat"}
               onClose={onClose}
               currentProjectId={currentProjectId}
+              editorRef={editorRef}
             />
           </div>
 

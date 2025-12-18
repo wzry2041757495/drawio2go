@@ -3,7 +3,7 @@ import {
   DEFAULT_ANTHROPIC_API_URL,
   DEFAULT_DEEPSEEK_API_URL,
   DEFAULT_OPENAI_API_URL,
-} from "@/app/lib/config-utils";
+} from "@/lib/config-utils";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAI } from "@ai-sdk/openai";

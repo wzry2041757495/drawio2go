@@ -23,19 +23,6 @@ import type {
 
 declare global {
   /**
-   * Chat 运行中的 AbortController（key = chatRunId）。
-   * 用于在用户点击“取消”时，通过 `useChat().stop()` 触发请求中断，从而中止后端流式响应与工具等待。
-   */
-  var chatAbortControllers: Map<string, AbortController> | undefined;
-
-  /**
-   * 已取消的 chatRunId 集合（用于阻断后续工具调用）。
-   * 使用 Map 存储添加时间戳，自动清理超过 5 分钟的旧条目。
-   * key = chatRunId, value = 添加时的时间戳（毫秒）
-   */
-  var cancelledChatRunIds: Map<string, number> | undefined;
-
-  /**
    * Electron API
    * 通过 preload.js 注入的 API
    */

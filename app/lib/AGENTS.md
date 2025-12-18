@@ -17,6 +17,8 @@
 - **storage/writers.ts**: 统一的 WIP/历史版本写入管线（归一化 + 页面元数据 + 关键帧/Diff 计算 + 事件派发）
 - **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id + 几何语义匹配的元素级高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
+- **model-factory.ts**: 服务器侧模型工厂：按 `providerType` 创建 AI SDK `LanguageModel`（供 `/api/ai-proxy` 使用）
+- **error-classifier.ts**: 服务器侧错误分类：将错误归一化为 `{ statusCode, code, message }`（供 `/api/ai-proxy` 使用）
 - **model-capabilities.ts**: 模型能力白名单与查找辅助函数（supportsThinking / supportsVision）
 - **model-icons.ts**: 模型与供应商图标映射工具（@lobehub/icons 品牌图标 + lucide fallback，按模型规则/供应商/通用优先级）
 - **version-utils.ts**: 语义化版本号工具（解析、过滤子版本、子版本计数与递增推荐）
@@ -194,7 +196,7 @@ const xml = await restoreXMLFromVersion("version-id", storage);
 
 ## DrawIO 工具执行（v1.1）
 
-- 后端不再执行任何 DrawIO 工具；工具执行全部迁移到前端（见 `frontend-tools.ts` 与 `hooks/useAIChat.ts`）。
+- 后端不再执行任何 DrawIO 工具；工具执行全部迁移到前端（见 `frontend-tools.ts` 与 `components/ChatSidebar.tsx`）。
 - `/api/ai-proxy` 仅负责转发到 AI Provider（纯 HTTP/BFF 代理），不注入/不执行 DrawIO 工具。
 
 ## 浏览器端存储工具（`drawio-tools.ts`）
@@ -482,7 +484,7 @@ const tools = [
 **原因**: 代理目标不可用、CORS/证书问题、网络离线或 Next.js 服务未启动
 **解决**:
 
-- 确认 `/api/chat`、`/api/ai-proxy` 可访问（必要时先看 `/api/health`）
+- 确认 `/api/ai-proxy` 可访问（必要时先看 `/api/health`）
 - 检查 Settings 中的 `apiUrl`/模型配置是否可达
 - 查看浏览器 DevTools Network 与 Console 日志定位失败原因
 
@@ -517,7 +519,7 @@ const tools = [
 
 1. 在 `frontend-tools.ts` 中定义新工具
 2. 使用 Zod 定义参数 schema
-3. 在 `useAIChat`（或其他前端调用方）注册/暴露工具给聊天层
+3. 在 `ChatSidebar`（或其他前端 `useChat` 调用方）注册/暴露工具给聊天层（`onToolCall`）
 4. 编写测试覆盖 success/error 路径（如有测试体系）
 
 ## 关键注意事项
