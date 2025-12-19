@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
-  Popover,
+  Dropdown,
   Spinner,
   TooltipContent,
   TooltipRoot,
@@ -110,23 +110,25 @@ export default function ChatInputActions({
 
       setIsSelecting(true);
 
-      try {
-        await onSelectModel(modelId);
-        // 模型切换成功后再关闭 Popover
-        setIsModelPopoverOpen(false);
-      } catch (error) {
-        // 错误时也关闭 Popover
-        setIsModelPopoverOpen(false);
-        push({
-          variant: "danger",
-          title: t("modelSelector.selectFailedTitle"),
-          description:
-            (error as Error)?.message ??
-            t("modelSelector.selectFailedDescription"),
-        });
-      } finally {
-        setIsSelecting(false);
-      }
+      // 先关闭 Dropdown
+      setIsModelPopoverOpen(false);
+
+      // 延迟执行，让 Dropdown 有时间完成关闭动画
+      setTimeout(async () => {
+        try {
+          await onSelectModel(modelId);
+        } catch (error) {
+          push({
+            variant: "danger",
+            title: t("modelSelector.selectFailedTitle"),
+            description:
+              (error as Error)?.message ??
+              t("modelSelector.selectFailedDescription"),
+          });
+        } finally {
+          setIsSelecting(false);
+        }
+      }, 150);
     },
     [isSelecting, onSelectModel, push, t],
   );
@@ -216,35 +218,33 @@ export default function ChatInputActions({
           </Button>
         )}
 
-        <Popover
+        <Dropdown
           isOpen={isModelPopoverOpen}
           onOpenChange={setIsModelPopoverOpen}
         >
-          <Popover.Trigger>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="chat-model-button"
-              isDisabled={isModelSelectorDisabled}
-              aria-label={`${t("modelSelector.label")}: ${modelLabel}`}
-            >
-              {isModelSelectorLoading ? (
-                <Spinner size="sm" />
-              ) : (
-                <ModelIcon
-                  size={16}
-                  modelId={selectedModelId}
-                  modelName={activeModel?.modelName || activeModel?.displayName}
-                  providerId={activeProvider?.id}
-                  providerType={activeProvider?.providerType ?? null}
-                  className="text-primary"
-                />
-              )}
-              <span className="chat-model-button__label">{modelLabel}</span>
-            </Button>
-          </Popover.Trigger>
-          <Popover.Content className="chat-model-popover" placement="top end">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="chat-model-button"
+            isDisabled={isModelSelectorDisabled}
+            aria-label={`${t("modelSelector.label")}: ${modelLabel}`}
+          >
+            {isModelSelectorLoading ? (
+              <Spinner size="sm" />
+            ) : (
+              <ModelIcon
+                size={16}
+                modelId={selectedModelId}
+                modelName={activeModel?.modelName || activeModel?.displayName}
+                providerId={activeProvider?.id}
+                providerType={activeProvider?.providerType ?? null}
+                className="text-primary"
+              />
+            )}
+            <span className="chat-model-button__label">{modelLabel}</span>
+          </Button>
+          <Dropdown.Popover className="chat-model-popover" placement="top end">
             <ModelComboBox
               providers={providers}
               models={models}
@@ -254,8 +254,8 @@ export default function ChatInputActions({
               isLoading={isModelSelectorLoading}
               isOpen={isModelPopoverOpen}
             />
-          </Popover.Content>
-        </Popover>
+          </Dropdown.Popover>
+        </Dropdown>
 
         <TooltipRoot isDisabled={!sendDisabledReason} delay={0}>
           <Button
