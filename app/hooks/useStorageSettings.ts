@@ -36,7 +36,8 @@ type SettingsUpdatedType =
   | "model"
   | "agent"
   | "activeModel"
-  | "general";
+  | "general"
+  | "update";
 type SettingsUpdatedDetail = { type: SettingsUpdatedType };
 
 type StorageInstance = Awaited<ReturnType<typeof getStorage>>;

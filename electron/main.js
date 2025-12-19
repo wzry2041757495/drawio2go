@@ -411,6 +411,20 @@ app.on("window-all-closed", () => {
   }
 });
 
+/**
+ * 通知渲染进程后端清理状态
+ * @param {"started" | "completed" | "failed"} status
+ */
+function notifyBackendCleanup(status) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  try {
+    mainWindow.webContents.send("backend:cleanup", { status });
+  } catch (error) {
+    console.error("[Electron] 发送 backend:cleanup 失败:", error);
+  }
+}
+
 app.on("before-quit", (event) => {
   if (appQuitInProgress) return;
   appQuitInProgress = true;
@@ -421,6 +435,9 @@ app.on("before-quit", (event) => {
     "[Electron] before-quit：开始退出流程（优雅关闭服务器 → 关闭数据库）",
   );
 
+  // 通知渲染进程开始清理
+  notifyBackendCleanup("started");
+
   const forceExitTimeout = setTimeout(() => {
     console.error("[Electron] 退出流程超过 7 秒，强制退出（exit=1）");
     app.exit(1);
@@ -430,10 +447,12 @@ app.on("before-quit", (event) => {
   gracefulAppShutdown("before-quit")
     .catch((error) => {
       console.error("[Electron] 退出流程异常：", error);
+      notifyBackendCleanup("failed");
     })
     .finally(() => {
       clearTimeout(forceExitTimeout);
       console.log("[Electron] 退出流程完成");
+      notifyBackendCleanup("completed");
       app.exit(0);
     });
 });

@@ -4,6 +4,8 @@ import I18nProvider from "@/app/components/I18nProvider";
 import { AlertDialogProvider } from "@/app/components/alert";
 import { ToastProvider } from "@/app/components/toast";
 import ErrorBoundary from "@/app/components/ErrorBoundary";
+import GlobalUpdateChecker from "@/app/components/GlobalUpdateChecker";
+import GlobalBackendCleanupNotifier from "@/app/components/GlobalBackendCleanupNotifier";
 import { defaultLocale } from "@/app/i18n/config";
 
 export const metadata: Metadata = {
@@ -51,7 +53,11 @@ export default function RootLayout({
         <I18nProvider>
           <ErrorBoundary>
             <AlertDialogProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <ToastProvider>
+                <GlobalUpdateChecker />
+                <GlobalBackendCleanupNotifier />
+                {children}
+              </ToastProvider>
             </AlertDialogProvider>
           </ErrorBoundary>
         </I18nProvider>

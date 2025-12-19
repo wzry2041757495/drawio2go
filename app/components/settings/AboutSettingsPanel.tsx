@@ -46,7 +46,7 @@ export default function AboutSettingsPanel({
 }: AboutSettingsPanelProps) {
   const { t, i18n } = useAppTranslation("settings");
   const { isChecking, lastCheckTime, updateInfo, checkForUpdates } =
-    useUpdateChecker({ autoCheckEnabled });
+    useUpdateChecker({ autoCheckEnabled: false });
 
   const canCheckForUpdates = useMemo(
     () => typeof window !== "undefined" && !!window.electron?.checkForUpdates,

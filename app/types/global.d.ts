@@ -45,6 +45,11 @@ declare global {
           releaseNotes?: string;
         }) => void,
       ) => () => void;
+      onBackendCleanup: (
+        callback: (result: {
+          status: "started" | "completed" | "failed";
+        }) => void,
+      ) => () => void;
       selectFolder: () => Promise<string | null>;
       saveDiagram: (
         xml: string,

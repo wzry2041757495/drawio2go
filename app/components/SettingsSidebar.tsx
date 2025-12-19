@@ -163,6 +163,13 @@ export default function SettingsSidebar({
     async (enabled: boolean) => {
       await runSaveTask(async () => {
         await setSetting("update.autoCheck", enabled ? "1" : "0");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("settings-updated", {
+              detail: { type: "update" },
+            }),
+          );
+        }
       });
     },
     [runSaveTask, setSetting],

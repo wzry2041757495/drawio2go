@@ -195,6 +195,20 @@
 
 ---
 
+### 10. GlobalUpdateChecker.tsx - 全局更新检查订阅
+
+**文件**: `app/components/GlobalUpdateChecker.tsx`
+
+**用途**:
+
+- 应用启动后即订阅 Electron 主进程广播的 `update:available`
+- 受 `update.autoCheck` 设置控制（设置变更会实时生效）
+- 发现新版本时通过 Toast 通知用户（按 `latestVersion` 去重）
+
+**接入位置**: `app/layout.tsx` 的 `ToastProvider` 内部
+
+---
+
 ## HeroUI v3 使用规范
 
 ### 复合组件模式

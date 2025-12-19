@@ -51,6 +51,17 @@ const electronApi = Object.freeze({
     return () => ipcRenderer.removeListener("update:available", listener);
   },
 
+  // 后端清理状态通知（应用退出时）
+  onBackendCleanup: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, result) => callback(result);
+    ipcRenderer.on("backend:cleanup", listener);
+    return () => ipcRenderer.removeListener("backend:cleanup", listener);
+  },
+
   // 通用文件对话框和文件操作
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
