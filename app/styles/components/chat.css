@@ -184,21 +184,6 @@
   color: var(--foreground, #f8fafc);
 }
 
-.message-body.message-cancelled,
-.message-body.message-disconnected {
-  font-style: italic;
-  color: var(--foreground-secondary, #6b7280);
-  background: color-mix(in oklch, var(--warning) 8%, transparent);
-  border-left: 3px solid var(--warning, #f59e0b);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-}
-
-.message-body.message-disconnected {
-  border-left-color: var(--danger, #ef4444);
-  background: color-mix(in oklch, var(--danger) 8%, transparent);
-}
-
 .message-content {
   font-size: 0.95rem;
   line-height: 1.7;

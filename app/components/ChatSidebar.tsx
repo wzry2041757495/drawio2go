@@ -63,10 +63,7 @@ import Composer from "./chat/Composer";
 // 导出工具
 import { exportBlobContent } from "./chat/utils/fileExport";
 import { createLogger } from "@/lib/logger";
-import {
-  hasConversationIdMetadata,
-  isAbnormalExitNoticeMessage,
-} from "@/app/lib/type-guards";
+import { hasConversationIdMetadata } from "@/app/lib/type-guards";
 import { TOOL_TIMEOUT_CONFIG } from "@/lib/constants/tool-config";
 import { AI_TOOL_NAMES } from "@/lib/constants/tool-names";
 
@@ -508,13 +505,6 @@ export default function ChatSidebar({
           typeof rawMetadata.createdAt === "number"
             ? rawMetadata.createdAt
             : undefined,
-        isCancelled: rawMetadata.isCancelled === true,
-        isDisconnected: rawMetadata.isDisconnected === true,
-        isAbnormalExitNotice: rawMetadata.isAbnormalExitNotice === true,
-        disconnectReason:
-          typeof rawMetadata.disconnectReason === "string"
-            ? rawMetadata.disconnectReason
-            : undefined,
       };
 
       const resolvedMetadata: MessageMetadata = {
@@ -526,12 +516,7 @@ export default function ChatSidebar({
       if (
         !hasConversationIdMetadata(message) &&
         message.metadata?.modelName === resolvedMetadata.modelName &&
-        message.metadata?.createdAt === resolvedMetadata.createdAt &&
-        message.metadata?.isAbnormalExitNotice ===
-          resolvedMetadata.isAbnormalExitNotice &&
-        message.metadata?.isCancelled === resolvedMetadata.isCancelled &&
-        message.metadata?.isDisconnected === resolvedMetadata.isDisconnected &&
-        message.metadata?.disconnectReason === resolvedMetadata.disconnectReason
+        message.metadata?.createdAt === resolvedMetadata.createdAt
       ) {
         return message;
       }
@@ -1399,55 +1384,8 @@ export default function ChatSidebar({
       updateStreamingFlag(targetConversationId, false, { syncOnly: true });
       void updateStreamingFlag(targetConversationId, false);
 
-      const pageClosedText = t("chat:messages.pageClosed");
-      const baseMessages =
-        chatService.getCachedMessages(targetConversationId) ?? displayMessages;
-
-      const hasPageClosedMessage = baseMessages.some(
-        (message) =>
-          message.metadata?.isDisconnected &&
-          message.parts.some(
-            // eslint-disable-next-line sonarjs/no-nested-functions -- 简单谓词回调，但位于深层卸载处理逻辑中
-            (part) => part.type === "text" && part.text === pageClosedText,
-          ),
-      );
-
-      const disconnectMessage: ChatUIMessage = {
-        id: generateUUID("msg"),
-        role: "system",
-        parts: [
-          {
-            type: "text",
-            text: pageClosedText,
-          },
-        ],
-        metadata: {
-          createdAt: Date.now(),
-          isDisconnected: true,
-        },
-      };
-
-      const nextMessages = hasPageClosedMessage
-        ? baseMessages
-        : [...baseMessages, disconnectMessage];
-
       // 4) 刷新待保存队列，确保 debounce 队列立即写入
       chatService.flushPending(targetConversationId);
-
-      // 5) 回落：同步写入 localStorage，避免 beforeunload 异步中断
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(
-            `chat:unload:${targetConversationId}`,
-            JSON.stringify({
-              conversationId: targetConversationId,
-              messages: nextMessages,
-            }),
-          );
-        }
-      } catch (error) {
-        logger.error("[ChatSidebar] 卸载回落保存失败:", error);
-      }
     };
 
     window.addEventListener("beforeunload", handlePageUnload);
@@ -1461,10 +1399,8 @@ export default function ChatSidebar({
   }, [
     activeConversationId,
     chatService,
-    displayMessages,
     releaseLock,
     stop,
-    t,
     updateStreamingFlag,
   ]);
 
@@ -1689,67 +1625,21 @@ export default function ChatSidebar({
 
     if (!targetConversationId) {
       sendingSessionIdRef.current = null;
+      releaseLock();
       return;
     }
 
-    const cancelMessage: ChatUIMessage = {
-      id: generateUUID("msg"),
-      role: "system",
-      parts: [
-        {
-          type: "text",
-          text: t("chat:messages.userCancelled"),
-        },
-      ],
-      metadata: {
-        createdAt: Date.now(),
-        isCancelled: true,
-      },
-    };
-
-    const baseMessages =
-      activeConversationId === targetConversationId
-        ? displayMessages
-        : (chatService.getCachedMessages(targetConversationId) ?? []);
-
-    const nextMessages = [...baseMessages, cancelMessage];
-
-    if (activeConversationId === targetConversationId) {
-      setMessages(nextMessages as unknown as UseChatMessage[]);
-    }
-
     try {
-      await chatService.saveNow(targetConversationId, nextMessages, {
-        resolveConversationId,
-        onConversationResolved: (resolvedId) => {
-          setActiveConversationId(resolvedId);
-        },
-      });
-      logger.info("[ChatSidebar] 取消消息已同步保存");
-    } catch (error) {
-      logger.error("[ChatSidebar] 保存取消消息失败:", error);
-      pushErrorToast(
-        extractErrorMessage(error) ?? t("toasts.unknownError"),
-        t("toasts.autoSaveFailed"),
-      );
+      await updateStreamingFlag(targetConversationId, false);
     } finally {
-      void updateStreamingFlag(targetConversationId, false);
       sendingSessionIdRef.current = null;
       releaseLock();
     }
   }, [
     activeConversationId,
-    chatService,
-    displayMessages,
-    extractErrorMessage,
     isChatStreaming,
-    pushErrorToast,
     updateStreamingFlag,
-    resolveConversationId,
-    setActiveConversationId,
-    setMessages,
     stop,
-    t,
     releaseLock,
   ]);
 
@@ -1999,52 +1889,10 @@ export default function ChatSidebar({
         activeConversationId ?? sendingSessionIdRef.current;
       if (!streaming || !targetConversationId) return;
 
-      const runCleanup = async () => {
-        try {
-          const resolvedId = await resolveConversationId(targetConversationId);
-          const cached =
-            chatService.getCachedMessages(resolvedId) ?? displayMessages;
-
-          const hasNotice = cached.some(isAbnormalExitNoticeMessage);
-
-          const noticeMessage: ChatUIMessage = {
-            id: generateUUID("sys"),
-            role: "system",
-            parts: [
-              {
-                type: "text",
-                text: "[系统] 上次对话异常中断",
-              },
-            ],
-            metadata: {
-              createdAt: Date.now(),
-              isAbnormalExitNotice: true,
-            },
-          };
-
-          const nextMessages = hasNotice
-            ? cached
-            : [noticeMessage, ...(cached ?? [])];
-
-          await chatService.saveNow(resolvedId, nextMessages, {
-            resolveConversationId,
-          });
-          await updateStreamingFlag(resolvedId, false);
-        } catch (error) {
-          logger.error("[ChatSidebar] 卸载时清理流式状态失败", {
-            conversationId: targetConversationId,
-            error,
-          });
-        }
-      };
-
-      void runCleanup();
+      void updateStreamingFlag(targetConversationId, false);
     },
     [
       activeConversationId,
-      chatService,
-      displayMessages,
-      resolveConversationId,
       status,
       updateStreamingFlag,
     ],

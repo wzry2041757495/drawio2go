@@ -36,21 +36,13 @@ export default function MessageItem({
   const formattedTime = formatRelativeTime(timestamp.getTime(), t);
 
   const isUser = message.role === "user";
-  const isCancelledMessage = metadata.isCancelled === true;
-  const isDisconnectedMessage = metadata.isDisconnected === true;
-  const messageStateClass = [
-    isCancelledMessage ? "message-cancelled" : "",
-    isDisconnectedMessage ? "message-disconnected" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
   const metaLabel = `${t("messages.labels.model")}: ${modelName} · ${t("messages.labels.timestamp", { time: formattedTime })}`;
 
   return (
     <div
       className={`message ${
         message.role === "user" ? "message-user" : "message-ai"
-      } ${messageStateClass}`}
+      }`}
     >
       <div className={`message-meta ${isUser ? "message-meta--user" : ""}`}>
         <span className="message-meta-icon" aria-hidden>
@@ -68,7 +60,7 @@ export default function MessageItem({
       <div
         className={`message-body ${
           isUser ? "message-body--user" : "message-body--assistant"
-        } ${messageStateClass}`}
+        }`}
       >
         <div
           className={`message-content ${

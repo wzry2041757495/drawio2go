@@ -16,9 +16,7 @@ import {
   createChatSessionService,
   type ChatSessionService,
 } from "@/app/lib/chat-session-service";
-import { generateUUID } from "@/app/lib/utils";
 import type { ChatUIMessage } from "@/app/types/chat";
-import { isAbnormalExitNoticeMessage } from "@/app/lib/type-guards";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("useChatSessionsController");
@@ -414,35 +412,6 @@ export function useChatSessionsController(
           next.add(resolvedId);
           return next;
         });
-
-        const baseMessages =
-          (await chatService.ensureMessages(resolvedId)) ?? [];
-        const hasNotice = baseMessages.some(isAbnormalExitNoticeMessage);
-
-        if (hasNotice) return;
-
-        const noticeMessage: ChatUIMessage = {
-          id: generateUUID("sys"),
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: "[系统] 检测到上次对话异常退出",
-            },
-          ],
-          metadata: {
-            createdAt: Date.now(),
-            isAbnormalExitNotice: true,
-          },
-        };
-
-        const nextMessages = [noticeMessage, ...baseMessages];
-        await chatService.saveNow(resolvedId, nextMessages, {
-          resolveConversationId,
-          onConversationResolved: (finalId) => {
-            setActiveConversationId(finalId);
-          },
-        });
       } catch (abnormalError) {
         logger.error("[useChatSessionsController] 检测/处理异常退出失败:", {
           conversationId,
@@ -450,7 +419,7 @@ export function useChatSessionsController(
         });
       }
     },
-    [chatService, loadConversationWithStatus, resolveConversationId],
+    [loadConversationWithStatus, resolveConversationId],
   );
 
   useEffect(() => {

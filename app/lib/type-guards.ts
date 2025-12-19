@@ -13,11 +13,3 @@ export function hasConversationIdMetadata(
       "string"
   );
 }
-
-export function isAbnormalExitNoticeMessage(
-  message: ChatUIMessage,
-): message is ChatUIMessage & {
-  metadata: MessageMetadata & { isAbnormalExitNotice: true };
-} {
-  return message.metadata?.isAbnormalExitNotice === true;
-}

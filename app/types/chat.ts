@@ -132,10 +132,6 @@ export interface ChatMessage {
 export interface MessageMetadata {
   modelName?: string | null;
   createdAt?: number;
-  isCancelled?: boolean;
-  isDisconnected?: boolean;
-  isAbnormalExitNotice?: boolean;
-  disconnectReason?: string;
 }
 
 /**
