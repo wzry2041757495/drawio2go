@@ -1891,11 +1891,7 @@ export default function ChatSidebar({
 
       void updateStreamingFlag(targetConversationId, false);
     },
-    [
-      activeConversationId,
-      status,
-      updateStreamingFlag,
-    ],
+    [activeConversationId, status, updateStreamingFlag],
   );
 
   const alerts = (

@@ -482,10 +482,6 @@ export function useStorageSettings() {
   const getProviders = useCallback(async (): Promise<ProviderConfig[]> => {
     return execute(async (storage) => {
       const providers = await loadProviders(storage);
-      logger.info(
-        "[useStorageSettings] getProviders loaded %d provider(s)",
-        providers.length,
-      );
       return providers;
     });
   }, [execute, loadProviders]);
@@ -496,10 +492,6 @@ export function useStorageSettings() {
   const getModels = useCallback(async (): Promise<ModelConfig[]> => {
     return execute(async (storage) => {
       const models = await loadModels(storage);
-      logger.info(
-        "[useStorageSettings] getModels loaded %d model(s)",
-        models.length,
-      );
       return models;
     });
   }, [execute, loadModels]);
@@ -511,10 +503,6 @@ export function useStorageSettings() {
     async (providers: ProviderConfig[]): Promise<void> => {
       await execute(async (storage) => {
         await persistProviders(storage, providers);
-        logger.info(
-          "[useStorageSettings] saveProviders saved %d provider(s)",
-          providers.length,
-        );
         dispatchSettingsUpdated("provider");
       });
     },
@@ -542,11 +530,6 @@ export function useStorageSettings() {
         };
 
         await persistProviders(storage, [...providers, newProvider]);
-        logger.info(
-          "[useStorageSettings] addProvider %s (%s)",
-          newProvider.displayName,
-          newProvider.id,
-        );
         dispatchSettingsUpdated("provider");
         return newProvider;
       });
@@ -587,10 +570,6 @@ export function useStorageSettings() {
 
         providers[index] = updatedProvider;
         await persistProviders(storage, providers);
-        logger.info(
-          "[useStorageSettings] updateProvider %s succeeded",
-          providerId,
-        );
         dispatchSettingsUpdated("provider");
         return updatedProvider;
       });
@@ -642,15 +621,6 @@ export function useStorageSettings() {
           persistModels(storage, remainingModels),
           persistActiveModel(storage, nextActive),
         ]);
-
-        logger.info(
-          "[useStorageSettings] deleteProvider %s, models removed %d, active -> %s",
-          providerId,
-          models.length - remainingModels.length,
-          nextActive
-            ? `${nextActive.providerId}/${nextActive.modelId}`
-            : "null",
-        );
         dispatchSettingsUpdated("provider");
       });
     },
@@ -730,12 +700,6 @@ export function useStorageSettings() {
           persistProviders(storage, updatedProviders),
         ]);
 
-        logger.info(
-          "[useStorageSettings] addModel %s/%s (%s)",
-          providerId,
-          newModel.modelName,
-          newModel.id,
-        );
         dispatchSettingsUpdated("model");
         return newModel;
       });
@@ -828,12 +792,6 @@ export function useStorageSettings() {
           persistModels(storage, nextModels),
           persistProviders(storage, updatedProviders),
         ]);
-
-        logger.info(
-          "[useStorageSettings] updateModel %s/%s 完成",
-          providerId,
-          modelId,
-        );
         dispatchSettingsUpdated("model");
         return updatedModel;
       });
@@ -896,15 +854,6 @@ export function useStorageSettings() {
           persistProviders(storage, updatedProviders),
           persistActiveModel(storage, nextActive),
         ]);
-
-        logger.info(
-          "[useStorageSettings] deleteModel %s/%s, active -> %s",
-          providerId,
-          modelId,
-          nextActive
-            ? `${nextActive.providerId}/${nextActive.modelId}`
-            : "null",
-        );
         dispatchSettingsUpdated("model");
       });
     },
@@ -925,7 +874,6 @@ export function useStorageSettings() {
   const getAgentSettings = useCallback(async (): Promise<AgentSettings> => {
     return execute(async (storage) => {
       const settings = await loadAgentSettings(storage);
-      logger.info("[useStorageSettings] getAgentSettings loaded");
       return settings;
     });
   }, [execute, loadAgentSettings]);
@@ -943,7 +891,6 @@ export function useStorageSettings() {
           updatedAt: Date.now(),
         };
         await persistAgentSettings(storage, next);
-        logger.info("[useStorageSettings] saveAgentSettings 更新成功");
         dispatchSettingsUpdated("agent");
         return next;
       });
@@ -958,10 +905,6 @@ export function useStorageSettings() {
     useCallback(async (): Promise<ActiveModelReference | null> => {
       return execute(async (storage) => {
         const active = await loadActiveModel(storage);
-        logger.info(
-          "[useStorageSettings] getActiveModel -> %s",
-          active ? `${active.providerId}/${active.modelId}` : "null",
-        );
         return active;
       });
     }, [execute, loadActiveModel]);
@@ -1000,11 +943,6 @@ export function useStorageSettings() {
           updatedAt: Date.now(),
         };
         await persistActiveModel(storage, active);
-        logger.info(
-          "[useStorageSettings] setActiveModel -> %s/%s",
-          providerId,
-          modelId,
-        );
         dispatchSettingsUpdated("activeModel");
         return active;
       });
