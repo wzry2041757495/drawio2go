@@ -7,7 +7,6 @@ import {
   useState,
   useCallback,
   type FormEvent,
-  type MutableRefObject,
   type RefObject,
 } from "react";
 import { Alert } from "@heroui/react";
@@ -16,7 +15,6 @@ import {
   DefaultChatTransport,
   asSchema,
   lastAssistantMessageIsCompleteWithToolCalls,
-  type Tool,
   type UIMessage,
 } from "ai";
 import {
@@ -25,6 +23,10 @@ import {
   useChatSessionsController,
   useLLMConfig,
   useOperationToast,
+  useChatMessages,
+  useChatToolExecution,
+  useChatNetworkControl,
+  useChatLifecycle,
 } from "@/app/hooks";
 import { useAlertDialog } from "@/app/components/alert";
 import { useI18n } from "@/app/i18n/hooks";
@@ -32,45 +34,29 @@ import { DEFAULT_PROJECT_UUID, getStorage } from "@/app/lib/storage";
 import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
 import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
-import { ErrorCodes } from "@/app/errors/error-codes";
 import { getDrawioXML, replaceDrawioXML } from "@/app/lib/drawio-tools";
 import {
   createFrontendDrawioTools,
   type FrontendToolContext,
 } from "@/app/lib/frontend-tools";
-import {
-  drawioEditBatchInputSchema,
-  drawioOverwriteInputSchema,
-  drawioReadInputSchema,
-} from "@/app/lib/schemas/drawio-tool-schemas";
-import {
-  convertUIMessageToCreateInput,
-  fingerprintMessage,
-} from "@/app/lib/chat-session-service";
-import { generateUUID } from "@/app/lib/utils";
 import { DrainableToolQueue } from "@/app/lib/drainable-tool-queue";
 import { ChatRunStateMachine } from "@/app/lib/chat-run-state-machine";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
-import {
-  convertAttachmentItemToImagePart,
-  fileToDataUrl,
-  uploadImageAttachment,
-} from "@/lib/image-message-utils";
+import { fileToDataUrl } from "@/lib/image-message-utils";
 
 import ChatHistoryView from "./chat/ChatHistoryView";
 import ChatShell from "./chat/ChatShell";
 import MessagePane from "./chat/MessagePane";
 import Composer from "./chat/Composer";
 
-// 导出工具
 import { exportBlobContent } from "./chat/utils/fileExport";
 import { createLogger } from "@/lib/logger";
 import { hasConversationIdMetadata } from "@/app/lib/type-guards";
-import { TOOL_TIMEOUT_CONFIG } from "@/lib/constants/tool-config";
-import { AI_TOOL_NAMES } from "@/lib/constants/tool-names";
 
 const logger = createLogger("ChatSidebar");
 type UseChatMessage = UIMessage<MessageMetadata>;
+
+// ========== 辅助函数 ==========
 
 const hasImageParts = (msg: unknown): boolean => {
   if (!msg || typeof msg !== "object") return false;
@@ -123,28 +109,6 @@ const runWithConcurrency = async <T, R>(
 
 const CHAT_REQUEST_TIMEOUT_MS = 10 * 60_000;
 
-const TOOL_INPUT_SCHEMAS = {
-  [AI_TOOL_NAMES.DRAWIO_READ]: drawioReadInputSchema.optional(),
-  [AI_TOOL_NAMES.DRAWIO_EDIT_BATCH]: drawioEditBatchInputSchema,
-  [AI_TOOL_NAMES.DRAWIO_OVERWRITE]: drawioOverwriteInputSchema,
-} as const;
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "未知错误";
-}
-
-function createAbortError(message: string): Error {
-  const error = new Error(message);
-  error.name = "AbortError";
-  return error;
-}
-
 function mergeAbortSignals(
   signals: Array<AbortSignal | undefined>,
 ): AbortSignal {
@@ -164,43 +128,6 @@ function mergeAbortSignals(
   }
 
   return controller.signal;
-}
-
-async function withTimeout<T>(
-  task: Promise<T>,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  if (timeoutMs <= 0) return await task;
-
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`[${ErrorCodes.TIMEOUT}] 操作超时（${timeoutMs}ms）`));
-    }, timeoutMs);
-  });
-
-  try {
-    if (!signal) {
-      return await Promise.race([task, timeoutPromise]);
-    }
-
-    const abortPromise = new Promise<T>((_, reject) => {
-      if (signal.aborted) {
-        reject(createAbortError("已取消"));
-        return;
-      }
-      signal.addEventListener(
-        "abort",
-        () => reject(createAbortError("已取消")),
-        { once: true },
-      );
-    });
-
-    return await Promise.race([task, timeoutPromise, abortPromise]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 function buildToolSchemaPayload(
@@ -258,143 +185,6 @@ async function replaceDrawioXmlFromRef(
   return { success: true };
 }
 
-type AddToolResultFn = (
-  args:
-    | {
-        state?: "output-available";
-        tool: string;
-        toolCallId: string;
-        output: unknown;
-      }
-    | {
-        state: "output-error";
-        tool: string;
-        toolCallId: string;
-        errorText: string;
-      },
-) => Promise<void>;
-
-async function executeToolCall(options: {
-  toolCall: { toolCallId: string; toolName: string; input: unknown };
-  toolsRef: MutableRefObject<Record<string, Tool>>;
-  addToolResult: AddToolResultFn;
-  setToolError: (error: Error | null) => void;
-  currentToolCallIdRef: MutableRefObject<string | null>;
-  activeToolAbortRef: MutableRefObject<AbortController | null>;
-}): Promise<void> {
-  const {
-    toolCall,
-    addToolResult,
-    setToolError,
-    currentToolCallIdRef,
-    activeToolAbortRef,
-  } = options;
-  const toolName = toolCall.toolName;
-  const toolCallId = toolCall.toolCallId;
-
-  const tool = options.toolsRef.current[toolName];
-
-  if (!tool || typeof tool.execute !== "function") {
-    const errorText = `未知工具: ${toolName}`;
-    setToolError(new Error(errorText));
-    await addToolResult({
-      state: "output-error",
-      tool: toolName,
-      toolCallId,
-      errorText,
-    });
-    return;
-  }
-
-  const schema = (
-    TOOL_INPUT_SCHEMAS as Record<
-      string,
-      { safeParse: (input: unknown) => { success: boolean; data?: unknown } }
-    >
-  )[toolName];
-  if (!schema) {
-    const errorText = `缺少工具 schema: ${toolName}`;
-    setToolError(new Error(errorText));
-    await addToolResult({
-      state: "output-error",
-      tool: toolName,
-      toolCallId,
-      errorText,
-    });
-    return;
-  }
-
-  const parsed = schema.safeParse(toolCall.input);
-  if (!parsed.success) {
-    const errorText = `工具输入校验失败: ${toolName}`;
-    setToolError(new Error(errorText));
-    await addToolResult({
-      state: "output-error",
-      tool: toolName,
-      toolCallId,
-      errorText,
-    });
-    return;
-  }
-
-  currentToolCallIdRef.current = toolCallId;
-  const abortController = new AbortController();
-  activeToolAbortRef.current = abortController;
-
-  try {
-    const timeoutMs =
-      TOOL_TIMEOUT_CONFIG[toolName as keyof typeof TOOL_TIMEOUT_CONFIG] ??
-      30_000;
-
-    const output = await withTimeout(
-      Promise.resolve(
-        tool.execute(parsed.data as never, {
-          toolCallId,
-          messages: [],
-          abortSignal: abortController.signal,
-        }),
-      ),
-      timeoutMs,
-      abortController.signal,
-    );
-
-    // AI SDK 5.0: 不要在 onToolCall 中 await addToolResult，否则会死锁
-    // https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0
-    void addToolResult({
-      tool: toolName,
-      toolCallId,
-      output,
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      void addToolResult({
-        state: "output-error",
-        tool: toolName,
-        toolCallId,
-        errorText: "已取消",
-      });
-      return;
-    }
-
-    const errorText = toErrorMessage(error);
-    setToolError(error instanceof Error ? error : new Error(errorText));
-
-    void addToolResult({
-      state: "output-error",
-      tool: toolName,
-      toolCallId,
-      errorText,
-    });
-  } finally {
-    if (activeToolAbortRef.current === abortController) {
-      activeToolAbortRef.current = null;
-    }
-    if (currentToolCallIdRef.current === toolCallId) {
-      currentToolCallIdRef.current = null;
-    }
-  }
-}
-
 interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -409,8 +199,8 @@ export default function ChatSidebar({
   currentProjectId,
   editorRef,
 }: ChatSidebarProps) {
+  // ========== 基础状态 ==========
   const [input, setInput] = useState("");
-  const [toolError, setToolError] = useState<Error | null>(null);
   const [expandedToolCalls, setExpandedToolCalls] = useState<
     Record<string, boolean>
   >({});
@@ -418,13 +208,13 @@ export default function ChatSidebar({
     Record<string, boolean>
   >({});
   const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
-  const imageAttachments = useImageAttachments();
 
-  // ========== Hook 聚合 ==========
+  // ========== Hooks 聚合 ==========
   const { t, i18n } = useI18n();
   const { open: openAlertDialog } = useAlertDialog();
   const { pushErrorToast, showNotice, extractErrorMessage } =
     useOperationToast();
+  const imageAttachments = useImageAttachments();
 
   const {
     llmConfig,
@@ -438,8 +228,6 @@ export default function ChatSidebar({
     handleModelChange,
   } = useLLMConfig();
 
-  const [showOnlineRecoveryHint, setShowOnlineRecoveryHint] = useState(false);
-
   const translate = useCallback(
     (key: string, fallback?: string) => t(key, fallback ?? key),
     [t],
@@ -449,6 +237,26 @@ export default function ChatSidebar({
   const { canChat, lockHolder, acquireLock, releaseLock } =
     useChatLock(resolvedProjectUuid);
   const { isOnline, offlineReason } = useNetworkStatus();
+
+  // ========== 引用 ==========
+  const imageDataUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const imageDataUrlPendingRef = useRef<Map<string, Promise<string | null>>>(
+    new Map(),
+  );
+  const alertOwnerRef = useRef<"single-delete" | "batch-delete" | null>(null);
+  const reasoningTimersRef = useRef<Map<string, number>>(new Map());
+  const finishReasonRef = useRef<string | null>(null);
+
+  // 工具执行队列和状态机
+  const toolQueue = useRef(new DrainableToolQueue());
+  const stateMachine = useRef(new ChatRunStateMachine());
+  const activeRequestAbortRef = useRef<AbortController | null>(null);
+
+  // ========== 派生状态 ==========
+  const fallbackModelName = useMemo(
+    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
+    [llmConfig],
+  );
 
   const truncatedLockHolder = useMemo(() => {
     if (!lockHolder) return null;
@@ -477,26 +285,6 @@ export default function ChatSidebar({
   const lockBlockedMessage = useMemo(
     () => t("chat:messages.chatLockedHint", "当前项目正在其他标签页中进行聊天"),
     [t],
-  );
-
-  // ========== 引用 ==========
-  const imageDataUrlCacheRef = useRef<Map<string, string>>(new Map());
-  const imageDataUrlPendingRef = useRef<Map<string, Promise<string | null>>>(
-    new Map(),
-  );
-  const alertOwnerRef = useRef<"single-delete" | "batch-delete" | null>(null);
-  const pageUnloadHandledRef = useRef(false);
-  const streamingFlagCacheRef = useRef<Record<string, boolean>>({});
-  const forceStopReasonRef = useRef<"sidebar" | "history" | null>(null);
-  const wasOfflineRef = useRef(false);
-  const previousOnlineStatusRef = useRef<boolean | null>(null);
-  const reasoningTimersRef = useRef<Map<string, number>>(new Map());
-  const finishReasonRef = useRef<string | null>(null);
-
-  // ========== 派生状态 ==========
-  const fallbackModelName = useMemo(
-    () => llmConfig?.modelName ?? DEFAULT_LLM_CONFIG.modelName,
-    [llmConfig],
   );
 
   const ensureMessageMetadata = useCallback(
@@ -584,93 +372,7 @@ export default function ChatSidebar({
       : [];
   }, [activeConversationId, conversationMessages]);
 
-  useEffect(() => {
-    console.info("[ChatSidebar] calling loadModelSelector on mount");
-    void loadModelSelector();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Web 端偶发出现模型列表为空（IndexedDB 数据已存在但未加载到状态）。
-  // 当侧栏重新展开或依然为空时主动重载一次，避免卡在“暂无可用模型”空态。
-  useEffect(() => {
-    if (!isOpen) return;
-    if (providers.length === 0 || models.length === 0) {
-      void loadModelSelector({ preserveSelection: true });
-    }
-  }, [isOpen, providers.length, models.length, loadModelSelector]);
-
-  useEffect(() => {
-    chatService.handleConversationSwitch(activeConversationId);
-  }, [chatService, activeConversationId]);
-
-  useEffect(() => {
-    if (!activeConversationId) return;
-    void handleAbnormalExitIfNeeded(activeConversationId);
-  }, [activeConversationId, handleAbnormalExitIfNeeded]);
-
-  useEffect(() => {
-    if (typeof localStorage === "undefined") return;
-
-    const recoverUnloadData = async () => {
-      const keys = Object.keys(localStorage).filter((key) =>
-        key.startsWith("chat:unload:"),
-      );
-
-      for (const key of keys) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) {
-            localStorage.removeItem(key);
-            continue;
-          }
-
-          const parsed = JSON.parse(raw) as {
-            conversationId?: string;
-            messages?: ChatUIMessage[];
-          };
-
-          if (
-            !parsed ||
-            typeof parsed.conversationId !== "string" ||
-            !Array.isArray(parsed.messages)
-          ) {
-            localStorage.removeItem(key);
-            continue;
-          }
-
-          logger.info("[ChatSidebar] 恢复卸载时未保存的消息", { key });
-
-          await chatService.saveNow(parsed.conversationId, parsed.messages, {
-            resolveConversationId,
-            onConversationResolved: (resolvedId) => {
-              // eslint-disable-next-line sonarjs/no-nested-functions -- setState 函数式更新需要回调，且此处嵌套层级较深
-              setActiveConversationId((prev) => prev ?? resolvedId);
-            },
-          });
-
-          localStorage.removeItem(key);
-        } catch (error) {
-          logger.error("[ChatSidebar] 恢复卸载数据失败", { key, error });
-          localStorage.removeItem(key);
-        }
-      }
-    };
-
-    void recoverUnloadData();
-  }, [chatService, resolveConversationId, setActiveConversationId]);
-
-  // ========== useChat 集成 ==========
-  // NOTE(Milestone 4): ChatSidebar 目前仍是"自管理"模式（内部 useChat + 存储/会话控制器）。
-  // 如需复用聊天状态/动作，建议抽出 Provider/Context 注入，避免出现"双消息源 / 双流式状态 / 双取消逻辑"的竞态问题。
-
-  // 工具执行队列：可等待清空的队列，确保 onFinish 等待工具完成
-  const toolQueue = useRef(new DrainableToolQueue());
-
-  // 聊天状态机：统一管理会话生命周期，避免 ref 竞态
-  const stateMachine = useRef(new ChatRunStateMachine());
-
-  const activeRequestAbortRef = useRef<AbortController | null>(null);
-  const activeToolAbortRef = useRef<AbortController | null>(null);
+  // ========== 前端工具配置 ==========
   const currentToolCallIdRef = useRef<string | null>(null);
 
   const frontendToolContext = useMemo<FrontendToolContext>(() => {
@@ -693,16 +395,12 @@ export default function ChatSidebar({
     [frontendToolContext],
   );
 
-  const frontendToolsRef = useRef(frontendTools);
-  useEffect(() => {
-    frontendToolsRef.current = frontendTools;
-  }, [frontendTools]);
-
   const llmConfigRef = useRef(llmConfig);
   useEffect(() => {
     llmConfigRef.current = llmConfig;
   }, [llmConfig]);
 
+  // ========== useChat 传输层配置 ==========
   const chatTransport = useMemo(() => {
     const fetchWithAbort: typeof fetch = async (request, init) => {
       const abortController = new AbortController();
@@ -861,7 +559,7 @@ export default function ChatSidebar({
           }),
         );
 
-        const toolSchemas = buildToolSchemaPayload(frontendToolsRef.current);
+        const toolSchemas = buildToolSchemaPayload(frontendTools);
 
         const rawBody = (options.body ?? {}) as Record<string, unknown>;
         const { llmConfig: legacyLlmConfig, ...bodyRest } = rawBody;
@@ -881,8 +579,9 @@ export default function ChatSidebar({
         };
       },
     });
-  }, []);
+  }, [frontendTools]);
 
+  // ========== useChat 集成 ==========
   const {
     messages,
     setMessages,
@@ -895,22 +594,14 @@ export default function ChatSidebar({
     id: activeConversationId || "default",
     messages: initialMessages as unknown as UseChatMessage[],
     transport: chatTransport,
-    // AI SDK 5.0: onToolCall 中不要 await addToolResult，否则会死锁
-    // https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0
     onToolCall: ({ toolCall }) => {
-      // 使用新的可等待队列，替代 Promise 链
-      toolQueue.current.enqueue(async () => {
-        await executeToolCall({
-          toolCall,
-          toolsRef: frontendToolsRef,
-          addToolResult,
-          setToolError,
-          currentToolCallIdRef,
-          activeToolAbortRef,
+      toolExecution.enqueueToolCall(async () => {
+        await toolExecution.executeToolCall({
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          input: toolCall.input,
         });
       });
-
-      // 不要 await，直接返回让 AI SDK 继续处理
     },
     sendAutomaticallyWhen: ({ messages: currentMessages }) =>
       lastAssistantMessageIsCompleteWithToolCalls({
@@ -924,7 +615,6 @@ export default function ChatSidebar({
       isAbort,
       isError,
     }) => {
-      // 使用状态机获取上下文，替代 sendingSessionIdRef
       const ctx = stateMachine.current.getContext();
       if (!ctx) {
         logger.error("[ChatSidebar] onFinish: 没有状态机上下文");
@@ -934,10 +624,9 @@ export default function ChatSidebar({
       try {
         finishReasonRef.current =
           !isAbort && !isError && finishReason ? finishReason : null;
-        // ⭐ 核心修复：等待工具队列清空
-        // 确保所有工具执行完成后才保存消息和释放锁
+
         logger.info("[ChatSidebar] onFinish: 等待工具队列清空");
-        await toolQueue.current.drain();
+        await toolExecution.drainQueue();
         logger.info("[ChatSidebar] onFinish: 工具队列已清空");
 
         const shouldContinue =
@@ -948,15 +637,31 @@ export default function ChatSidebar({
             hasToolPartsInLastAssistant(finishedMessages));
 
         if (shouldContinue) {
-          // 工具执行完成，需继续流式（sendAutomaticallyWhen 会自动触发）
           logger.info("[ChatSidebar] onFinish: 工具需要继续，等待下一轮");
+          // 状态机转换：streaming → tools-pending（如果当前是 streaming）
+          if (stateMachine.current.canTransition("finish-with-tools")) {
+            stateMachine.current.transition("finish-with-tools");
+          }
+          // 等待下一轮流式（sendAutomaticallyWhen 会触发）
           return;
         }
 
-        // 进入最终化状态
         logger.info("[ChatSidebar] onFinish: 开始最终化会话");
 
-        // 记录解析后的真实会话 ID，用于正确更新流式状态
+        // 状态机转换：streaming/tools-pending → finalizing
+        const currentState = stateMachine.current.getState();
+        if (
+          currentState === "streaming" &&
+          stateMachine.current.canTransition("finish-no-tools")
+        ) {
+          stateMachine.current.transition("finish-no-tools");
+        } else if (
+          currentState === "tools-pending" &&
+          stateMachine.current.canTransition("tools-complete-done")
+        ) {
+          stateMachine.current.transition("tools-complete-done");
+        }
+
         let resolvedConversationId: string | null = null;
 
         await chatService.saveNow(
@@ -967,83 +672,282 @@ export default function ChatSidebar({
             resolveConversationId,
             onConversationResolved: (resolvedId) => {
               resolvedConversationId = resolvedId;
-              // 更新上下文中的 conversationId
               ctx.conversationId = resolvedId;
               setActiveConversationId(resolvedId);
             },
           },
         );
 
-        // 优先使用解析后的真实 ID，回落到原始 ID
         const finalId = resolvedConversationId ?? ctx.conversationId;
 
-        // 更新流式状态为完成
         await updateStreamingFlag(finalId, false);
 
-        // 释放锁
         if (ctx.lockAcquired) {
           releaseLock();
         }
 
-        // 清理上下文
+        // 状态机转换：finalizing → idle
+        if (stateMachine.current.canTransition("finalize-complete")) {
+          stateMachine.current.transition("finalize-complete");
+        }
+
         stateMachine.current.clearContext();
         logger.info("[ChatSidebar] onFinish: 会话已最终化");
       } catch (error) {
         logger.error("[ChatSidebar] onFinish: 发生错误", { error });
 
-        // 错误处理：确保锁被释放
+        // 错误时转换到 errored → idle
+        try {
+          if (stateMachine.current.canTransition("error")) {
+            stateMachine.current.transition("error");
+          }
+          if (stateMachine.current.canTransition("error-cleanup")) {
+            stateMachine.current.transition("error-cleanup");
+          }
+        } catch (transitionError) {
+          logger.error("[ChatSidebar] onFinish: 状态转换失败", {
+            transitionError,
+          });
+        }
+
         if (ctx.lockAcquired) {
           releaseLock();
         }
 
-        // 清理上下文
         stateMachine.current.clearContext();
       }
     },
   });
 
-  const stop = useCallback(() => {
-    activeRequestAbortRef.current?.abort();
-    activeToolAbortRef.current?.abort();
-    setToolError(null);
-
-    stopChat().catch((error) => {
-      if (isAbortError(error)) return;
-      logger.warn("[ChatSidebar] 停止聊天失败", { error });
-    });
-  }, [stopChat]);
-
-  // 使用 ref 缓存 setMessages，避免因为引用变化导致依赖效应重复执行
-  const setMessagesRef = useRef(setMessages);
-  // 双向指纹缓存 + 来源标记：阻断存储 ↔ useChat 间的循环同步
-  const lastSyncedToUIRef = useRef<Record<string, string[]>>({});
-  const lastSyncedToStoreRef = useRef<Record<string, string[]>>({});
-  const applyingFromStorageRef = useRef(false);
-
-  const clearSyncedFingerprints = useCallback((ids: string[]) => {
-    ids.forEach((id) => {
-      delete lastSyncedToUIRef.current[id];
-      delete lastSyncedToStoreRef.current[id];
-    });
-  }, []);
-
-  useEffect(() => {
-    setMessagesRef.current = setMessages;
-  }, [setMessages]);
-
   const isChatStreaming = status === "submitted" || status === "streaming";
 
+  // ========== 新 Hooks 集成 ==========
+
+  // 工具执行 Hook
+  const toolExecution = useChatToolExecution({
+    frontendTools,
+    addToolResult,
+  });
+
+  // 同步 currentToolCallId
   useEffect(() => {
-    if (!isChatStreaming) {
-      forceStopReasonRef.current = null;
+    currentToolCallIdRef.current = toolExecution.currentToolCallId;
+  }, [toolExecution.currentToolCallId]);
+
+  // 监听流式状态变化，处理 tools-pending → streaming 转换
+  const prevIsChatStreamingRef = useRef(isChatStreaming);
+  useEffect(() => {
+    const prev = prevIsChatStreamingRef.current;
+    const current = isChatStreaming;
+    prevIsChatStreamingRef.current = current;
+
+    // 流式开始（从 false 变为 true）
+    if (!prev && current) {
+      const currentState = stateMachine.current.getState();
+      // 如果是从 tools-pending 状态开始流式，说明工具完成后需要继续
+      if (currentState === "tools-pending") {
+        logger.info(
+          "[ChatSidebar] 工具完成后继续流式，状态转换: tools-pending → streaming",
+        );
+        if (stateMachine.current.canTransition("tools-complete-continue")) {
+          stateMachine.current.transition("tools-complete-continue");
+        }
+      }
     }
   }, [isChatStreaming]);
 
-  const displayMessages = useMemo(
-    () => messages.map(ensureMessageMetadata),
-    [messages, ensureMessageMetadata],
+  const stop = useCallback(() => {
+    activeRequestAbortRef.current?.abort();
+    toolExecution.abortCurrentTool();
+    toolExecution.setToolError(null);
+
+    stopChat().catch((error) => {
+      if (error instanceof Error && error.name === "AbortError") return;
+      logger.warn("[ChatSidebar] 停止聊天失败", { error });
+    });
+  }, [stopChat, toolExecution]);
+
+  // 更新流式状态的回调
+  const updateStreamingFlag = useCallback(
+    async (
+      conversationId: string,
+      isStreaming: boolean,
+      options?: { syncOnly?: boolean },
+    ) => {
+      if (!conversationId) return;
+
+      if (options?.syncOnly) return;
+
+      try {
+        const resolvedId = await resolveConversationId(conversationId);
+        if (isStreaming) {
+          await markConversationAsStreaming(resolvedId);
+        } else {
+          await markConversationAsCompleted(resolvedId);
+        }
+      } catch (error) {
+        logger.error("[ChatSidebar] 更新流式状态失败", {
+          conversationId,
+          isStreaming,
+          error,
+        });
+      }
+    },
+    [
+      markConversationAsCompleted,
+      markConversationAsStreaming,
+      resolveConversationId,
+    ],
   );
 
+  // 网络控制 Hook
+  const { showOnlineRecoveryHint } = useChatNetworkControl({
+    isOnline,
+    offlineReasonLabel: offlineReasonLabel ?? undefined,
+    isChatStreaming,
+    activeConversationId,
+    stateMachine: stateMachine.current,
+    releaseLock,
+    stop,
+    updateStreamingFlag,
+    markConversationAsCompleted,
+    resolveConversationId,
+    openAlertDialog: (config) =>
+      openAlertDialog({
+        ...config,
+        status: config.status as "warning" | "danger",
+      }),
+    t: (key: string, fallback?: string) => {
+      if (fallback) {
+        return t(key, { defaultValue: fallback });
+      }
+      return t(key);
+    },
+    toolQueue: toolQueue.current,
+  });
+
+  // 生命周期管理 Hook
+  const lifecycle = useChatLifecycle({
+    stateMachine,
+    toolQueue,
+    acquireLock,
+    releaseLock,
+    sendMessage: (message, options) =>
+      sendMessage(message as unknown as UseChatMessage, options),
+    stop,
+    isChatStreaming,
+    updateStreamingFlag,
+    chatService,
+    activeConversationId,
+    setMessages: (value) => {
+      setMessages(
+        typeof value === "function"
+          ? (prev: UseChatMessage[]) =>
+              value(
+                prev as unknown as ChatUIMessage[],
+              ) as unknown as UseChatMessage[]
+          : (value as unknown as UseChatMessage[]),
+      );
+    },
+    finishReasonRef,
+    onError: (message) => pushErrorToast(message),
+  });
+
+  // 消息同步 Hook
+  const { displayMessages } = useChatMessages({
+    activeConversationId,
+    chatService,
+    isChatStreaming,
+    conversationMessages,
+    setMessages: (value) => {
+      setMessages(
+        typeof value === "function"
+          ? (prev: UseChatMessage[]) =>
+              value(
+                prev as unknown as ChatUIMessage[],
+              ) as unknown as UseChatMessage[]
+          : (value as unknown as UseChatMessage[]),
+      );
+    },
+    messages: messages as unknown as ChatUIMessage[],
+    resolveConversationId,
+  });
+
+  // ========== 初始化副作用 ==========
+  useEffect(() => {
+    console.info("[ChatSidebar] calling loadModelSelector on mount");
+    void loadModelSelector();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (providers.length === 0 || models.length === 0) {
+      void loadModelSelector({ preserveSelection: true });
+    }
+  }, [isOpen, providers.length, models.length, loadModelSelector]);
+
+  useEffect(() => {
+    chatService.handleConversationSwitch(activeConversationId);
+  }, [chatService, activeConversationId]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    void handleAbnormalExitIfNeeded(activeConversationId);
+  }, [activeConversationId, handleAbnormalExitIfNeeded]);
+
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+
+    const recoverUnloadData = async () => {
+      const keys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("chat:unload:"),
+      );
+
+      for (const key of keys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) {
+            localStorage.removeItem(key);
+            continue;
+          }
+
+          const parsed = JSON.parse(raw) as {
+            conversationId?: string;
+            messages?: ChatUIMessage[];
+          };
+
+          if (
+            !parsed ||
+            typeof parsed.conversationId !== "string" ||
+            !Array.isArray(parsed.messages)
+          ) {
+            localStorage.removeItem(key);
+            continue;
+          }
+
+          logger.info("[ChatSidebar] 恢复卸载时未保存的消息", { key });
+
+          await chatService.saveNow(parsed.conversationId, parsed.messages, {
+            resolveConversationId,
+            onConversationResolved: (resolvedId) => {
+              // eslint-disable-next-line sonarjs/no-nested-functions -- setState 函数式更新需要回调，且此处嵌套层级较深
+              setActiveConversationId((prev) => prev ?? resolvedId);
+            },
+          });
+
+          localStorage.removeItem(key);
+        } catch (error) {
+          logger.error("[ChatSidebar] 恢复卸载数据失败", { key, error });
+          localStorage.removeItem(key);
+        }
+      }
+    };
+
+    void recoverUnloadData();
+  }, [chatService, resolveConversationId, setActiveConversationId]);
+
+  // ========== 推理时长计算 ==========
   useEffect(() => {
     const activeKeys = new Set<string>();
 
@@ -1115,6 +1019,7 @@ export default function ChatSidebar({
     });
   }, [messages, setMessages]);
 
+  // ========== 派生状态（UI 相关）==========
   const lastMessageIsUser = useMemo(() => {
     if (!displayMessages || displayMessages.length === 0) return false;
     const lastMsg = displayMessages[displayMessages.length - 1];
@@ -1132,282 +1037,7 @@ export default function ChatSidebar({
     return abnormalExitConversations.has(activeConversationId);
   }, [abnormalExitConversations, activeConversationId]);
 
-  const areFingerprintsEqual = useCallback(
-    (a: string[] | undefined, b: string[] | undefined) => {
-      if (!a || !b) return false;
-      if (a.length !== b.length) return false;
-      return a.every((fp, index) => fp === b[index]);
-    },
-    [],
-  );
-
-  const updateStreamingFlag = useCallback(
-    async (
-      conversationId: string | null,
-      isStreaming: boolean,
-      options?: { syncOnly?: boolean },
-    ) => {
-      if (!conversationId) return;
-
-      // 先做同步标记，避免卸载时异步任务被浏览器中断
-      streamingFlagCacheRef.current[conversationId] = isStreaming;
-      if (options?.syncOnly) return;
-
-      try {
-        const resolvedId = await resolveConversationId(conversationId);
-        if (isStreaming) {
-          await markConversationAsStreaming(resolvedId);
-        } else {
-          await markConversationAsCompleted(resolvedId);
-        }
-      } catch (error) {
-        logger.error("[ChatSidebar] 更新流式状态失败", {
-          conversationId,
-          isStreaming,
-          error,
-        });
-      }
-    },
-    [
-      markConversationAsCompleted,
-      markConversationAsStreaming,
-      resolveConversationId,
-    ],
-  );
-
-  const forceStopStreaming = useCallback(
-    (reason: "sidebar" | "history") => {
-      if (!isChatStreaming) return;
-      if (forceStopReasonRef.current) return;
-
-      forceStopReasonRef.current = reason;
-
-      if (reason === "sidebar") {
-        logger.info("[ChatSidebar] 侧栏关闭，停止聊天请求");
-      } else {
-        logger.info("[ChatSidebar] 切换到历史视图，停止聊天请求");
-      }
-
-      // 使用状态机获取上下文
-      const ctx = stateMachine.current.getContext();
-      const targetConversationId = activeConversationId ?? ctx?.conversationId;
-
-      stop();
-      releaseLock();
-
-      if (targetConversationId) {
-        void updateStreamingFlag(targetConversationId, false);
-      }
-
-      // 清理状态机上下文
-      if (ctx) {
-        stateMachine.current.clearContext();
-      }
-    },
-    [
-      activeConversationId,
-      isChatStreaming,
-      releaseLock,
-      stop,
-      updateStreamingFlag,
-    ],
-  );
-
-  useEffect(() => {
-    if (!isOpen) {
-      forceStopStreaming("sidebar");
-    }
-  }, [forceStopStreaming, isOpen]);
-
-  useEffect(() => {
-    if (currentView === "history") {
-      forceStopStreaming("history");
-    }
-  }, [currentView, forceStopStreaming]);
-
-  useEffect(() => {
-    const previousOnline = previousOnlineStatusRef.current;
-    const onlineStatusChanged = previousOnline !== isOnline;
-    previousOnlineStatusRef.current = isOnline;
-
-    if (!onlineStatusChanged) return;
-
-    if (!isOnline) {
-      setShowOnlineRecoveryHint(false);
-
-      if (isChatStreaming) {
-        logger.warn("[ChatSidebar] 网络断开，停止聊天请求");
-      } else {
-        logger.warn("[ChatSidebar] 网络断开，当前无流式请求，释放聊天锁");
-      }
-
-      // 使用状态机获取上下文
-      const ctx = stateMachine.current.getContext();
-      const targetConversationId = activeConversationId ?? ctx?.conversationId;
-
-      stop();
-      releaseLock();
-
-      if (targetConversationId) {
-        updateStreamingFlag(targetConversationId, false).catch((error) => {
-          logger.error("[ChatSidebar] 网络断开后更新流式状态失败", {
-            conversationId: targetConversationId,
-            error,
-          });
-        });
-
-        resolveConversationId(targetConversationId)
-          .then((resolvedId) => markConversationAsCompleted(resolvedId))
-          .catch((error) => {
-            logger.error("[ChatSidebar] 网络断开后标记对话完成失败", {
-              error,
-              conversationId: targetConversationId,
-            });
-          });
-      }
-
-      openAlertDialog({
-        status: "danger",
-        title: t("chat:status.networkOffline"),
-        description: offlineReasonLabel
-          ? `${t("chat:status.networkOfflineDesc")}（${offlineReasonLabel}）`
-          : t("chat:status.networkOfflineDesc"),
-        isDismissable: true,
-      });
-
-      wasOfflineRef.current = true;
-      return;
-    }
-
-    if (wasOfflineRef.current) {
-      wasOfflineRef.current = false;
-      setShowOnlineRecoveryHint(true);
-      logger.info("[ChatSidebar] 网络恢复，允许继续聊天");
-
-      openAlertDialog({
-        status: "warning",
-        title: t("chat:status.networkOnline"),
-        description: t("chat:status.networkOnlineDesc"),
-        isDismissable: true,
-      });
-    }
-  }, [
-    activeConversationId,
-    isChatStreaming,
-    isOnline,
-    markConversationAsCompleted,
-    openAlertDialog,
-    releaseLock,
-    resolveConversationId,
-    stop,
-    t,
-    offlineReasonLabel,
-    updateStreamingFlag,
-  ]);
-
-  useEffect(() => {
-    if (!showOnlineRecoveryHint) return;
-
-    const timer = window.setTimeout(() => {
-      setShowOnlineRecoveryHint(false);
-    }, 4800);
-
-    return () => window.clearTimeout(timer);
-  }, [showOnlineRecoveryHint]);
-
-  useEffect(() => {
-    const targetConversationId = activeConversationId;
-    if (!targetConversationId) return;
-    if (isChatStreaming) return;
-
-    const cached = conversationMessages[targetConversationId];
-    if (!cached) return;
-
-    const cachedFingerprints = cached.map(fingerprintMessage);
-    const lastSyncedToUI = lastSyncedToUIRef.current[targetConversationId];
-
-    // 已同步过且内容未变化时直接跳过，避免无意义的 setState 循环
-    if (areFingerprintsEqual(cachedFingerprints, lastSyncedToUI)) {
-      return;
-    }
-
-    // 标记当前更新来自存储，避免反向 useEffect 写回
-    applyingFromStorageRef.current = true;
-
-    setMessagesRef.current?.((current) => {
-      // 再次校验状态与会话，避免切换时覆盖流式消息
-      if (isChatStreaming || activeConversationId !== targetConversationId) {
-        return current;
-      }
-
-      const currentFingerprints = (current as unknown as ChatUIMessage[]).map(
-        fingerprintMessage,
-      );
-
-      const isSame = areFingerprintsEqual(
-        cachedFingerprints,
-        currentFingerprints,
-      );
-
-      if (isSame) {
-        lastSyncedToUIRef.current[targetConversationId] = cachedFingerprints;
-        lastSyncedToStoreRef.current[targetConversationId] = cachedFingerprints;
-        return current;
-      }
-
-      lastSyncedToUIRef.current[targetConversationId] = cachedFingerprints;
-      lastSyncedToStoreRef.current[targetConversationId] = cachedFingerprints;
-
-      return cached as unknown as UseChatMessage[];
-    });
-
-    // 在微任务中清除来源标记，确保后续写回路径正常运行
-    queueMicrotask(() => {
-      applyingFromStorageRef.current = false;
-    });
-  }, [
-    activeConversationId,
-    conversationMessages,
-    isChatStreaming,
-    areFingerprintsEqual,
-  ]);
-
-  useEffect(() => {
-    if (!activeConversationId) return;
-
-    // 存储侧变更已经在上方 useEffect 标记处理中，这里跳过以阻断回环
-    if (applyingFromStorageRef.current) return;
-
-    // 流式阶段阻断写回存储，避免流式消息尚未完成时触发读写循环
-    if (isChatStreaming) return;
-
-    const currentFingerprints = displayMessages.map(fingerprintMessage);
-
-    // 缓存与当前展示相同则无需再次触发同步，避免写-读循环
-    if (
-      areFingerprintsEqual(
-        currentFingerprints,
-        lastSyncedToStoreRef.current[activeConversationId],
-      )
-    ) {
-      return;
-    }
-
-    lastSyncedToStoreRef.current[activeConversationId] = currentFingerprints;
-
-    chatService.syncMessages(activeConversationId, displayMessages, {
-      resolveConversationId,
-    });
-  }, [
-    activeConversationId,
-    chatService,
-    displayMessages,
-    areFingerprintsEqual,
-    isChatStreaming,
-    resolveConversationId,
-    // applyingFromStorageRef 是 ref，不需要添加到依赖数组
-  ]);
-
+  // ========== 错误处理 ==========
   useEffect(() => {
     const message = extractErrorMessage(chatError);
 
@@ -1417,77 +1047,12 @@ export default function ChatSidebar({
   }, [chatError, extractErrorMessage, pushErrorToast, t]);
 
   useEffect(() => {
-    if (!toolError) return;
-    pushErrorToast(toolError.message, t("toasts.chatRequestFailed"));
-  }, [toolError, pushErrorToast, t]);
-
-  useEffect(() => {
-    pageUnloadHandledRef.current = false;
-
-    const handlePageUnload = (
-      _event: BeforeUnloadEvent | PageTransitionEvent,
-    ) => {
-      if (pageUnloadHandledRef.current) return;
-      pageUnloadHandledRef.current = true;
-
-      // 使用状态机获取上下文
-      const ctx = stateMachine.current.getContext();
-      if (!ctx) {
-        // 没有正在进行的流式请求，只需要释放锁
-        releaseLock();
-        return;
-      }
-
-      logger.warn("[ChatSidebar] 页面即将卸载，停止聊天请求", {
-        conversationId: ctx.conversationId,
-      });
-
-      // 1) 立即中断正在进行的流式请求
-      stop();
-
-      // 2) 释放聊天锁，避免遗留占用
-      releaseLock();
-
-      const targetConversationId = activeConversationId ?? ctx.conversationId;
-
-      // 3) 同步标记流式结束，避免卸载时遗留 streaming 状态
-      updateStreamingFlag(targetConversationId, false, { syncOnly: true });
-      void updateStreamingFlag(targetConversationId, false);
-
-      // 4) 刷新待保存队列，确保 debounce 队列立即写入
-      chatService.flushPending(targetConversationId);
-
-      // 5) 清理状态机上下文
-      stateMachine.current.clearContext();
-    };
-
-    window.addEventListener("beforeunload", handlePageUnload);
-    window.addEventListener("pagehide", handlePageUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handlePageUnload);
-      window.removeEventListener("pagehide", handlePageUnload);
-      pageUnloadHandledRef.current = false;
-    };
-  }, [
-    activeConversationId,
-    chatService,
-    releaseLock,
-    stop,
-    updateStreamingFlag,
-  ]);
-
-  useEffect(
-    () => () => {
-      // 组件卸载时清理状态机和释放锁
-      const ctx = stateMachine.current.getContext();
-      if (ctx) {
-        stateMachine.current.clearContext();
-        releaseLock();
-      }
-    },
-    [releaseLock],
-  );
+    if (!toolExecution.toolError) return;
+    pushErrorToast(
+      toolExecution.toolError.message,
+      t("toasts.chatRequestFailed"),
+    );
+  }, [toolExecution.toolError, pushErrorToast, t]);
 
   // ========== 事件处理函数 ==========
 
@@ -1539,16 +1104,8 @@ export default function ChatSidebar({
       return;
     }
 
-    const locked = acquireLock();
-    if (!locked) {
-      showNotice(lockBlockedMessage, "warning");
-      return;
-    }
-
     const targetSessionId = activeConversationId;
     if (!targetSessionId) {
-      // 获取锁失败，释放锁
-      releaseLock();
       showNotice(
         t("chat:messages.conversationNotReady", "对话尚未就绪，请稍后重试。"),
         "warning",
@@ -1556,120 +1113,19 @@ export default function ChatSidebar({
       return;
     }
 
-    // 初始化状态机上下文
-    stateMachine.current.initContext(targetSessionId);
-    const ctx = stateMachine.current.getContext()!;
-    ctx.lockAcquired = true;
-
-    logger.debug("[ChatSidebar] 开始发送消息到会话:", targetSessionId);
-
-    const messageId = generateUUID("msg");
-    const createdAt = Date.now();
-    finishReasonRef.current = null;
-
-    const imageParts = hasReadyAttachments
-      ? await Promise.all(
-          readyAttachments.map((item) =>
-            convertAttachmentItemToImagePart(item, item.id),
-          ),
-        )
-      : [];
-
-    const parts: ChatUIMessage["parts"] = [
-      ...(trimmedInput
-        ? [
-            {
-              type: "text",
-              text: trimmedInput,
-            } as const,
-          ]
-        : []),
-      ...imageParts,
-    ];
-
-    const userMessage: ChatUIMessage = {
-      id: messageId,
-      role: "user",
-      parts,
-      metadata: {
-        createdAt,
-        modelName: llmConfig.modelName,
+    await lifecycle.submitMessage({
+      input: trimmedInput,
+      readyAttachments,
+      llmConfig,
+      resolvedProjectUuid,
+      targetSessionId,
+      clearAttachments: () => {
+        if (hasReadyAttachments) {
+          imageAttachments.clearAll();
+        }
       },
-    };
-
-    setInput("");
-
-    let lockTransferredToStream = false;
-    let storageForRollback: Awaited<ReturnType<typeof getStorage>> | null =
-      null;
-    try {
-      const storage = await getStorage();
-      storageForRollback = storage;
-      await storage.createMessage(
-        convertUIMessageToCreateInput(userMessage, targetSessionId),
-      );
-
-      if (hasReadyAttachments) {
-        await Promise.all(
-          readyAttachments.map((item) =>
-            uploadImageAttachment({
-              storage,
-              attachmentId: item.id,
-              conversationId: targetSessionId,
-              messageId,
-              file: item.file,
-              width: item.width,
-              height: item.height,
-            }),
-          ),
-        );
-      }
-
-      await sendMessage(userMessage as unknown as UseChatMessage, {
-        body: {
-          config: llmConfig,
-          projectUuid: resolvedProjectUuid,
-          conversationId: targetSessionId,
-        },
-      });
-      lockTransferredToStream = true;
-      if (hasReadyAttachments) {
-        imageAttachments.clearAll();
-      }
-      void updateStreamingFlag(targetSessionId, true);
-    } catch (error) {
-      logger.error("[ChatSidebar] 发送消息失败:", error);
-
-      // 使用状态机清理上下文
-      stateMachine.current.clearContext();
-
-      if (storageForRollback) {
-        try {
-          await storageForRollback.deleteMessage(messageId);
-        } catch (deleteError) {
-          logger.warn("[ChatSidebar] 回滚失败：删除消息失败", {
-            messageId,
-            error: deleteError,
-          });
-        }
-      }
-      setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-      setInput(trimmedInput);
-      pushErrorToast(
-        extractErrorMessage(error) ?? t("toasts.unknownError"),
-        t("toasts.chatRequestFailed"),
-      );
-    } finally {
-      if (!lockTransferredToStream) {
-        // 如果锁没有转移到流式响应，清理状态机并释放锁
-        const ctx = stateMachine.current.getContext();
-        if (ctx) {
-          void updateStreamingFlag(ctx.conversationId, false);
-          stateMachine.current.clearContext();
-        }
-        releaseLock();
-      }
-    }
+      setInput,
+    });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1677,81 +1133,9 @@ export default function ChatSidebar({
     await submitMessage();
   };
 
-  /**
-   * 静默停止流式传输（不保存取消消息）
-   * 用于新建对话等场景
-   */
-  const stopStreamingSilently = useCallback(async () => {
-    if (!isChatStreaming) return;
-
-    logger.info("[ChatSidebar] 静默停止流式传输");
-
-    // 使用状态机获取上下文
-    const ctx = stateMachine.current.getContext();
-    const targetConversationId = activeConversationId ?? ctx?.conversationId;
-
-    stop();
-
-    if (targetConversationId) {
-      void updateStreamingFlag(targetConversationId, false);
-    }
-
-    // 清理状态机上下文
-    if (ctx) {
-      stateMachine.current.clearContext();
-    }
-
-    releaseLock();
-  }, [
-    activeConversationId,
-    isChatStreaming,
-    releaseLock,
-    stop,
-    updateStreamingFlag,
-  ]);
-
   const handleCancel = useCallback(async () => {
-    if (!isChatStreaming) return;
-
-    // 使用状态机获取上下文
-    const ctx = stateMachine.current.getContext();
-    if (!ctx) {
-      logger.warn("[ChatSidebar] handleCancel: 没有状态机上下文");
-      return;
-    }
-
-    logger.info("[ChatSidebar] 用户取消聊天", {
-      conversationId: ctx.conversationId,
-    });
-
-    // 中止请求
-    stop();
-
-    try {
-      // 等待工具队列清空（确保工具不会继续执行）
-      logger.info("[ChatSidebar] handleCancel: 等待工具队列清空");
-      await toolQueue.current.drain();
-      logger.info("[ChatSidebar] handleCancel: 工具队列已清空");
-    } catch (error) {
-      logger.warn("[ChatSidebar] handleCancel: 工具队列清空失败", { error });
-    }
-
-    // 释放锁
-    if (ctx.lockAcquired) {
-      releaseLock();
-    }
-
-    // 更新流式状态
-    try {
-      await updateStreamingFlag(ctx.conversationId, false);
-    } catch (error) {
-      logger.error("[ChatSidebar] handleCancel: 更新流式状态失败", { error });
-    }
-
-    // 清理上下文
-    stateMachine.current.clearContext();
-    logger.info("[ChatSidebar] handleCancel: 聊天已取消");
-  }, [isChatStreaming, stop, releaseLock, updateStreamingFlag]);
+    await lifecycle.handleCancel();
+  }, [lifecycle]);
 
   const handleRetry = useCallback(() => {
     if (!lastMessageIsUser) return;
@@ -1800,8 +1184,7 @@ export default function ChatSidebar({
   ]);
 
   const handleNewChat = useCallback(async () => {
-    // 先静默取消正在进行的流式传输
-    await stopStreamingSilently();
+    await lifecycle.stopStreamingSilently();
 
     try {
       const newConv = await createConversation(
@@ -1813,7 +1196,7 @@ export default function ChatSidebar({
       logger.error("[ChatSidebar] 创建新对话失败:", error);
     }
   }, [
-    stopStreamingSilently,
+    lifecycle,
     createConversation,
     currentProjectId,
     setActiveConversationId,
@@ -1837,6 +1220,11 @@ export default function ChatSidebar({
     await handleSessionSelect(sessionId);
     setCurrentView("chat");
   };
+
+  const clearSyncedFingerprints = useCallback((ids: string[]) => {
+    // 这个功能已经被 useChatMessages 内部管理，这里保留空实现以保持接口兼容
+    logger.debug("[ChatSidebar] clearSyncedFingerprints called", { ids });
+  }, []);
 
   const handleBatchDelete = useCallback(
     async (ids: string[]) => {
@@ -1992,18 +1380,7 @@ export default function ChatSidebar({
 
   const modelSelectorDisabled = isChatStreaming || selectorLoading;
 
-  useEffect(
-    () => () => {
-      const streaming = status === "submitted" || status === "streaming";
-      // 使用状态机获取上下文
-      const ctx = stateMachine.current.getContext();
-      const targetConversationId = activeConversationId ?? ctx?.conversationId;
-      if (!streaming || !targetConversationId) return;
-
-      void updateStreamingFlag(targetConversationId, false);
-    },
-    [activeConversationId, status, updateStreamingFlag],
-  );
+  // ========== 渲染 ==========
 
   const alerts = (
     <>

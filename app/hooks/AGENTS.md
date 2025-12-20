@@ -164,7 +164,22 @@
 - **状态与清理**: `handleAbnormalExitIfNeeded`、`removeConversationsFromState`、`markConversationAsStreaming/Completed`
 - **行为**: 内部自动创建默认对话、默认 XML 版本，订阅会话/消息并维护缓存
 
-### 14. useLLMConfig _(新增，2025-12-08)_
+### 14. useChatMessages _(新增，2025-12-19)_
+
+**聊天消息管理 Hook** - 统一管理消息同步（storage ↔ UI）、消息指纹对比与展示过滤。
+
+- **输入**: `activeConversationId`、`chatService`、`isChatStreaming`、`conversationMessages`、`setMessages`、`messages`、`resolveConversationId`
+- **输出**: `displayMessages`（过滤系统消息）、`syncStateMachine`（同步状态机）、`refreshFromStorage`（手动刷新）
+- **核心功能**:
+  - 使用 `MessageSyncStateMachine` 替代 `applyingFromStorageRef`，解决竞态问题
+  - 消息指纹计算和对比，避免无意义的同步循环（`fingerprintMessage`）
+  - 双向同步：storage → UI（存储变化自动加载）、UI → storage（消息变化自动保存）
+  - 流式时自动锁定同步，确保流式消息不被覆盖
+  - 提供清晰的同步方向和生命周期管理
+- **设计亮点**: 状态机管理同步方向，指纹缓存避免重复同步，流式锁定保护数据一致性
+- **使用场景**: ChatSidebar 消息管理逻辑重构，提取为独立 hook
+
+### 15. useLLMConfig _(新增，2025-12-08)_
 
 **LLM 配置聚合 Hook** - 统一加载/切换模型与 Provider，封装重复的配置加载逻辑。
 
@@ -172,7 +187,7 @@
 - **操作**: `loadModelSelector()`、`handleModelChange(modelId)`
 - **特性**: 自动订阅设置变更（provider/model/activeModel）；未配置 provider/model 时返回 `llmConfig=null`，由上层 UI 提示并引导用户先完成模型配置
 
-### 15. useOperationToast _(新增，2025-12-08)_
+### 16. useOperationToast _(新增，2025-12-08)_
 
 **操作提示 Hook** - 统一成功/警告/失败提示与错误消息提取。
 
@@ -180,7 +195,7 @@
 - `showNotice(message, status)` — status: success/warning/danger
 - `extractErrorMessage(error)` — 从 Error/字符串/对象中抽取 message
 
-### 16. useAttachmentObjectUrl _(新增，2025-12-13)_
+### 17. useAttachmentObjectUrl _(新增，2025-12-13)_
 
 **附件 Object URL 生命周期 Hook** - 用于 Milestone 5 图片展示的懒加载与缓存管理。
 
@@ -192,7 +207,107 @@
   - LRU 缓存：最多缓存 50 张图片，超出时淘汰最久未使用且未被引用的条目
   - 跨端读取：Web 端从 IndexedDB Blob 生成 URL；Electron 端通过 `file_path` + `window.electronFS.readFile()` 读取二进制生成 URL
 
-### 17. useIntersection _(新增，2025-12-13)_
+### 18. useChatToolExecution _(新增，2025-12-19)_
+
+**聊天工具执行 Hook** - 统一管理工具执行队列、执行逻辑、错误处理和中止控制。
+
+- **输入**: `frontendTools`（前端工具定义）、`addToolResult`（添加工具结果的回调）
+- **输出**:
+  - `executeToolCall`: 执行单个工具调用
+  - `enqueueToolCall`: 将工具调用添加到队列
+  - `drainQueue`: 等待工具队列清空
+  - `abortCurrentTool`: 中止当前工具
+  - `toolQueue`: 工具队列引用
+  - `currentToolCallId`: 当前执行的工具调用 ID
+  - `toolError`: 工具执行错误状态
+  - `setToolError`: 设置错误状态
+- **核心功能**:
+  - 使用 `DrainableToolQueue` 管理工具串行执行
+  - 工具输入参数自动验证（使用 Zod schema）
+  - 支持工具执行超时和中止（AbortController）
+  - 错误处理统一，包括超时、中止、验证失败等
+  - 提供 `drainQueue` 方法等待所有工具完成（用于 onFinish）
+- **设计亮点**:
+  - 从 ChatSidebar 提取，使工具执行逻辑可复用
+  - 队列模式确保工具串行执行，避免竞态
+  - 与 AI SDK 5.0 兼容（不在 onToolCall 中 await addToolResult）
+- **使用场景**: ChatSidebar 工具执行逻辑重构，提取为独立 hook
+
+### 19. useChatNetworkControl _(新增，2025-12-19)_
+
+**聊天网络控制 Hook** - 统一管理网络状态监听、断开/恢复处理和状态提示。
+
+- **输入**:
+  - `isOnline`: 网络在线状态（来自 useNetworkStatus）
+  - `offlineReasonLabel`: 离线原因标签（用于显示）
+  - `isChatStreaming`: 是否正在流式聊天
+  - `activeConversationId`: 当前活动的会话 ID
+  - `stateMachine`: 聊天运行状态机（ChatRunStateMachine）
+  - `releaseLock`: 聊天锁释放函数
+  - `stop`: 停止流式响应函数（来自 useChat）
+  - `updateStreamingFlag`: 更新会话流式状态标记
+  - `markConversationAsCompleted`: 标记会话为已完成
+  - `resolveConversationId`: 会话 ID 解析函数
+  - `openAlertDialog`: 打开 Alert 对话框
+  - `t`: 国际化翻译函数
+  - `toolQueue`: 工具队列（可选）
+- **输出**:
+  - `showOnlineRecoveryHint`: 是否显示网络恢复提示
+  - `dismissRecoveryHint`: 关闭网络恢复提示
+  - `handleNetworkDisconnect`: 手动触发网络断开处理
+- **核心功能**:
+  - 监听网络状态变化（isOnline）
+  - 网络断开时：停止流式、释放锁、标记对话完成、显示断开提示
+  - 网络恢复时：显示恢复提示（4.8秒后自动隐藏）
+  - 与 ChatRunStateMachine 状态机协调
+  - 使用状态机获取上下文，避免 ref 竞态
+- **设计亮点**:
+  - 从 ChatSidebar 提取网络状态处理逻辑，提高可测试性
+  - 使用状态机进行状态转换而非直接操作 ref
+  - 提供清晰的 API 供外部调用
+  - 自动管理网络恢复提示的显示和隐藏
+- **使用场景**: ChatSidebar 网络状态处理逻辑重构，提取为独立 hook
+
+### 20. useChatLifecycle _(新增，2025-12-19)_
+
+**聊天生命周期管理 Hook** - 统一管理聊天会话生命周期，协调 ChatRunStateMachine 状态转换。
+
+- **输入**:
+  - `stateMachine`: ChatRunStateMachine 引用
+  - `toolQueue`: DrainableToolQueue 引用
+  - `acquireLock`/`releaseLock`: 聊天锁控制
+  - `sendMessage`/`stop`: useChat 的核心方法
+  - `isChatStreaming`: 是否正在流式聊天
+  - `updateStreamingFlag`: 更新会话流式状态
+  - `chatService`: 聊天会话服务实例
+  - `activeConversationId`: 当前活动会话 ID
+  - `setMessages`: useChat 的 setMessages
+  - `finishReasonRef`: 完成原因 ref
+  - `onError`: 错误提示回调
+- **输出**:
+  - `submitMessage`: 提交消息（接收已处理好的参数）
+  - `handleCancel`: 取消当前请求
+  - `stopStreamingSilently`: 静默停止流式传输
+  - `getRunContext`: 获取当前运行上下文
+  - `isSubmitting`: 是否正在提交消息
+- **核心功能**:
+  - 完全使用 ChatRunStateMachine 的 transition() 方法进行状态转换
+  - 管理消息提交流程：锁获取 → 状态机初始化 → 发送消息 → 错误回滚
+  - 管理取消流程：中止请求 → 等待工具队列 → 释放锁 → 清理上下文
+  - 页面卸载处理（beforeunload/pagehide 监听）
+  - 组件卸载清理
+- **状态转换流程**:
+  - 提交：`idle → preparing → streaming → tools-pending → finalizing → idle`
+  - 取消：`streaming/tools-pending → cancelled → idle`
+  - 错误：`* → errored → idle`
+- **设计亮点**:
+  - 从 ChatSidebar 提取生命周期逻辑，使其可复用和可测试
+  - 使用状态机进行状态转换而非直接操作 ref
+  - 提供清晰的 API 供外部调用
+  - 完整的错误处理和回滚机制
+- **使用场景**: ChatSidebar 生命周期逻辑重构，提取为独立 hook
+
+### 21. useIntersection _(新增，2025-12-13)_
 
 **视口交叉观察 Hook** - 为图片/重资源组件提供轻量懒加载触发器（不引入第三方依赖）。
 
@@ -200,13 +315,13 @@
 - **输出**: `{ ref, isInView, hasEverBeenInView }`
   - `ref`: 绑定到需要观察的 DOM 元素
   - `isInView`: 当前是否在视口（或 root 容器）中
-  - `hasEverBeenInView`: 一旦进入过视口即永久为 `true`，便于“首次进入触发加载”的场景
+  - `hasEverBeenInView`: 一旦进入过视口即永久为 `true`，便于"首次进入触发加载"的场景
 - **特性**:
   - `disabled=true` 时视为始终可见（用于测试或强制加载）
   - 缺少 `IntersectionObserver` 的环境自动回退为可见
 - 清理阶段 `disconnect` observer，避免泄漏
 
-### 18. useUpdateChecker _(新增，2025-12-15)_
+### 21. useUpdateChecker _(新增，2025-12-15)_
 
 **更新检查 Hook** - 统一管理更新检查状态（手动检查 + Electron 主进程自动检查事件）。
 
@@ -232,6 +347,10 @@ export { useNetworkStatus } from "./useNetworkStatus";
 export { useVersionPages } from "./useVersionPages";
 export { usePanZoomStage } from "./usePanZoomStage";
 export { useChatSessionsController } from "./useChatSessionsController";
+export { useChatMessages } from "./useChatMessages";
+export { useChatToolExecution } from "./useChatToolExecution";
+export { useChatNetworkControl } from "./useChatNetworkControl";
+export { useChatLifecycle } from "./useChatLifecycle";
 export { useLLMConfig } from "./useLLMConfig";
 export { useOperationToast } from "./useOperationToast";
 export { useAttachmentObjectUrl } from "./useAttachmentObjectUrl";
@@ -261,6 +380,30 @@ export { useDrawioEditor } from "./useDrawioEditor";
 - **类型定义**: 详见 `app/types/AGENTS.md`
 
 ## 代码腐化清理记录
+
+### 2025-12-19 清理（ChatSidebar 生命周期提取）
+
+**执行的操作**：
+
+- 新增 `useChatLifecycle` Hook，提取 ChatSidebar 的核心生命周期逻辑：
+  - 消息提交流程（锁获取、状态机初始化、发送消息、错误回滚）
+  - 取消流程（中止请求、等待工具队列、释放锁）
+  - 页面卸载处理（beforeunload/pagehide 监听）
+  - 组件卸载清理
+- 完全使用 ChatRunStateMachine 的 transition() 方法进行状态转换
+- 提取 `prepareUserMessage` 和 `saveUserMessage` 辅助函数，降低 submitMessage 的认知复杂度
+- 状态转换流程清晰：
+  - 提交：`idle → preparing → streaming → tools-pending → finalizing → idle`
+  - 取消：`streaming/tools-pending → cancelled → idle`
+  - 错误：`* → errored → idle`
+
+**影响文件**：3 个文件（useChatLifecycle.ts、index.ts、AGENTS.md）
+
+**下次关注**：
+
+- ChatSidebar 可以使用此 Hook 替代现有的生命周期逻辑
+- 观察状态机转换是否覆盖所有边界情况
+- 考虑是否需要添加更多生命周期钩子（如 onStateChange）
 
 ### 2025-12-08 清理
 

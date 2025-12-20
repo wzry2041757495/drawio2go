@@ -31,6 +31,7 @@
 - **error-handler.ts**: 通用错误处理工具（AppError + i18n 翻译 + API/Toast 友好消息）
 - **drainable-tool-queue.ts**: 可等待清空的工具执行队列，确保 onFinish 等待所有工具完成后再保存消息和释放锁
 - **chat-run-state-machine.ts**: 聊天运行状态机，统一管理会话生命周期状态，避免 ref 竞态条件
+- **message-sync-state-machine.ts**: 消息同步状态机，统一管理消息同步状态（storage ↔ UI），避免循环同步和竞态条件
 
 ### svg-export-utils.ts
 
@@ -436,6 +437,90 @@ stateMachine.clearContext();
 ```
 
 **用途**：替代 ChatSidebar 中的 `sendingSessionIdRef`，统一管理会话 ID 和生命周期，消除多处清空 ref 导致的竞态问题。
+
+### message-sync-state-machine.ts - 消息同步状态机
+
+状态机管理消息同步状态（storage ↔ UI），避免使用 ref 导致的循环同步和竞态条件。
+
+**状态定义**：
+
+- `idle`: 无同步
+- `storage-to-ui`: 存储 → UI
+- `ui-to-storage`: UI → 存储
+- `locked`: 流式时锁定同步
+
+**状态转换路径**：
+
+```
+idle -[STORAGE_CHANGED]→ storage-to-ui -[SYNC_COMPLETE]→ idle
+idle -[UI_CHANGED]→ ui-to-storage -[SYNC_COMPLETE]→ idle
+* -[STREAM_START]→ locked -[STREAM_END]→ idle
+```
+
+**主要 API**：
+
+```typescript
+class MessageSyncStateMachine {
+  // 获取当前状态
+  getState(): MessageSyncState;
+
+  // 状态转换
+  transition(event: MessageSyncEvent): void;
+
+  // 检查是否可以转换
+  canTransition(event: MessageSyncEvent): boolean;
+
+  // 订阅状态变化
+  subscribe(listener: (state) => void): () => void;
+
+  // 检查是否被锁定（流式中）
+  isLocked(): boolean;
+
+  // 检查是否正在同步
+  isSyncing(): boolean;
+}
+```
+
+**使用示例**：
+
+```typescript
+import { MessageSyncStateMachine } from "@/lib/message-sync-state-machine";
+
+const syncStateMachine = new MessageSyncStateMachine();
+
+// 流式开始，锁定同步
+syncStateMachine.transition("stream-start");
+console.log(syncStateMachine.isLocked()); // true
+
+// 流式结束，解锁
+syncStateMachine.transition("stream-end");
+
+// 存储变更，同步到 UI
+if (syncStateMachine.canTransition("storage-changed")) {
+  syncStateMachine.transition("storage-changed");
+  // ... 执行同步逻辑
+  syncStateMachine.transition("sync-complete");
+}
+
+// UI 变更，同步到存储
+if (
+  !syncStateMachine.isLocked() &&
+  syncStateMachine.canTransition("ui-changed")
+) {
+  syncStateMachine.transition("ui-changed");
+  // ... 执行同步逻辑
+  syncStateMachine.transition("sync-complete");
+}
+```
+
+**用途**：替代 ChatSidebar 中的 `applyingFromStorageRef`，统一管理消息同步方向和状态，防止循环同步（storage → UI → storage）和流式时的干扰。
+
+**核心优势**：
+
+- **防止循环同步**: 明确同步方向，避免 storage 和 UI 之间的无限循环
+- **流式保护**: 流式期间自动锁定同步，避免干扰正在进行的消息流
+- **状态可见**: 通过状态机清晰展示当前同步状态，便于调试和监控
+- **类型安全**: 所有状态转换都有类型检查，防止非法转换
 
 ## 工具链工作流
 

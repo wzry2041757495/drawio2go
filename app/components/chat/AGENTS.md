@@ -104,6 +104,53 @@ ChatInputArea（输入组件）
 
 ## 代码腐化清理记录
 
+### 2025-12-19 清理（架构重构）
+
+**执行的操作**：
+
+- **ChatSidebar 架构重构**：完全基于状态机和新 hooks 重写 ChatSidebar.tsx
+  - 从 2117 行减少到 1402 行，减少 715 行（约 33.8%）
+  - 引入 4 个新 hooks：`useChatMessages`、`useChatToolExecution`、`useChatNetworkControl`、`useChatLifecycle`
+  - 完全使用 `MessageSyncStateMachine` 和 `ChatRunStateMachine` 进行状态管理
+  - 移除内联的消息同步逻辑，改用 `useChatMessages` hook
+  - 移除内联的工具执行逻辑，改用 `useChatToolExecution` hook
+  - 移除内联的网络状态处理逻辑，改用 `useChatNetworkControl` hook
+  - 移除内联的生命周期管理逻辑，改用 `useChatLifecycle` hook
+  - 使用状态机的 `transition()` 方法替代所有直接的 ref 操作
+  - 减少 useEffect 数量，提高代码可维护性
+  - 保留的逻辑：useChat hook 配置、图片缓存、推理时长计算、UI 状态、对话历史管理
+
+**架构改进**：
+
+1. **消息同步**：使用 `MessageSyncStateMachine` 管理 storage ↔ UI 的双向同步
+   - 避免循环同步问题
+   - 流式时自动锁定同步
+   - 使用消息指纹对比避免重复同步
+
+2. **工具执行**：使用 `DrainableToolQueue` 确保工具串行执行
+   - 提供 `drainQueue` 方法等待所有工具完成
+   - 支持工具执行超时和中止
+   - 统一的错误处理
+
+3. **网络控制**：监听网络状态变化并自动处理
+   - 网络断开时停止流式、释放锁、标记对话完成
+   - 网络恢复时显示提示
+   - 自动管理恢复提示的显示和隐藏
+
+4. **生命周期管理**：统一管理聊天生命周期
+   - 消息提交流程（锁获取、状态机初始化、发送消息、错误回滚）
+   - 取消流程（中止请求、等待工具队列、释放锁）
+   - 页面卸载处理（beforeunload/pagehide 监听）
+   - 组件卸载清理
+
+**影响文件**：1 个主文件（ChatSidebar.tsx）+ 4 个新 hooks
+
+**下次关注**：
+
+- 观察新架构在生产环境中的稳定性
+- 监控状态机状态转换是否有遗漏的边界情况
+- 考虑是否需要进一步提取其他可复用的逻辑到 hooks
+
 ### 2025-12-08 清理
 
 **执行的操作**：
