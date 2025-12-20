@@ -6,7 +6,7 @@
 
 ## 状态
 
-⏳ 待开始
+✅ 已完成 (2025-12-20)
 
 ## 预计时间
 
@@ -24,39 +24,39 @@ electron/mcp/
 
 ### 1.1 端口分配工具 (`mcp-port-utils.js`)
 
-- [ ] `isPortAvailable(port)` - 检测端口是否可用
-- [ ] `findAvailablePort(start, end)` - 查找范围内可用端口
-- [ ] `getRandomAvailablePort(8000, 9000)` - 随机分配端口
-- [ ] 使用 Node.js `net` 模块实现
+- [x] `isPortAvailable(port)` - 检测端口是否可用
+- [x] `findAvailablePort(start, end)` - 查找范围内可用端口
+- [x] `getRandomAvailablePort(8000, 9000)` - 随机分配端口
+- [x] 使用 Node.js `net` 模块实现
 
 ### 1.2 MCP 服务器核心 (`mcp-server.js`)
 
 基于 `@modelcontextprotocol/sdk` 实现：
 
-- [ ] 导入 SDK 模块
+- [x] 导入 SDK 模块
   ```javascript
   const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
   const {
     StreamableHTTPServerTransport,
   } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
   ```
-- [ ] 创建 `McpServer` 实例
+- [x] 创建 `McpServer` 实例
   ```javascript
   const server = new McpServer({
     name: "drawio2go",
     version: "1.0.0",
   });
   ```
-- [ ] 注册 3 个 DrawIO 工具
-  - [ ] `drawio_read` - 读取当前图表 XML
-  - [ ] `drawio_edit_batch` - 批量编辑图表
-  - [ ] `drawio_overwrite` - 覆盖整个图表
-- [ ] 工具定义使用 zod schema 进行参数验证
-- [ ] 创建 HTTP 服务器并绑定 `StreamableHTTPServerTransport`
-- [ ] 实现 `start(host, port)` - 启动服务器
-- [ ] 实现 `stop()` - 停止服务器
-- [ ] 实现 `getStatus()` - 获取服务器状态
-- [ ] 设置工具执行回调（通过 IPC 桥接到渲染进程）
+- [x] 注册 3 个 DrawIO 工具
+  - [x] `drawio_read` - 读取当前图表 XML
+  - [x] `drawio_edit_batch` - 批量编辑图表
+  - [x] `drawio_overwrite` - 覆盖整个图表
+- [x] 工具定义使用 zod schema 进行参数验证
+- [x] 创建 HTTP 服务器并绑定 `StreamableHTTPServerTransport`
+- [x] 实现 `start(host, port)` - 启动服务器
+- [x] 实现 `stop()` - 停止服务器
+- [x] 实现 `getStatus()` - 获取服务器状态
+- [x] 设置工具执行回调（通过 IPC 桥接到渲染进程）
 
 ### 1.3 工具定义示例
 
@@ -113,16 +113,19 @@ server.tool(
 
 ```json
 {
-  "@modelcontextprotocol/sdk": "^1.x.x",
-  "zod": "^3.25.0"
+  "@modelcontextprotocol/sdk": "^1.25.1",
+  "zod": "^4.1.13",
+  "express": "^5.2.1"
 }
 ```
 
 **安装命令**：
 
 ```bash
-npm add @modelcontextprotocol/sdk zod
+npm add @modelcontextprotocol/sdk express
 ```
+
+> 注意：`zod` 项目已有，无需额外安装
 
 ## SDK 核心概念
 
@@ -174,12 +177,12 @@ Streamable HTTP 传输层，特点：
 
 ## 验收标准
 
-- [ ] 服务器能在指定端口正常启动
-- [ ] 端口冲突时能自动选择下一个可用端口
-- [ ] `initialize` 请求返回正确的服务器信息
-- [ ] `tools/list` 返回 3 个 DrawIO 工具定义
-- [ ] 工具参数使用 zod schema 验证
-- [ ] 优雅关闭不会残留进程
+- [x] 服务器能在指定端口正常启动
+- [x] 端口冲突时能自动选择下一个可用端口
+- [x] `initialize` 请求返回正确的服务器信息
+- [x] `tools/list` 返回 3 个 DrawIO 工具定义
+- [x] 工具参数使用 zod schema 验证
+- [x] 优雅关闭不会残留进程
 
 ## 参考资源
 
