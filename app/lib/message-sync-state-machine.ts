@@ -37,6 +37,15 @@ export type MessageSyncEvent =
   | "stream-end"; // 流式结束
 
 /**
+ * 状态变化上下文
+ */
+export type MessageSyncTransitionContext = {
+  from: MessageSyncState;
+  to: MessageSyncState;
+  event: MessageSyncEvent;
+};
+
+/**
  * 状态转换表
  *
  * 定义所有合法的状态转换
@@ -91,7 +100,9 @@ const STATE_TRANSITIONS: Record<
  */
 export class MessageSyncStateMachine {
   private state: MessageSyncState = "idle";
-  private listeners: Array<(state: MessageSyncState) => void> = [];
+  private listeners: Array<
+    (state: MessageSyncState, context: MessageSyncTransitionContext) => void
+  > = [];
 
   /**
    * 获取当前状态
@@ -144,7 +155,7 @@ export class MessageSyncStateMachine {
     });
 
     this.state = nextState;
-    this.notifyListeners();
+    this.notifyListeners({ from: currentState, to: nextState, event });
   }
 
   /**
@@ -161,7 +172,12 @@ export class MessageSyncStateMachine {
    * // 取消订阅
    * unsubscribe();
    */
-  subscribe(listener: (state: MessageSyncState) => void): () => void {
+  subscribe(
+    listener: (
+      state: MessageSyncState,
+      context: MessageSyncTransitionContext,
+    ) => void,
+  ): () => void {
     this.listeners.push(listener);
     logger.debug("Listener subscribed", {
       listenerCount: this.listeners.length,
@@ -178,17 +194,18 @@ export class MessageSyncStateMachine {
   /**
    * 通知所有监听者
    */
-  private notifyListeners(): void {
+  private notifyListeners(context: MessageSyncTransitionContext): void {
     if (this.listeners.length === 0) return;
 
     logger.debug("Notifying listeners", {
       listenerCount: this.listeners.length,
       state: this.state,
+      context,
     });
 
     this.listeners.forEach((listener) => {
       try {
-        listener(this.state);
+        listener(this.state, context);
       } catch (error) {
         logger.error("Listener error", { error });
       }

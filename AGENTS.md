@@ -245,6 +245,7 @@ Accordion, Alert, Avatar, Button, Card, Checkbox, CheckboxGroup, Chip, CloseButt
 ### 6. 检查测试
 
 - 务必主动调用`npm run lint`获得语法错误检查信息，避免在编译时才处理语法错误
+- Vitest / Vite 测试环境中如需引用 Node 内置模块，优先使用 `node:` 前缀（如 `node:buffer`），避免被浏览器 polyfill 误替换
 
 ## 代码腐化清理记录
 

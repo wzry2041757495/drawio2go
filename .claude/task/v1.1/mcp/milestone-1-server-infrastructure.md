@@ -121,7 +121,7 @@ server.tool(
 **安装命令**：
 
 ```bash
-pnpm add @modelcontextprotocol/sdk zod
+npm add @modelcontextprotocol/sdk zod
 ```
 
 ## SDK 核心概念

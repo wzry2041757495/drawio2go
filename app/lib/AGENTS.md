@@ -317,10 +317,11 @@ logger.error("save:failed", err);
 **核心功能**：
 
 - 串行执行工具任务，保持执行顺序
-- 提供 `drain()` 方法阻塞等待所有任务完成
+- 提供 `drain()` 方法等待队列清空（**快照语义**：只等待调用时已入队的任务）
 - 支持多个调用者同时等待队列清空
 - 单个任务失败不影响队列继续执行
 - 带超时保护（默认 60 秒），防止永久阻塞
+- 支持 `cancel()` 丢弃未开始的任务（取消/断网等场景无需等待）
 
 **主要 API**：
 
@@ -329,8 +330,11 @@ class DrainableToolQueue {
   // 添加工具任务到队列
   enqueue(task: () => Promise<void>): void;
 
-  // 等待队列清空（核心功能）
+  // 等待队列清空（快照语义：只等待调用时已入队的任务）
   async drain(timeout?: number): Promise<void>;
+
+  // 丢弃未开始的任务（不影响正在执行中的任务）
+  cancel(): number;
 
   // 获取待执行任务数
   getPendingCount(): number;
@@ -354,6 +358,10 @@ await toolQueue.drain();
 ```
 
 **用途**：在 ChatSidebar 的 onFinish 回调中，等待所有工具执行完成后再保存消息和释放锁，解决工具队列与 onFinish 不同步的问题。
+
+**单元测试**：
+
+- `app/lib/__tests__/drainable-tool-queue.test.ts`
 
 ### chat-run-state-machine.ts - 聊天状态机
 
@@ -436,6 +444,10 @@ stateMachine.transition("lock-acquired");
 stateMachine.clearContext();
 ```
 
+**单元测试**：
+
+- `app/lib/__tests__/chat-run-state-machine.test.ts`
+
 **用途**：替代 ChatSidebar 中的 `sendingSessionIdRef`，统一管理会话 ID 和生命周期，消除多处清空 ref 导致的竞态问题。
 
 ### message-sync-state-machine.ts - 消息同步状态机
@@ -471,7 +483,9 @@ class MessageSyncStateMachine {
   canTransition(event: MessageSyncEvent): boolean;
 
   // 订阅状态变化
-  subscribe(listener: (state) => void): () => void;
+  subscribe(
+    listener: (state, context: { from: MessageSyncState; to: MessageSyncState; event: MessageSyncEvent }) => void,
+  ): () => void;
 
   // 检查是否被锁定（流式中）
   isLocked(): boolean;
@@ -512,6 +526,10 @@ if (
   syncStateMachine.transition("sync-complete");
 }
 ```
+
+**单元测试**：
+
+- `app/lib/__tests__/message-sync-state-machine.test.ts`
 
 **用途**：替代 ChatSidebar 中的 `applyingFromStorageRef`，统一管理消息同步方向和状态，防止循环同步（storage → UI → storage）和流式时的干扰。
 
