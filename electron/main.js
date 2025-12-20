@@ -1,11 +1,14 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const { safeStorage } = require("electron");
+const { randomUUID } = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const { fork } = require("child_process");
 const net = require("net");
 const SQLiteManager = require("./storage/sqlite-manager");
+const mcpServer = require("./mcp/mcp-server");
+const { getRandomAvailablePort } = require("./mcp/mcp-port-utils");
 
 let mainWindow;
 let storageManager = null;
@@ -108,6 +111,14 @@ async function gracefulServerShutdown(trigger) {
 
 async function gracefulAppShutdown(trigger) {
   await gracefulServerShutdown(trigger);
+
+  // 关闭 MCP 服务器
+  try {
+    await mcpServer.stop();
+    console.log("[Electron] MCP 服务器已关闭");
+  } catch (error) {
+    console.error("[Electron] 关闭 MCP 服务器失败：", error);
+  }
 
   if (storageManager) {
     try {
@@ -371,6 +382,42 @@ function createWindow() {
   });
 }
 
+/**
+ * 初始化 MCP 工具执行桥接
+ * 通过 IPC 将工具调用转发到渲染进程执行
+ */
+function initMcpToolBridge() {
+  mcpServer.setToolExecutor(async (toolName, args) => {
+    return new Promise((resolve, reject) => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        reject(new Error("Main window not available"));
+        return;
+      }
+
+      const requestId = randomUUID();
+      const timeout = setTimeout(() => {
+        ipcMain.removeAllListeners(`mcp-tool-response-${requestId}`);
+        reject(new Error("Tool execution timeout (30s)"));
+      }, 30000);
+
+      ipcMain.once(`mcp-tool-response-${requestId}`, (_event, result) => {
+        clearTimeout(timeout);
+        if (result.success) {
+          resolve(result.data);
+        } else {
+          reject(new Error(result.error || "Tool execution failed"));
+        }
+      });
+
+      mainWindow.webContents.send("mcp-tool-request", {
+        requestId,
+        toolName,
+        args,
+      });
+    });
+  });
+}
+
 app.whenReady().then(async () => {
   try {
     try {
@@ -395,6 +442,9 @@ app.whenReady().then(async () => {
 
     // 创建窗口
     createWindow();
+
+    // 初始化 MCP 工具桥接
+    initMcpToolBridge();
   } catch (error) {
     console.error("[Electron] 启动失败:", error);
     dialog.showErrorBox("启动失败", `无法启动应用服务器: ${error.message}`);
@@ -1177,3 +1227,48 @@ ipcMain.handle(
     return storageManager.getAttachmentsByConversation(conversationId);
   },
 );
+
+// ==================== MCP IPC Handlers ====================
+
+// 启动 MCP 服务器
+ipcMain.handle("mcp:start", async (_event, config) => {
+  const { host, port } = config || {};
+
+  if (!host || typeof host !== "string") {
+    throw new Error("Invalid host");
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("Invalid port");
+  }
+
+  // 检查是否已在运行
+  const status = mcpServer.getStatus();
+  if (status.running) {
+    throw new Error("MCP server is already running");
+  }
+
+  await mcpServer.start(host, port);
+  const newStatus = mcpServer.getStatus();
+  return { success: true, host: newStatus.host, port: newStatus.port };
+});
+
+// 停止 MCP 服务器
+ipcMain.handle("mcp:stop", async () => {
+  const status = mcpServer.getStatus();
+  if (!status.running) {
+    return { success: true, message: "Server was not running" };
+  }
+
+  await mcpServer.stop();
+  return { success: true };
+});
+
+// 查询 MCP 服务器状态
+ipcMain.handle("mcp:status", async () => {
+  return mcpServer.getStatus();
+});
+
+// 获取随机可用端口
+ipcMain.handle("mcp:getRandomPort", async () => {
+  return getRandomAvailablePort(8000, 9000);
+});

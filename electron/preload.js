@@ -170,3 +170,47 @@ const electronStorageApi = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("electronStorage", electronStorageApi);
+
+// ==================== MCP API ====================
+// MCP 服务器控制接口（仅 Electron 环境可用）
+
+const electronMcpApi = Object.freeze({
+  // 启动 MCP 服务器
+  // @param {{ host: string, port: number }} config
+  // @returns {Promise<{ success: boolean, host: string, port: number }>}
+  start: (config) => ipcRenderer.invoke("mcp:start", config),
+
+  // 停止 MCP 服务器
+  // @returns {Promise<{ success: boolean, message?: string }>}
+  stop: () => ipcRenderer.invoke("mcp:stop"),
+
+  // 查询服务器状态
+  // @returns {Promise<{ running: boolean, host?: string, port?: number }>}
+  getStatus: () => ipcRenderer.invoke("mcp:status"),
+
+  // 获取随机可用端口（8000-9000）
+  // @returns {Promise<number>}
+  getRandomPort: () => ipcRenderer.invoke("mcp:getRandomPort"),
+
+  // 监听工具调用请求（渲染进程需要注册此监听器来处理工具调用）
+  // @param {(request: { requestId: string, toolName: string, args: object }) => void} callback
+  // @returns {() => void} 取消监听的函数
+  onToolRequest: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, request) => callback(request);
+    ipcRenderer.on("mcp-tool-request", listener);
+    return () => ipcRenderer.removeListener("mcp-tool-request", listener);
+  },
+
+  // 发送工具执行结果
+  // @param {string} requestId
+  // @param {{ success: boolean, data?: any, error?: string }} result
+  sendToolResponse: (requestId, result) => {
+    ipcRenderer.send(`mcp-tool-response-${requestId}`, result);
+  },
+});
+
+contextBridge.exposeInMainWorld("electronMcp", electronMcpApi);

@@ -89,7 +89,9 @@ let executeInRenderer = async (_toolName, _args) => {
  */
 function setToolExecutor(executor) {
   if (typeof executor !== "function") {
-    throw new TypeError("setToolExecutor(executor): executor must be a function");
+    throw new TypeError(
+      "setToolExecutor(executor): executor must be a function",
+    );
   }
   executeInRenderer = executor;
 }
@@ -140,7 +142,9 @@ function isInitializeBody(body) {
   } else if (body) {
     items = [body];
   }
-  return items.some((msg) => msg && typeof msg === "object" && msg.method === "initialize");
+  return items.some(
+    (msg) => msg && typeof msg === "object" && msg.method === "initialize",
+  );
 }
 
 /**
@@ -274,7 +278,11 @@ function registerDrawioTools(server) {
         let xml;
         if (typeof result === "string") {
           xml = result;
-        } else if (result && typeof result === "object" && typeof result.xml === "string") {
+        } else if (
+          result &&
+          typeof result === "object" &&
+          typeof result.xml === "string"
+        ) {
           xml = result.xml;
         } else {
           xml = JSON.stringify(result ?? "");
@@ -456,7 +464,12 @@ async function start(host, port) {
     try {
       const transport = getTransportFromRequest(req);
       if (!transport) {
-        sendJsonRpcError(res, 400, -32000, "Bad Request: Mcp-Session-Id header is required");
+        sendJsonRpcError(
+          res,
+          400,
+          -32000,
+          "Bad Request: Mcp-Session-Id header is required",
+        );
         return;
       }
       await transport.handleRequest(req, res);
@@ -470,7 +483,12 @@ async function start(host, port) {
     try {
       const transport = getTransportFromRequest(req);
       if (!transport) {
-        sendJsonRpcError(res, 400, -32000, "Bad Request: Mcp-Session-Id header is required");
+        sendJsonRpcError(
+          res,
+          400,
+          -32000,
+          "Bad Request: Mcp-Session-Id header is required",
+        );
         return;
       }
       await transport.handleRequest(req, res);
