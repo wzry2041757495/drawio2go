@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ReactNode,
   type FormEvent,
   useCallback,
   useEffect,
@@ -11,6 +12,7 @@ import {
   Alert,
   Button,
   CloseButton,
+  Dropdown,
   Description,
   FieldError,
   Input,
@@ -21,42 +23,44 @@ import {
   Surface,
   TextField,
 } from "@heroui/react";
-import {
-  Dialog as AriaDialog,
-  Modal as AriaModal,
-  ModalOverlay,
-} from "react-aria-components";
 
 import type { McpConfig, McpHost } from "@/app/types/mcp";
 import { useOperationToast } from "@/app/hooks/useOperationToast";
 
 /**
- * MCP 配置对话框 Props
+ * MCP 配置弹窗（Popover/Dropdown）Props
  */
 export interface McpConfigDialogProps {
   /**
-   * 是否打开对话框。
+   * 是否打开弹窗（受控）。
    */
   isOpen: boolean;
 
   /**
-   * 关闭回调。
+   * 打开状态变化（受控）。
    */
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 
   /**
    * 确认回调（提交配置并启动 MCP）。
    */
   onConfirm: (config: McpConfig) => Promise<void>;
+
+  /**
+   * 触发器（由父组件提供）。
+   */
+  trigger: ReactNode;
 }
 
 type FormErrors = {
   port?: string;
-  general?: string;
 };
+
+type PortMode = "manual" | "random";
 
 const DEFAULT_HOST: McpHost = "127.0.0.1";
 const DEFAULT_PORT = 8000;
+const DEFAULT_PORT_MODE: PortMode = "manual";
 
 const isElectronEnv = (): boolean =>
   typeof window !== "undefined" && typeof window.electronMcp !== "undefined";
@@ -73,21 +77,23 @@ const validatePort = (raw: string): string | null => {
 };
 
 /**
- * MCP 配置对话框
+ * MCP 配置弹窗（Popover/Dropdown）
  *
- * - 使用 React Aria 的 `ModalOverlay` + `Modal` 作为可访问性基础
- * - 使用 HeroUI 的 `Surface` 作为内容容器
+ * - 使用 HeroUI v3 的 `Dropdown` 在侧边栏内弹出（非 Modal）
+ * - 使用 HeroUI 的 `Surface` 作为内容容器（现代扁平化）
  * - Web 环境显示“仅支持 APP 端”提示
  */
 export function McpConfigDialog({
   isOpen,
-  onClose,
+  onOpenChange,
   onConfirm,
+  trigger,
 }: McpConfigDialogProps) {
   const { pushErrorToast, extractErrorMessage } = useOperationToast();
 
   const [host, setHost] = useState<McpHost>(DEFAULT_HOST);
   const [port, setPort] = useState<string>(String(DEFAULT_PORT));
+  const [portMode, setPortMode] = useState<PortMode>(DEFAULT_PORT_MODE);
   const [errors, setErrors] = useState<FormErrors>({});
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,9 +103,15 @@ export function McpConfigDialog({
 
   const isBusy = isSubmitting || isPickingPort;
 
+  const handleRequestClose = useCallback(() => {
+    if (isSubmitting) return;
+    onOpenChange(false);
+  }, [isSubmitting, onOpenChange]);
+
   const resetState = useCallback(() => {
     setHost(DEFAULT_HOST);
     setPort(String(DEFAULT_PORT));
+    setPortMode(DEFAULT_PORT_MODE);
     setErrors({});
     setIsSubmitting(false);
     setIsPickingPort(false);
@@ -142,6 +154,18 @@ export function McpConfigDialog({
     }
   }, [extractErrorMessage, handlePortChange, isBusy, pushErrorToast]);
 
+  const handlePortModeChange = useCallback(
+    (value: string) => {
+      const nextMode = value === "random" ? "random" : "manual";
+      setPortMode(nextMode);
+
+      if (nextMode === "random") {
+        void handlePickRandomPort();
+      }
+    },
+    [handlePickRandomPort],
+  );
+
   const isFormValid = useMemo(() => {
     if (!canUseMcp) return false;
     return validatePort(port) === null;
@@ -159,18 +183,21 @@ export function McpConfigDialog({
 
     const config: McpConfig = { host, port: Number(port) };
 
-    setIsSubmitting(true);
     setErrors({});
-    try {
-      await onConfirm(config);
-      onClose();
-    } catch (error) {
-      const message = extractErrorMessage(error) ?? "未知错误";
-      setErrors({ general: message });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [canUseMcp, extractErrorMessage, host, isBusy, onClose, onConfirm, port]);
+    onOpenChange(false);
+    setIsSubmitting(true);
+
+    // 延迟执行异步操作，避免关闭动画被阻塞
+    setTimeout(async () => {
+      try {
+        await onConfirm(config);
+      } catch {
+        // 弹窗已关闭：错误不在表单内展示，由 onConfirm 内部 Toast 负责提示
+      } finally {
+        setIsSubmitting(false);
+      }
+    }, 150);
+  }, [canUseMcp, host, isBusy, onConfirm, onOpenChange, port]);
 
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -181,25 +208,30 @@ export function McpConfigDialog({
   );
 
   return (
-    <ModalOverlay
+    <Dropdown
       isOpen={isOpen}
-      isDismissable={!isSubmitting}
-      isKeyboardDismissDisabled={isSubmitting}
       onOpenChange={(open: boolean) => {
-        if (!open) onClose();
+        if (!open && isSubmitting) return;
+        onOpenChange(open);
       }}
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
     >
-      <AriaModal className="w-full max-w-lg px-4">
-        <Surface className="w-full rounded-2xl bg-content1 p-4 shadow-2xl outline-none">
-          <AriaDialog aria-label="MCP 配置" className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">
+      {trigger}
+      <Dropdown.Popover
+        placement="top end"
+        className="z-[80] min-w-[320px] max-w-[420px] p-0"
+      >
+        <Surface className="w-full rounded-[var(--radius-lg)] bg-content1 p-4 shadow-[var(--shadow-4)] outline-none">
+          <div
+            aria-label="MCP 配置"
+            className="flex max-h-[70vh] flex-col gap-4 overflow-auto"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-foreground">
                 MCP 配置
               </h2>
               <CloseButton
                 aria-label="关闭"
-                onPress={onClose}
+                onPress={handleRequestClose}
                 isDisabled={isSubmitting}
               />
             </div>
@@ -249,12 +281,46 @@ export function McpConfigDialog({
                   <Alert.Title>安全提示</Alert.Title>
                   <Alert.Description>
                     绑定到 0.0.0.0 会让同一局域网内设备可访问 MCP
-                    接口，请确保网络可信， 并避免在公共 Wi‑Fi 下开启。
+                    接口，请确保网络可信，并避免在公共 Wi‑Fi 下开启。
                   </Alert.Description>
                 </Alert>
               ) : null}
 
-              <TextField isRequired isInvalid={Boolean(errors.port)}>
+              <RadioGroup
+                value={portMode}
+                orientation="horizontal"
+                onChange={handlePortModeChange}
+                isDisabled={!canUseMcp || isBusy}
+              >
+                <Label>端口模式</Label>
+                <Description className="mt-2">
+                  选择“随机端口”会自动选择 8000-9000 范围内的可用端口。
+                </Description>
+
+                <Radio value="manual">
+                  <Radio.Content>
+                    <Label>指定</Label>
+                    <Description className="text-xs text-default-500">
+                      手动输入端口
+                    </Description>
+                  </Radio.Content>
+                </Radio>
+
+                <Radio value="random">
+                  <Radio.Content>
+                    <Label>随机</Label>
+                    <Description className="text-xs text-default-500">
+                      自动选择可用端口
+                    </Description>
+                  </Radio.Content>
+                </Radio>
+              </RadioGroup>
+
+              <TextField
+                isRequired
+                isInvalid={Boolean(errors.port)}
+                isDisabled={!canUseMcp || isBusy}
+              >
                 <Label>端口</Label>
                 <div className="mt-2 flex items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -266,8 +332,8 @@ export function McpConfigDialog({
                       inputMode="numeric"
                       value={port}
                       onChange={(event) => handlePortChange(event.target.value)}
-                      disabled={!canUseMcp || isBusy}
                       aria-label="端口"
+                      disabled={portMode === "random"}
                     />
                   </div>
                   <Button
@@ -277,22 +343,18 @@ export function McpConfigDialog({
                     onPress={handlePickRandomPort}
                     isDisabled={!canUseMcp || isBusy}
                   >
-                    随机端口
+                    {portMode === "random" ? "重新生成" : "随机端口"}
                   </Button>
                 </div>
                 <Description>范围 8000-9000</Description>
                 {errors.port ? <FieldError>{errors.port}</FieldError> : null}
               </TextField>
 
-              {errors.general ? (
-                <FieldError className="text-sm">{errors.general}</FieldError>
-              ) : null}
-
               <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="tertiary"
-                  onPress={onClose}
+                  onPress={handleRequestClose}
                   isDisabled={isBusy}
                 >
                   取消
@@ -313,9 +375,9 @@ export function McpConfigDialog({
                 </Button>
               </div>
             </form>
-          </AriaDialog>
+          </div>
         </Surface>
-      </AriaModal>
-    </ModalOverlay>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }

@@ -2,6 +2,7 @@
 
 import type { Key } from "react";
 import { useCallback, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Button,
   Description,
@@ -11,12 +12,7 @@ import {
   Surface,
 } from "@heroui/react";
 import { XCircle } from "lucide-react";
-import {
-  Dialog as AriaDialog,
-  Modal as AriaModal,
-  ModalOverlay,
-  type Selection,
-} from "react-aria-components";
+import { Dialog as AriaDialog, type Selection } from "react-aria-components";
 
 import type { McpClientType } from "@/app/types/mcp";
 import { extractSingleKey, normalizeSelection } from "@/app/lib/select-utils";
@@ -30,6 +26,13 @@ export interface McpExposureOverlayProps {
    * 是否打开。
    */
   isOpen: boolean;
+
+  /**
+   * 将 Overlay Portal 到指定容器，而不是默认的 document.body。
+   *
+   * - 用于实现“局部遮罩”（仅覆盖 ChatSidebar 区域）
+   */
+  portalContainer?: Element | null;
 
   /**
    * MCP Server 监听地址。
@@ -58,11 +61,12 @@ const CLIENT_OPTIONS: Array<{ id: McpClientType; label: string }> = [
 /**
  * MCP 全屏暴露界面
  *
- * - 使用 React Aria `ModalOverlay` + `Modal` 实现全屏不可关闭遮罩
+ * - 使用普通 div + createPortal 实现“局部遮罩”（仅覆盖 ChatSidebar 区域），避免触发全局 inert/focus trap
  * - 提供客户端选择器与配置示例（McpConfigDisplay）
  */
 export function McpExposureOverlay({
   isOpen,
+  portalContainer,
   host,
   port,
   onStop,
@@ -83,17 +87,23 @@ export function McpExposureOverlay({
     [],
   );
 
-  return (
-    <ModalOverlay
-      isOpen={isOpen}
-      isDismissable={false}
-      isKeyboardDismissDisabled
-      onOpenChange={() => {
-        // 不允许通过遮罩/ESC 关闭；仅由外部 isOpen 控制
+  if (!isOpen) return null;
+  const resolvedPortalContainer =
+    portalContainer ?? (typeof document !== "undefined" ? document.body : null);
+  if (!resolvedPortalContainer) return null;
+
+  return createPortal(
+    <div
+      className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={(event) => {
+        // 避免点击遮罩层时触发 ChatSidebar 外层的点击逻辑（例如某些容器的点击透传）。
+        event.stopPropagation();
       }}
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 px-4"
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
     >
-      <AriaModal className="w-full max-w-3xl">
+      <div className="w-full max-w-3xl">
         <Surface className="w-full rounded-2xl bg-content1 p-5 shadow-2xl outline-none">
           <AriaDialog
             aria-label="MCP 接口已暴露"
@@ -172,7 +182,8 @@ export function McpExposureOverlay({
             </div>
           </AriaDialog>
         </Surface>
-      </AriaModal>
-    </ModalOverlay>
+      </div>
+    </div>,
+    resolvedPortalContainer,
   );
 }

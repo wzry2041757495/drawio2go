@@ -44,7 +44,7 @@ import { DrainableToolQueue } from "@/app/lib/drainable-tool-queue";
 import { ChatRunStateMachine } from "@/app/lib/chat-run-state-machine";
 import { withTimeout } from "@/app/lib/utils";
 import type { McpConfig, McpToolRequest } from "@/app/types/mcp";
-import { McpConfigDialog, McpExposureOverlay } from "@/app/components/mcp";
+import { McpExposureOverlay } from "@/app/components/mcp";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { fileToDataUrl } from "@/lib/image-message-utils";
 
@@ -214,7 +214,11 @@ export default function ChatSidebar({
     Record<string, boolean>
   >({});
   const [currentView, setCurrentView] = useState<"chat" | "history">("chat");
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [isMcpConfigOpen, setIsMcpConfigOpen] = useState(false);
+  const mcpOverlayContainerRef = useRef<HTMLDivElement | null>(null);
+  const [mcpOverlayPortalContainer, setMcpOverlayPortalContainer] =
+    useState<Element | null>(null);
+  const chatShellContainerRef = useRef<HTMLDivElement | null>(null);
 
   // ========== Hooks 聚合 ==========
   const { t, i18n } = useI18n();
@@ -246,14 +250,39 @@ export default function ChatSidebar({
     useChatLock(resolvedProjectUuid);
   const { isOnline, offlineReason } = useNetworkStatus();
 
-  const handleOpenMcpConfigDialog = useCallback(() => {
-    if (mcpServer.running) return;
-    setConfigDialogOpen(true);
-  }, [mcpServer.running]);
-
-  const handleCloseMcpConfigDialog = useCallback(() => {
-    setConfigDialogOpen(false);
+  useEffect(() => {
+    setMcpOverlayPortalContainer(mcpOverlayContainerRef.current);
   }, []);
+
+  const isMcpExposureOverlayOpen =
+    isOpen &&
+    Boolean(mcpOverlayPortalContainer) &&
+    mcpServer.running &&
+    Boolean(mcpServer.host) &&
+    Boolean(mcpServer.port);
+
+  useEffect(() => {
+    const el = chatShellContainerRef.current;
+    if (!el) return;
+
+    // 仅禁用聊天内容的交互（含键盘焦点），不影响 DrawIO / 设置 / 版本等区域。
+    if (isMcpExposureOverlayOpen) el.setAttribute("inert", "");
+    else el.removeAttribute("inert");
+  }, [isMcpExposureOverlayOpen]);
+
+  useEffect(() => {
+    if (mcpServer.running || mcpServer.isLoading) {
+      setIsMcpConfigOpen(false);
+    }
+  }, [mcpServer.isLoading, mcpServer.running]);
+
+  const handleMcpConfigOpenChange = useCallback(
+    (open: boolean) => {
+      if (open && (mcpServer.running || mcpServer.isLoading)) return;
+      setIsMcpConfigOpen(open);
+    },
+    [mcpServer.isLoading, mcpServer.running],
+  );
 
   const handleConfirmMcpConfig = useCallback(
     async (config: McpConfig) => {
@@ -1592,82 +1621,77 @@ export default function ChatSidebar({
   );
 
   return (
-    <>
-      <ChatShell
-        view={currentView}
-        alerts={alerts}
-        chatPane={
-          <>
-            <MessagePane
-              messages={displayMessages}
-              configLoading={configLoading}
-              llmConfig={llmConfig}
-              status={status}
-              expandedToolCalls={expandedToolCalls}
-              expandedThinkingBlocks={expandedThinkingBlocks}
-              onToolCallToggle={handleToolCallToggle}
-              onThinkingBlockToggle={handleThinkingBlockToggle}
+    <div ref={mcpOverlayContainerRef} className="relative h-full">
+      <div ref={chatShellContainerRef} className="h-full">
+        <ChatShell
+          view={currentView}
+          alerts={alerts}
+          chatPane={
+            <>
+              <MessagePane
+                messages={displayMessages}
+                configLoading={configLoading}
+                llmConfig={llmConfig}
+                status={status}
+                expandedToolCalls={expandedToolCalls}
+                expandedThinkingBlocks={expandedThinkingBlocks}
+                onToolCallToggle={handleToolCallToggle}
+                onThinkingBlockToggle={handleThinkingBlockToggle}
+              />
+              <Composer
+                input={input}
+                setInput={setInput}
+                isChatStreaming={isChatStreaming}
+                configLoading={configLoading}
+                llmConfig={llmConfig}
+                canSendNewMessage={canSendNewMessage}
+                lastMessageIsUser={lastMessageIsUser}
+                isOnline={isOnline}
+                onSubmit={handleSubmit}
+                onCancel={handleCancel}
+                onNewChat={handleNewChat}
+                onHistory={handleHistory}
+                onRetry={handleRetry}
+                imageAttachments={imageAttachments}
+                modelSelectorProps={{
+                  providers,
+                  models,
+                  selectedModelId,
+                  onSelectModel: handleModelChange,
+                  isDisabled: modelSelectorDisabled,
+                  isLoading: selectorLoading,
+                  modelLabel: selectedModelLabel,
+                }}
+                mcpConfigDialog={{
+                  isActive: mcpServer.running,
+                  isOpen: isMcpConfigOpen,
+                  onOpenChange: handleMcpConfigOpenChange,
+                  onConfirm: handleConfirmMcpConfig,
+                  isDisabled: mcpServer.isLoading,
+                }}
+              />
+            </>
+          }
+          historyPane={
+            <ChatHistoryView
+              currentProjectId={currentProjectId}
+              conversations={conversations}
+              onSelectConversation={handleSelectFromHistory}
+              onBack={handleHistoryBack}
+              onDeleteConversations={handleBatchDelete}
+              onExportConversations={handleBatchExport}
             />
-            <Composer
-              input={input}
-              setInput={setInput}
-              isChatStreaming={isChatStreaming}
-              configLoading={configLoading}
-              llmConfig={llmConfig}
-              canSendNewMessage={canSendNewMessage}
-              lastMessageIsUser={lastMessageIsUser}
-              isOnline={isOnline}
-              onSubmit={handleSubmit}
-              onCancel={handleCancel}
-              onNewChat={handleNewChat}
-              onHistory={handleHistory}
-              onRetry={handleRetry}
-              imageAttachments={imageAttachments}
-              modelSelectorProps={{
-                providers,
-                models,
-                selectedModelId,
-                onSelectModel: handleModelChange,
-                isDisabled: modelSelectorDisabled,
-                isLoading: selectorLoading,
-                modelLabel: selectedModelLabel,
-              }}
-              mcpButton={{
-                isActive: mcpServer.running,
-                onPress: handleOpenMcpConfigDialog,
-                isDisabled: mcpServer.isLoading,
-              }}
-            />
-          </>
-        }
-        historyPane={
-          <ChatHistoryView
-            currentProjectId={currentProjectId}
-            conversations={conversations}
-            onSelectConversation={handleSelectFromHistory}
-            onBack={handleHistoryBack}
-            onDeleteConversations={handleBatchDelete}
-            onExportConversations={handleBatchExport}
-          />
-        }
-      />
-
-      <McpConfigDialog
-        isOpen={configDialogOpen}
-        onClose={handleCloseMcpConfigDialog}
-        onConfirm={handleConfirmMcpConfig}
-      />
+          }
+        />
+      </div>
 
       <McpExposureOverlay
-        isOpen={
-          mcpServer.running &&
-          Boolean(mcpServer.host) &&
-          Boolean(mcpServer.port)
-        }
+        isOpen={isMcpExposureOverlayOpen}
+        portalContainer={mcpOverlayPortalContainer}
         host={mcpServer.host ?? "127.0.0.1"}
         port={mcpServer.port ?? 8000}
         onStop={handleStopMcp}
       />
-    </>
+    </div>
   );
 }

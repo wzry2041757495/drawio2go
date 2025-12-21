@@ -79,15 +79,6 @@ export function McpConfigDisplay({
     [clientType, host, port],
   );
 
-  // 根据客户端类型判断配置格式（命令行或 JSON）
-  const isCommandLine = useMemo(
-    () =>
-      clientType === "claude-code" ||
-      clientType === "codex" ||
-      clientType === "gemini-cli",
-    [clientType],
-  );
-
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(configText);
@@ -118,9 +109,7 @@ export function McpConfigDisplay({
       </div>
 
       <pre className="m-0 max-h-96 overflow-auto px-4 pb-4 text-sm text-foreground">
-        <code className={isCommandLine ? "language-bash" : "language-json"}>
-          {configText}
-        </code>
+        <code>{configText}</code>
       </pre>
     </div>
   );

@@ -7,7 +7,6 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
 } from "react";
 import { Button, TextArea } from "@heroui/react";
 import { ImagePlus } from "lucide-react";
@@ -27,7 +26,8 @@ import { useDropzone } from "@/hooks/useDropzone";
 import ImagePreviewBar from "@/components/chat/ImagePreviewBar";
 import { toErrorString } from "@/app/lib/error-handler";
 import { dispatchSidebarNavigate } from "@/app/lib/ui-events";
-import { McpButton } from "@/app/components/mcp";
+import { McpButton, McpConfigDialog } from "@/app/components/mcp";
+import type { McpConfig } from "@/app/types/mcp";
 
 const MIN_BASE_TEXTAREA_HEIGHT = 60;
 
@@ -58,11 +58,13 @@ interface ChatInputAreaProps {
   };
 
   /**
-   * MCP 按钮插槽（仅 Electron 环境展示；事件处理由上层组件实现）。
+   * MCP 配置弹窗（Popover/Dropdown）。
    */
-  mcpButton?: {
+  mcpConfigDialog?: {
     isActive: boolean;
-    onPress: () => void;
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: (config: McpConfig) => Promise<void>;
     isDisabled?: boolean;
   };
 }
@@ -84,7 +86,7 @@ export default function ChatInputArea({
   imageAttachments,
   onAttachmentsChange,
   modelSelectorProps,
-  mcpButton,
+  mcpConfigDialog,
 }: ChatInputAreaProps) {
   const { t } = useAppTranslation("chat");
   const { t: tCommon } = useI18n();
@@ -121,14 +123,6 @@ export default function ChatInputArea({
     isModelConfigMissing ||
     !canSendNewMessage ||
     !isOnline;
-
-  const [isElectronMcpAvailable, setIsElectronMcpAvailable] = useState(false);
-  useEffect(() => {
-    setIsElectronMcpAvailable(
-      typeof window !== "undefined" &&
-        typeof window.electronMcp !== "undefined",
-    );
-  }, []);
 
   useEffect(() => {
     onAttachmentsChange?.(attachmentItems);
@@ -268,12 +262,21 @@ export default function ChatInputArea({
           />
         ) : null}
 
-        {isElectronMcpAvailable && mcpButton ? (
+        {mcpConfigDialog ? (
           <div className="flex items-center justify-end">
-            <McpButton
-              isActive={mcpButton.isActive}
-              onPress={mcpButton.onPress}
-              isDisabled={mcpButton.isDisabled}
+            <McpConfigDialog
+              isOpen={mcpConfigDialog.isOpen}
+              onOpenChange={mcpConfigDialog.onOpenChange}
+              onConfirm={mcpConfigDialog.onConfirm}
+              trigger={
+                <McpButton
+                  isActive={mcpConfigDialog.isActive}
+                  isDisabled={
+                    Boolean(mcpConfigDialog.isDisabled) ||
+                    Boolean(mcpConfigDialog.isActive)
+                  }
+                />
+              }
             />
           </div>
         ) : null}

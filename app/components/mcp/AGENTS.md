@@ -18,10 +18,13 @@
 
 MCP 配置对话框组件：
 
-- 结构：React Aria `ModalOverlay` + `Modal` + HeroUI `Surface`
+- 结构：HeroUI `Dropdown` + `Dropdown.Popover` + `Surface`（侧边栏内弹出，非 Modal）
+- 触发：由父组件提供 `trigger`（通常为 `McpButton`），并通过 `isOpen/onOpenChange` 受控
 - Web 环境：显示“仅支持 APP 端”提示并禁用确认
+- 定位：`placement="top end"`，贴近触发按钮弹出
 - 表单：
   - IP 选择：`RadioGroup`（127.0.0.1 / 0.0.0.0），选择 0.0.0.0 时展示安全警告
+  - 端口模式：`RadioGroup`（指定 / 随机），随机模式会自动选择端口并可“重新生成”
   - 端口输入：`Input type="number"`（8000-9000），支持“随机端口”按钮调用 `window.electronMcp.getRandomPort()`
 - 按钮：取消 `variant="tertiary"`，确认 `variant="primary"`（提交时显示 `Spinner`）
 
@@ -30,16 +33,14 @@ MCP 配置对话框组件：
 MCP 配置展示组件（代码块 + 复制按钮）：
 
 - 根据 `McpClientType` 生成配置示例文本（5 种客户端：Cursor、Claude Code、Codex、Gemini CLI、通用）
-- 配置格式：
-  - **命令行格式**（Claude Code、Codex、Gemini CLI）：使用 `language-bash` class
-  - **JSON 格式**（Cursor、通用）：使用 `language-json` class，包含 `type: "http"` 字段
+- 配置格式：命令行（Claude Code/Codex/Gemini CLI）或 JSON（Cursor/通用，包含 `type: "http"` 字段）
 - 右上角复制按钮：复制到剪贴板后 Toast 提示"配置已复制"
 
 ### McpExposureOverlay.tsx
 
-MCP 全屏暴露界面（不可关闭遮罩）：
+MCP 暴露界面（不可关闭遮罩）：
 
-- 使用 React Aria `ModalOverlay` + `Modal`，`z-index: 2000`，背景 `bg-black/80`
+- 使用普通 `div` + `createPortal` 将 overlay portal 到 ChatSidebar 容器内，实现局部遮罩（`absolute inset-0`），`z-index: 100`，背景 `bg-black/50 backdrop-blur-sm`；避免 `ModalOverlay` 触发全局 `inert`/focus trap
 - 头部：标题 + `host:port` 状态 + danger 停止按钮
 - 客户端选择：HeroUI `Select`（Cursor / Claude Code / Codex / Gemini CLI / 通用），默认 Cursor
 - 配置展示：复用 `McpConfigDisplay`
