@@ -50,8 +50,11 @@ export interface McpConfig {
   /**
    * 监听端口（建议 8000-9000；与 `electronMcp.getRandomPort()` 一致）。
    *
-   * @minimum 8000
-   * @maximum 9000
+   * - 取值范围：1-65535
+   * - 说明：自动选择端口时，默认在 8000-9000 范围内分配可用端口（Electron 侧实现）。
+   *
+   * @minimum 1
+   * @maximum 65535
    */
   port: number;
 }

@@ -74,7 +74,7 @@ const validatePort = (raw: string): string | null => {
 
   const port = Number(trimmed);
   if (!Number.isInteger(port)) return "端口必须是整数";
-  if (port < 8000 || port > 9000) return "端口范围必须在 8000-9000";
+  if (port < 1 || port > 65535) return "端口范围必须在 1-65535";
 
   return null;
 };
@@ -100,11 +100,10 @@ export function McpConfigDialog({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPickingPort, setIsPickingPort] = useState(false);
 
   const canUseMcp = useMemo(() => (isOpen ? isElectronEnv() : true), [isOpen]);
 
-  const isBusy = isSubmitting || isPickingPort;
+  const isBusy = isSubmitting;
 
   const handleRequestClose = useCallback(() => {
     if (isSubmitting) return;
@@ -117,7 +116,6 @@ export function McpConfigDialog({
     setPortMode(DEFAULT_PORT_MODE);
     setErrors({});
     setIsSubmitting(false);
-    setIsPickingPort(false);
   }, []);
 
   useEffect(() => {
@@ -138,25 +136,6 @@ export function McpConfigDialog({
     });
   }, []);
 
-  const handlePickRandomPort = useCallback(async () => {
-    if (!isElectronEnv()) return;
-    if (isBusy) return;
-
-    setIsPickingPort(true);
-    try {
-      const nextPort = await window.electronMcp?.getRandomPort?.();
-      if (!Number.isInteger(nextPort)) {
-        throw new Error("Random port is invalid");
-      }
-      handlePortChange(String(nextPort));
-    } catch (error) {
-      const message = extractErrorMessage(error) ?? "未知错误";
-      pushErrorToast(`获取随机端口失败：${message}`);
-    } finally {
-      setIsPickingPort(false);
-    }
-  }, [extractErrorMessage, handlePortChange, isBusy, pushErrorToast]);
-
   const handleHostChange = useCallback((value: Selection | Key | null) => {
     const selection = normalizeSelection(value);
     const key = selection ? extractSingleKey(selection) : null;
@@ -173,34 +152,56 @@ export function McpConfigDialog({
 
       const nextMode = key as PortMode;
       setPortMode(nextMode);
-
-      if (nextMode === "random") {
-        void handlePickRandomPort();
-      }
+      setErrors((prev) => {
+        if (!prev.port) return prev;
+        const next = { ...prev };
+        delete next.port;
+        return next;
+      });
     },
-    [handlePickRandomPort],
+    [],
   );
 
   const isFormValid = useMemo(() => {
     if (!canUseMcp) return false;
+    if (portMode === "random") return true;
     return validatePort(port) === null;
-  }, [canUseMcp, port]);
+  }, [canUseMcp, port, portMode]);
 
   const submit = useCallback(async () => {
     if (isBusy) return;
     if (!canUseMcp) return;
 
-    const portError = validatePort(port);
-    if (portError) {
-      setErrors((prev) => ({ ...prev, port: portError }));
+    if (portMode === "manual") {
+      const portError = validatePort(port);
+      if (portError) {
+        setErrors((prev) => ({ ...prev, port: portError }));
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    setErrors({});
+
+    let resolvedPort: number;
+    try {
+      if (portMode === "random") {
+        if (!isElectronEnv() || !window.electronMcp) {
+          throw new Error("当前环境不支持 MCP 服务器（仅 Electron 可用）");
+        }
+        resolvedPort = await window.electronMcp.getRandomPort();
+      } else {
+        resolvedPort = Number(port);
+      }
+    } catch (error) {
+      const message = extractErrorMessage(error) ?? "未知错误";
+      pushErrorToast(`获取随机端口失败：${message}`);
+      setIsSubmitting(false);
       return;
     }
 
-    const config: McpConfig = { host, port: Number(port) };
-
-    setErrors({});
+    const config: McpConfig = { host, port: resolvedPort };
     onOpenChange(false);
-    setIsSubmitting(true);
 
     // 延迟执行异步操作，避免关闭动画被阻塞
     setTimeout(async () => {
@@ -212,7 +213,17 @@ export function McpConfigDialog({
         setIsSubmitting(false);
       }
     }, 300);
-  }, [canUseMcp, host, isBusy, onConfirm, onOpenChange, port]);
+  }, [
+    canUseMcp,
+    extractErrorMessage,
+    host,
+    isBusy,
+    onConfirm,
+    onOpenChange,
+    port,
+    portMode,
+    pushErrorToast,
+  ]);
 
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -288,7 +299,7 @@ export function McpConfigDialog({
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate">0.0.0.0（局域网）</span>
                         <Description className="text-xs text-default-500">
-                          局域网设备可访问
+                          局域网设备可访问（请确保网络可信，避免公共 Wi‑Fi）
                         </Description>
                       </div>
                       <ListBox.ItemIndicator />
@@ -299,16 +310,6 @@ export function McpConfigDialog({
                   选择 MCP 服务绑定的 IP 地址。
                 </Description>
               </Select>
-
-              {host === "0.0.0.0" ? (
-                <Alert status="warning">
-                  <Alert.Title>安全提示</Alert.Title>
-                  <Alert.Description>
-                    绑定到 0.0.0.0 会让同一局域网内设备可访问 MCP
-                    接口，请确保网络可信，并避免在公共 Wi‑Fi 下开启。
-                  </Alert.Description>
-                </Alert>
-              ) : null}
 
               <Select
                 className="w-full"
@@ -344,43 +345,36 @@ export function McpConfigDialog({
                   </ListBox>
                 </Select.Popover>
                 <Description className="mt-2">
-                  选择“随机端口”会自动选择 8000-9000 范围内的可用端口。
+                  {portMode === "random"
+                    ? "启动时自动选择可用端口（启动后可在暴露面板查看实际端口）。"
+                    : "手动指定服务监听端口。"}
                 </Description>
               </Select>
 
-              <TextField
-                isRequired
-                isInvalid={Boolean(errors.port)}
-                isDisabled={!canUseMcp || isBusy}
-              >
-                <Label>端口</Label>
-                <div className="mt-2 flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <Input
-                      type="number"
-                      step="1"
-                      min={8000}
-                      max={9000}
-                      inputMode="numeric"
-                      value={port}
-                      onChange={(event) => handlePortChange(event.target.value)}
-                      aria-label="端口"
-                      disabled={portMode === "random"}
-                    />
+              {portMode === "manual" ? (
+                <TextField
+                  isRequired
+                  isInvalid={Boolean(errors.port)}
+                  isDisabled={!canUseMcp || isBusy}
+                >
+                  <Label>端口</Label>
+                  <div className="mt-2 flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        type="number"
+                        step="1"
+                        inputMode="numeric"
+                        value={port}
+                        onChange={(event) =>
+                          handlePortChange(event.target.value)
+                        }
+                        aria-label="端口"
+                      />
+                    </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onPress={handlePickRandomPort}
-                    isDisabled={!canUseMcp || isBusy}
-                  >
-                    {portMode === "random" ? "重新生成" : "随机端口"}
-                  </Button>
-                </div>
-                <Description>范围 8000-9000</Description>
-                {errors.port ? <FieldError>{errors.port}</FieldError> : null}
-              </TextField>
+                  {errors.port ? <FieldError>{errors.port}</FieldError> : null}
+                </TextField>
+              ) : null}
 
               <div className="flex items-center justify-end gap-2">
                 <Button

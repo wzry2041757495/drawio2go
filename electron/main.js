@@ -332,6 +332,52 @@ function createWindow() {
     },
   );
 
+  mainWindow.on("close", (event) => {
+    // 如果退出流程已经在进行中，直接返回不阻止
+    if (appQuitInProgress) {
+      return;
+    }
+
+    console.log("[Electron] close 事件：窗口即将关闭，开始优雅退出流程");
+
+    // 阻止窗口立即关闭
+    event.preventDefault();
+
+    // 标记退出流程开始
+    appQuitInProgress = true;
+
+    // 通知渲染进程开始清理
+    notifyBackendCleanup("started");
+
+    // 设置强制退出超时（7 秒）
+    const forceExitTimeout = setTimeout(() => {
+      console.error("[Electron] 退出流程超过 7 秒，强制退出");
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.destroy();
+      }
+      app.exit(1);
+    }, 7000);
+    forceExitTimeout.unref();
+
+    // 执行清理流程
+    gracefulAppShutdown("close-button")
+      .catch((error) => {
+        console.error("[Electron] 退出流程异常：", error);
+        notifyBackendCleanup("failed");
+      })
+      .finally(() => {
+        clearTimeout(forceExitTimeout);
+        console.log("[Electron] 退出流程完成，销毁窗口并退出应用");
+        notifyBackendCleanup("completed");
+
+        // 销毁窗口并退出应用
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy();
+        }
+        app.quit();
+      });
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
 
