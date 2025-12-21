@@ -363,7 +363,7 @@ import { Button } from '@heroui/react';
 
 - `VersionSidebar.tsx` 删除本地 `loadVersions` 状态，改用 `useStorageXMLVersions` 的订阅机制
 - 所有日期展示改用 `format-utils.ts`（formatVersionTimestamp/formatConversationDate）
-- 聊天与版本子组件（MessageItem/ChatSessionMenu/ConversationList/MessagePreviewPanel/VersionCard/VersionCompare/ProjectSelector）统一日期格式
+- 聊天与版本子组件（MessageItem/ChatSessionMenu/ConversationList/VersionCard/VersionCompare/ProjectSelector）统一日期格式
 
 **影响文件**：9 个文件
 

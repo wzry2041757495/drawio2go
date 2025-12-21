@@ -264,7 +264,6 @@
     "expand": "展开内容",
     "collapse": "收起内容",
     "toggleTool": "展开工具调用详情",
-    "openPreview": "打开预览",
     "selectConversation": "选择会话 {{title}}",
     "deselectConversation": "取消选择 {{title}}",
     "selectAll": "全选会话",

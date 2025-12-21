@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Conversation, Message } from "@/app/lib/storage";
-import { useStorageConversations } from "@/app/hooks";
+import type { Conversation } from "@/app/lib/storage";
 import HistoryToolbar from "./HistoryToolbar";
 import ConversationList from "./ConversationList";
-import MessagePreviewPanel from "./MessagePreviewPanel";
-import { createLogger } from "@/lib/logger";
-
-const logger = createLogger("ChatHistoryView");
 
 interface ChatHistoryViewProps {
   currentProjectId?: string;
@@ -38,16 +33,10 @@ export default function ChatHistoryView({
   onDeleteConversations,
   onExportConversations,
 }: ChatHistoryViewProps) {
-  const { getMessages } = useStorageConversations();
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>({ start: "", end: "" });
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [previewConversationId, setPreviewConversationId] = useState<
-    string | null
-  >(null);
-  const [previewMessages, setPreviewMessages] = useState<Message[]>([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -80,38 +69,6 @@ export default function ChatHistoryView({
       return next.length === prev.size ? prev : new Set(next);
     });
   }, [filteredConversations]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadPreview = async (conversationId: string) => {
-      setPreviewLoading(true);
-      try {
-        const messages = await getMessages(conversationId);
-        if (cancelled) return;
-        setPreviewMessages(messages.slice(0, 10));
-      } catch (error) {
-        logger.error("[ChatHistoryView] 预览消息加载失败:", error);
-        if (!cancelled) {
-          setPreviewMessages([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setPreviewLoading(false);
-        }
-      }
-    };
-
-    if (previewConversationId) {
-      void loadPreview(previewConversationId);
-    } else {
-      setPreviewMessages([]);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getMessages, previewConversationId]);
 
   const handleToggleSelectionMode = () => {
     setSelectionMode((prev) => {
@@ -153,30 +110,14 @@ export default function ChatHistoryView({
     await onExportConversations(Array.from(selectedIds));
   };
 
-  const handlePreview = (conversationId: string) => {
-    setPreviewConversationId(conversationId);
-  };
-
   const handleOpenConversation = async (conversationId: string) => {
     await onSelectConversation(conversationId);
-    setPreviewConversationId(null);
     setSelectionMode(false);
     setSelectedIds(new Set());
   };
 
-  const currentPreviewConversation = useMemo(
-    () =>
-      previewConversationId
-        ? conversations.find((c) => c.id === previewConversationId) || null
-        : null,
-    [conversations, previewConversationId],
-  );
-
   return (
-    <div
-      className={`history-view ${previewConversationId ? "history-view--with-preview" : ""}`}
-      data-preview-open={!!previewConversationId}
-    >
+    <div className="history-view">
       <HistoryToolbar
         searchQuery={searchQuery}
         dateRange={dateRange}
@@ -198,21 +139,7 @@ export default function ChatHistoryView({
         selectionMode={selectionMode}
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
-        onPreview={handlePreview}
         onOpenConversation={handleOpenConversation}
-      />
-
-      <MessagePreviewPanel
-        isOpen={!!previewConversationId}
-        conversation={currentPreviewConversation}
-        messages={previewMessages}
-        loading={previewLoading}
-        onClose={() => setPreviewConversationId(null)}
-        onOpenConversation={() => {
-          if (previewConversationId) {
-            void handleOpenConversation(previewConversationId);
-          }
-        }}
       />
     </div>
   );

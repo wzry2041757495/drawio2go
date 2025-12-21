@@ -34,7 +34,6 @@
 | **ChatHistoryView**     | 历史记录视图     | 搜索/筛选对话、日期范围、批量操作、预览                 |
 | **HistoryToolbar**      | 历史工具栏       | 搜索框、日期选择、批量操作切换、全选/清除               |
 | **ConversationList**    | 对话列表         | 显示过滤后的对话卡片，选择模式，预览和打开操作          |
-| **MessagePreviewPanel** | 消息预览面板     | 侧边栏预览对话内容，显示消息角色和内容                  |
 | **EmptyState**          | 空状态占位符     | 加载中、未配置、无消息三种状态提示                      |
 | **TypingIndicator**     | 打字指示器       | 流式输出时的动画指示                                    |
 | **ChatShell**           | 布局壳层         | 统一包裹聊天/历史视图，承载顶部提示与导航               |
@@ -66,7 +65,6 @@
 1. **ChatHistoryView** 是历史视图的主容器
 2. **HistoryToolbar** 提供搜索、日期筛选、批量操作
 3. **ConversationList** 渲染过滤后的对话列表
-4. **MessagePreviewPanel** 在侧边栏展示对话内容预览
 
 ### 工具调用追踪
 
@@ -82,9 +80,8 @@
 ```
 ChatHistoryView（历史视图容器）
 ├── HistoryToolbar（搜索、筛选、批量操作）
-├── ConversationList（过滤后的对话列表）
-│   └── Conversation Item（单个对话卡片）
-└── MessagePreviewPanel（侧边栏预览）
+└── ConversationList（过滤后的对话列表）
+    └── Conversation Item（单个对话卡片）
 
 MessageList（消息列表容器）
 ├── MessageItem（单条消息）
@@ -362,7 +359,6 @@ app/components/chat/
 ├── ChatHistoryView.tsx           # 历史记录视图
 ├── HistoryToolbar.tsx            # 历史工具栏
 ├── ConversationList.tsx          # 对话列表
-├── MessagePreviewPanel.tsx       # 消息预览面板
 ├── EmptyState.tsx                # 空状态提示
 ├── TypingIndicator.tsx           # 打字指示器
 ├── typing-indicator.css          # 打字动画样式

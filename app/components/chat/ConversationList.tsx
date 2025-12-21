@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useMemo } from "react";
-import { Card, Checkbox, Button } from "@heroui/react";
+import { Card, Checkbox } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Eye, MessagesSquare } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import type { Conversation } from "@/app/lib/storage";
 import {
   formatConversationDate,
@@ -13,15 +13,14 @@ import { useAppTranslation } from "@/app/i18n/hooks";
 
 // 虚拟滚动阈值 - 会话数量超过此值时启用虚拟滚动
 const VIRTUAL_SCROLL_THRESHOLD = 5;
-// 估计每个卡片的高度
-const ESTIMATED_ITEM_HEIGHT = 72;
+// 估计每个卡片的高度（根据真实测量约 84-90px，设为 90 以确保虚拟滚动计算准确）
+const ESTIMATED_ITEM_HEIGHT = 90;
 
 interface ConversationListProps {
   conversations: Conversation[];
   selectionMode: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
-  onPreview: (id: string) => void;
   onOpenConversation: (id: string) => void;
 }
 
@@ -30,7 +29,6 @@ export default function ConversationList({
   selectionMode,
   selectedIds,
   onToggleSelect,
-  onPreview,
   onOpenConversation,
 }: ConversationListProps) {
   const { t, i18n } = useAppTranslation(["chat", "common"]);
@@ -131,20 +129,6 @@ export default function ConversationList({
               </div>
             </div>
           </div>
-
-          {!selectionMode && (
-            <div className="history-card__actions">
-              <Button
-                size="sm"
-                variant="tertiary"
-                aria-label={t("aria.openPreview")}
-                onPress={() => onPreview(conv.id)}
-              >
-                <Eye size={16} />
-                {t("aria.openPreview")}
-              </Button>
-            </div>
-          )}
         </Card.Content>
       </Card.Root>
     );

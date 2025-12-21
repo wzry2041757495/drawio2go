@@ -148,8 +148,6 @@ app/styles/components/
 | `.history-list`                       | 卡片列表，flex列布局      |
 | `.history-card`                       | 单条历史卡片              |
 | `.history-card[data-selected="true"]` | 选中状态（主色边框+背景） |
-| `.history-preview`                    | 右侧预览面板，固定定位    |
-| `.history-preview__item`              | 预览消息项（tag标记）     |
 
 ---
 
@@ -334,14 +332,15 @@ app/styles/components/
 
 ```css
 /* 浅色模式默认值 */
-.history-preview__tag--user {
-  background: color-mix(in oklch, var(--accent) 18%, transparent);
-  color: var(--foreground);
+.history-card__title {
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  color: var(--foreground, #0f172a);
 }
 
 /* 深色模式增强对比 */
-.dark .history-preview__tag--user {
-  background: color-mix(in oklch, var(--accent) 24%, transparent);
+.dark .history-card__title {
   color: var(--foreground, #e5e7eb); /* 更亮的文字 */
 }
 ```

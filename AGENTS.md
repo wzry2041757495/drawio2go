@@ -438,7 +438,7 @@ npm run format           # 使用 Prettier 格式化所有代码
 **聊天历史管理优化**
 
 - 聊天历史视图增强：支持会话预览、时间分组
-- 新增 `ChatHistoryView.tsx`、`MessagePreviewPanel.tsx` 组件
+- 新增 `ChatHistoryView.tsx` 组件
 - 会话列表虚拟滚动优化（@tanstack/react-virtual）
 
 **跨项目安全隔离**

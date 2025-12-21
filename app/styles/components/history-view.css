@@ -6,11 +6,7 @@
   gap: 0.75rem;
   height: 100%;
   padding: 0.5rem 0.75rem 0.75rem;
-  background: var(--surface, transparent);
-}
-
-.history-view--with-preview {
-  padding-right: min(420px, 95vw);
+  background: var(--surface);
 }
 
 .history-toolbar {
@@ -37,7 +33,7 @@
   display: flex;
   gap: 0.5rem;
   align-items: center;
-  color: var(--foreground-secondary, #6b7280);
+  color: var(--foreground-secondary);
 }
 
 .history-toolbar__date-sep {
@@ -49,33 +45,57 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.5rem;
-  border: 1px dashed var(--border-color, #e5e7eb);
-  background: color-mix(in oklch, var(--accent) 8%, transparent);
-  border-radius: var(--radius-lg, 10px);
+  border: 1px dashed var(--border);
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
 }
 
 .history-toolbar__count {
   font-size: 0.85rem;
-  color: var(--foreground-secondary, #6b7280);
+  color: var(--foreground-secondary);
 }
 
 .history-date-input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: var(--radius, 8px);
-  background: var(--surface, #f8fafc);
-  color: var(--foreground, #0f172a);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field-background);
+  color: var(--foreground);
   font-size: 0.875rem;
   min-width: 9.5rem;
   transition:
-    border-color var(--duration-medium, 200ms) var(--ease-out-cubic, ease),
-    box-shadow var(--duration-medium, 200ms) var(--ease-out-cubic, ease);
+    border-color var(--duration-medium) var(--ease-out-cubic),
+    box-shadow var(--duration-medium) var(--ease-out-cubic);
+  /* 修复日期选择器图标在深色模式下的可见性 */
+  color-scheme: light dark;
 }
 
 .history-date-input:focus {
-  outline: 2px solid var(--accent, #3388bb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 20%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 日期选择器 placeholder 样式（日期为空时） */
+.history-date-input::-webkit-datetime-edit-fields-wrapper {
+  color: var(--foreground);
+}
+
+.history-date-input::-webkit-calendar-picker-indicator {
+  filter: var(--calendar-icon-filter, none);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--duration-short) var(--ease-out-cubic);
+}
+
+.history-date-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* 深色模式下日历图标反色 */
+[data-theme="drawio2go-dark"] .history-date-input::-webkit-calendar-picker-indicator,
+.dark .history-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 .history-list {
@@ -90,26 +110,26 @@
 .history-card {
   display: flex;
   padding: 0;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: var(--radius-lg, 10px);
-  background: var(--surface-1, #fff);
-  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
   transition:
-    border-color var(--duration-fast, 150ms) var(--ease-out-cubic),
-    box-shadow var(--duration-fast, 150ms) var(--ease-out-cubic),
-    transform var(--duration-fast, 150ms) var(--ease-out-cubic);
+    border-color var(--duration-short) var(--ease-out-cubic),
+    box-shadow var(--duration-short) var(--ease-out-cubic),
+    transform var(--duration-short) var(--ease-out-cubic);
 }
 
 .history-card:hover {
-  border-color: color-mix(in oklch, var(--accent) 40%, transparent);
-  box-shadow: var(--shadow-md, 0 8px 20px rgba(0, 0, 0, 0.12));
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-2);
   transform: translateY(-2px);
 }
 
 .history-card[data-selected="true"] {
-  border-color: var(--accent, #3388bb);
-  box-shadow: var(--shadow-md, 0 8px 20px rgba(0, 0, 0, 0.12));
-  background: color-mix(in oklch, var(--accent) 5%, var(--surface-1, #fff));
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+  background: var(--accent-soft);
 }
 
 .history-card__content {
@@ -117,6 +137,7 @@
   align-items: center;
   gap: 0.65rem;
   padding: 0.5rem 0.75rem;
+  min-height: 86px; /* 确保最小高度一致性，接近实测值 84-90px */
 }
 
 .history-card__body {
@@ -124,6 +145,7 @@
   align-items: center;
   gap: 0.65rem;
   flex: 1;
+  min-width: 0;
   cursor: pointer;
 }
 
@@ -137,14 +159,11 @@
 .history-card__title {
   font-weight: 600;
   font-size: 0.98rem;
-  color: var(--foreground, #0f172a);
+  line-height: 1.3; /* 明确行高，提高一致性 */
+  color: var(--foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.dark .history-card__title {
-  color: var(--foreground, #e5e7eb);
 }
 
 .history-card__subtitle {
@@ -152,18 +171,12 @@
   align-items: center;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: var(--foreground-secondary, #6b7280);
+  line-height: 1.4; /* 明确行高，提高一致性 */
+  color: var(--foreground-secondary);
 }
 
 .history-card__dot {
   opacity: 0.6;
-}
-
-.history-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-left: auto;
 }
 
 .history-empty {
@@ -173,7 +186,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  color: var(--foreground-secondary, #6b7280);
+  color: var(--foreground-secondary);
   text-align: center;
 }
 
@@ -186,143 +199,6 @@
   margin: 0;
   font-size: 0.9rem;
   opacity: 0.7;
-}
-
-.history-preview {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: min(400px, 96vw);
-  height: 100%;
-  background: var(--surface-1, #fff);
-  border-left: 1px solid var(--border-color, #e5e7eb);
-  box-shadow: var(--shadow-lg, 0 18px 36px rgba(0, 0, 0, 0.16));
-  padding: 0.75rem 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  transform: translateX(16px);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 0.28s var(--ease-out-cubic),
-    opacity 0.28s var(--ease-out-cubic);
-}
-
-.history-preview[data-visible="true"],
-.history-view[data-preview-open="true"] .history-preview {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(0);
-}
-
-.history-preview__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  align-items: flex-start;
-}
-
-.history-preview__title {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.history-preview__name {
-  margin: 0;
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--foreground, #0f172a);
-}
-
-.history-preview__meta {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--foreground-secondary, #6b7280);
-}
-
-.history-preview__actions {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.history-preview__content {
-  flex: 1;
-  overflow: auto;
-  border-radius: var(--radius-lg, 10px);
-  background: color-mix(in oklch, var(--accent) 6%, transparent);
-  padding: 0.5rem;
-}
-
-.history-preview__loading,
-.history-preview__empty {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  color: var(--foreground-secondary, #6b7280);
-}
-
-.history-preview__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.history-preview__item {
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, #f8fafc);
-  border: 1px solid var(--border-color, #e5e7eb);
-  display: flex;
-  gap: 0.4rem;
-  align-items: flex-start;
-}
-
-.dark .history-preview__item {
-  background: color-mix(in oklch, var(--accent) 10%, transparent);
-}
-
-.history-preview__tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.history-preview__tag--user {
-  background: color-mix(in oklch, var(--accent) 18%, transparent);
-  color: var(--foreground, #0f172a);
-}
-
-.history-preview__tag--assistant {
-  background: color-mix(in oklch, var(--success, #16a34a) 18%, transparent);
-  color: var(--foreground, #0f172a);
-}
-
-.history-preview__tag--system {
-  background: color-mix(in oklch, var(--warning, #f59e0b) 18%, transparent);
-  color: var(--foreground, #0f172a);
-}
-
-.history-preview__text {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--foreground, #0f172a);
-}
-
-.dark .history-preview__text {
-  color: #e5e7eb;
 }
 
 @media (max-width: 720px) {
@@ -343,34 +219,5 @@
 
   .history-list {
     padding: 0.75rem 0.5rem 0.5rem;
-  }
-
-  .history-view--with-preview {
-    padding-right: 0.75rem;
-  }
-
-  .history-preview {
-    position: fixed;
-    inset: auto 0 0 0;
-    width: 100%;
-    height: 60vh;
-    max-height: 600px;
-    border-left: none;
-    border-top: 1px solid var(--border-color, #e5e7eb);
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(100%);
-    z-index: 50;
-  }
-
-  .history-preview[data-visible="true"] {
-    transform: translateY(0);
-    transition: transform var(--duration-medium, 200ms)
-      var(--ease-out-cubic, ease);
-  }
-
-  .history-preview[data-visible="false"] {
-    transform: translateY(100%);
-    transition: transform var(--duration-medium, 200ms)
-      var(--ease-out-cubic, ease);
   }
 }

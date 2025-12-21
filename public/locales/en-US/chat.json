@@ -267,7 +267,6 @@
     "expand": "Expand content",
     "collapse": "Collapse content",
     "toggleTool": "Toggle tool call details",
-    "openPreview": "Open preview",
     "selectConversation": "Select conversation {{title}}",
     "deselectConversation": "Deselect conversation {{title}}",
     "selectAll": "Select all conversations",
