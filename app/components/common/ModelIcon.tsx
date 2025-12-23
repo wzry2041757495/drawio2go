@@ -8,6 +8,7 @@ interface ModelIconProps {
   modelName?: string | null;
   providerId?: string | null;
   providerType?: ProviderType | null;
+  apiUrl?: string | null;
   size?: number;
   className?: string;
 }
@@ -17,6 +18,7 @@ export function ModelIcon({
   modelName,
   providerId,
   providerType,
+  apiUrl,
   size = 16,
   className,
 }: ModelIconProps) {
@@ -25,6 +27,7 @@ export function ModelIcon({
     modelName,
     providerId,
     providerType,
+    apiUrl,
   );
   const wrapperClass = [
     "inline-flex items-center justify-center rounded-md text-foreground",

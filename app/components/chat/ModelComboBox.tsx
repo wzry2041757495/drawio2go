@@ -5,7 +5,6 @@ import {
   Input,
   Label,
   ListBox,
-  Header,
   Chip,
   Spinner,
   type Key,
@@ -198,34 +197,25 @@ export default function ModelComboBox({
           ) : (
             filteredGroups.map(({ provider, models: providerModels }) => (
               <ListBox.Section key={provider.id}>
-                <Header>
-                  <div className="flex items-center gap-2">
-                    <ModelIcon
-                      size={14}
-                      providerId={provider.id}
-                      providerType={provider.providerType}
-                    />
-                    <span>{provider.displayName}</span>
-                  </div>
-                </Header>
                 {providerModels.map((model) => (
                   <ListBox.Item
                     key={model.id}
                     id={model.id}
                     textValue={getModelLabel(model)}
                   >
-                    <div className="model-option-content flex items-start gap-2">
-                      <ModelIcon
-                        size={18}
-                        modelId={model.id}
-                        modelName={getModelLabel(model)}
-                        providerId={provider.id}
-                        providerType={provider.providerType}
-                        className="mt-0.5 text-primary"
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <div className="model-option-header flex flex-wrap items-center gap-1.5">
-                          <span className="model-name">
+                    <div className="model-option-content">
+                      <div className="model-option-header">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <ModelIcon
+                            size={18}
+                            modelId={model.id}
+                            modelName={getModelLabel(model)}
+                            providerId={provider.id}
+                            providerType={provider.providerType}
+                            apiUrl={provider.apiUrl}
+                            className="text-primary"
+                          />
+                          <span className="model-name truncate">
                             {getModelLabel(model)}
                           </span>
                           {model.isDefault && (
@@ -234,22 +224,22 @@ export default function ModelComboBox({
                             </Chip>
                           )}
                         </div>
-                        <div className="model-option-meta flex flex-wrap items-center gap-2 text-xs text-default-500">
-                          <span className="model-params">
-                            {t("modelSelector.temperature")}:{" "}
-                            {model.temperature} |{" "}
-                            {t("modelSelector.maxToolRounds")}:{" "}
-                            {model.maxToolRounds}
-                          </span>
-                          <span className="provider-name inline-flex items-center gap-1">
-                            <ModelIcon
-                              size={14}
-                              providerId={provider.id}
-                              providerType={provider.providerType}
-                            />
-                            <span>{provider.displayName}</span>
-                          </span>
+                      </div>
+                      <div className="model-option-meta">
+                        <div className="model-provider-badge">
+                          <ModelIcon
+                            size={12}
+                            providerId={provider.id}
+                            providerType={provider.providerType}
+                            apiUrl={provider.apiUrl}
+                          />
+                          <span>{provider.displayName}</span>
                         </div>
+                        <span className="model-params">
+                          {t("modelSelector.temperature")}: {model.temperature}{" "}
+                          | {t("modelSelector.maxToolRounds")}:{" "}
+                          {model.maxToolRounds}
+                        </span>
                       </div>
                     </div>
                     <ListBox.ItemIndicator />

@@ -242,6 +242,7 @@ export default function ChatInputActions({
                 modelName={activeModel?.modelName || activeModel?.displayName}
                 providerId={activeProvider?.id}
                 providerType={activeProvider?.providerType ?? null}
+                apiUrl={activeProvider?.apiUrl ?? null}
                 className="text-primary"
               />
             )}

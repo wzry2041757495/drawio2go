@@ -407,6 +407,7 @@ export default function ModelsSettingsPanel({
                         size={18}
                         providerId={provider.id}
                         providerType={provider.providerType}
+                        apiUrl={provider.apiUrl}
                         className="text-primary"
                       />
                       <span className="text-base font-medium text-foreground">
@@ -556,6 +557,7 @@ export default function ModelsSettingsPanel({
                                           modelName={modelDisplayName}
                                           providerId={provider.id}
                                           providerType={provider.providerType}
+                                          apiUrl={provider.apiUrl}
                                           className="shrink-0 text-primary"
                                         />
                                         <div className="flex min-w-0 flex-col">

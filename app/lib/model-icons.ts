@@ -7,6 +7,10 @@ import {
   Google,
   Meta,
   OpenAI,
+  Minimax,
+  Qwen,
+  Zhipu,
+  LongCat,
 } from "@lobehub/icons";
 import type { ProviderType } from "@/app/types/chat";
 
@@ -44,6 +48,13 @@ const providerIconMap: Record<string, IconAsset> = {
   facebook: { Icon: Meta, alt: "Meta" },
   "deepseek-native": deepseekIcon,
   deepseek: deepseekIcon,
+  minimax: { Icon: Minimax, alt: "Minimax" },
+  qwen: { Icon: Qwen, alt: "Qwen" },
+  zhipu: { Icon: Zhipu, alt: "智谱AI" },
+  glm: { Icon: Zhipu, alt: "智谱AI" },
+  chatglm: { Icon: Zhipu, alt: "智谱AI" },
+  bigmodel: { Icon: Zhipu, alt: "智谱AI" },
+  longcat: { Icon: LongCat, alt: "LongCat" },
 };
 
 const modelIconRules: Array<{ pattern: RegExp; asset: IconAsset }> = [
@@ -62,10 +73,62 @@ const modelIconRules: Array<{ pattern: RegExp; asset: IconAsset }> = [
   },
   { pattern: /llama\s?\d*/i, asset: { Icon: Meta, alt: "Llama" } },
   { pattern: /deepseek/i, asset: deepseekIcon },
+
+  // Minimax 模型
+  { pattern: /minimax/i, asset: { Icon: Minimax, alt: "Minimax" } },
+
+  // Qwen 模型
+  { pattern: /qwen/i, asset: { Icon: Qwen, alt: "Qwen" } },
+
+  // 智谱AI 模型（GLM系列）
+  {
+    pattern: /(chatglm|glm[-_]?\d|zhipu)/i,
+    asset: { Icon: Zhipu, alt: "智谱AI" },
+  },
+
+  // LongCat 模型
+  { pattern: /longcat/i, asset: { Icon: LongCat, alt: "LongCat" } },
 ];
 
 const normalizeKey = (value?: string | null) =>
   value?.toLowerCase().trim() ?? "";
+
+/**
+ * 从 apiUrl 中提取供应商关键词
+ * @param apiUrl - API 端点 URL
+ * @returns 供应商关键词（用于匹配 providerIconMap）
+ */
+function extractVendorFromUrl(
+  apiUrl: string | null | undefined,
+): string | null {
+  if (!apiUrl) return null;
+
+  try {
+    const url = new URL(apiUrl);
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+    const fullUrl = `${hostname}${pathname}`;
+
+    // 按优先级匹配
+    if (fullUrl.includes("minimax")) return "minimax";
+    if (fullUrl.includes("dashscope") || fullUrl.includes("aliyuncs"))
+      return "qwen";
+    if (fullUrl.includes("bigmodel")) return "bigmodel";
+    if (fullUrl.includes("longcat")) return "longcat";
+
+    return null;
+  } catch {
+    // 如果 URL 解析失败，尝试简单字符串匹配
+    const lowerUrl = apiUrl.toLowerCase();
+    if (lowerUrl.includes("minimax")) return "minimax";
+    if (lowerUrl.includes("dashscope") || lowerUrl.includes("aliyuncs"))
+      return "qwen";
+    if (lowerUrl.includes("bigmodel")) return "bigmodel";
+    if (lowerUrl.includes("longcat")) return "longcat";
+
+    return null;
+  }
+}
 
 export type ModelIconResult = IconAsset;
 
@@ -74,6 +137,7 @@ export function getModelIcon(
   modelName?: string | null,
   providerId?: string | null,
   providerType?: ProviderType | null,
+  apiUrl?: string | null,
 ): ModelIconResult {
   const normalizedName = normalizeKey(modelName || modelId);
 
@@ -88,12 +152,17 @@ export function getModelIcon(
   }
 
   const providerKey = normalizeKey(providerId);
-  const providerTypeKey = normalizeKey(providerType ?? undefined);
 
   if (providerIconMap[providerKey]) {
     return providerIconMap[providerKey];
   }
 
+  const vendorKey = extractVendorFromUrl(apiUrl);
+  if (vendorKey && providerIconMap[vendorKey]) {
+    return providerIconMap[vendorKey];
+  }
+
+  const providerTypeKey = normalizeKey(providerType ?? undefined);
   if (providerIconMap[providerTypeKey]) {
     return providerIconMap[providerTypeKey];
   }

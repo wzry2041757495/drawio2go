@@ -43,11 +43,9 @@ export const markdownComponents: MarkdownComponents = {
     return <ol className="message-list message-list-ordered" {...props} />;
   },
   table({ node: _node, ...props }) {
-    return (
-      <div className="message-table-wrapper">
-        <table className="message-table" {...props} />
-      </div>
-    );
+    // eslint-disable-next-line sonarjs/table-header
+    const table = <table className="message-table" {...props} />;
+    return <div className="message-table-wrapper">{table}</div>;
   },
   thead({ node: _node, ...props }) {
     return <thead className="message-table-head" {...props} />;
