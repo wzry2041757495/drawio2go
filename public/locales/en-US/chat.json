@@ -124,6 +124,39 @@
     "ariaLabel": "Select page scope",
     "noPagesSelected": "Please select at least one page"
   },
+  "skill": {
+    "buttonLabel": "{{theme}} · {{count}} elements",
+    "ariaLabel": "Configure diagram style and elements",
+    "disabled": {
+      "missingTemplate": "System prompt must include {{theme}} and {{elements}} placeholders.",
+      "partialTemplate": "System prompt must include both {{theme}} and {{elements}} placeholders.",
+      "unavailable": "Skill settings are unavailable right now."
+    },
+    "theme": {
+      "label": "Style",
+      "description": "Choose an overall diagram style",
+      "modern": "Modern",
+      "academic": "Academic",
+      "classic": "Classic",
+      "custom": "Custom",
+      "unknown": "Unknown style"
+    },
+    "elements": {
+      "label": "Elements",
+      "description": "Choose element types (multi-select)",
+      "required": "Required"
+    },
+    "element": {
+      "general": "General",
+      "basic": "Basic Flow",
+      "misc": "Misc",
+      "uml": "UML",
+      "aws": "AWS",
+      "azure": "Azure",
+      "gcp": "GCP",
+      "network": "Network"
+    }
+  },
   "toolCalls": {
     "title": "Tool calls",
     "parameters": "Input parameters",

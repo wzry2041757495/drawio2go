@@ -9,10 +9,12 @@ import type {
   ModelConfig,
   RuntimeLLMConfig,
   ProviderConfig,
+  SkillSettings,
 } from "@/app/types/chat";
 import {
   DEFAULT_AGENT_SETTINGS,
   DEFAULT_GENERAL_SETTINGS,
+  DEFAULT_SKILL_SETTINGS,
   STORAGE_KEY_ACTIVE_MODEL,
   STORAGE_KEY_AGENT_SETTINGS,
   STORAGE_KEY_GENERAL_SETTINGS,
@@ -73,6 +75,33 @@ const normalizeGeneralSettings = (parsed: unknown): GeneralSettings | null => {
       typeof record.defaultPath === "string"
         ? record.defaultPath
         : DEFAULT_GENERAL_SETTINGS.defaultPath,
+  };
+};
+
+const normalizeSkillSettings = (parsed: unknown): SkillSettings => {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return DEFAULT_SKILL_SETTINGS;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const selectedTheme =
+    typeof record.selectedTheme === "string" && record.selectedTheme.trim()
+      ? record.selectedTheme
+      : DEFAULT_SKILL_SETTINGS.selectedTheme;
+
+  const selectedElements = Array.isArray(record.selectedElements)
+    ? record.selectedElements.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : DEFAULT_SKILL_SETTINGS.selectedElements;
+
+  return {
+    selectedTheme,
+    selectedElements:
+      selectedElements.length > 0
+        ? selectedElements
+        : DEFAULT_SKILL_SETTINGS.selectedElements,
   };
 };
 
@@ -284,7 +313,11 @@ export function useStorageSettings() {
       if (!parsed) {
         return DEFAULT_AGENT_SETTINGS;
       }
-      return parsed;
+      return {
+        ...DEFAULT_AGENT_SETTINGS,
+        ...parsed,
+        skillSettings: normalizeSkillSettings(parsed.skillSettings),
+      };
     },
     [],
   );
@@ -888,6 +921,10 @@ export function useStorageSettings() {
         const next: AgentSettings = {
           ...current,
           ...updates,
+          skillSettings:
+            updates.skillSettings ??
+            current.skillSettings ??
+            DEFAULT_SKILL_SETTINGS,
           updatedAt: Date.now(),
         };
         await persistAgentSettings(storage, next);
@@ -896,6 +933,25 @@ export function useStorageSettings() {
       });
     },
     [execute, loadAgentSettings, persistAgentSettings],
+  );
+
+  /**
+   * 获取 Skill 设置（便捷方法）
+   */
+  const getSkillSettings = useCallback(async (): Promise<SkillSettings> => {
+    const settings = await getAgentSettings();
+    return settings.skillSettings ?? DEFAULT_SKILL_SETTINGS;
+  }, [getAgentSettings]);
+
+  /**
+   * 保存 Skill 设置（便捷方法）
+   */
+  const saveSkillSettings = useCallback(
+    async (settings: SkillSettings): Promise<SkillSettings> => {
+      const next = await saveAgentSettings({ skillSettings: settings });
+      return next.skillSettings ?? DEFAULT_SKILL_SETTINGS;
+    },
+    [saveAgentSettings],
   );
 
   /**
@@ -1051,6 +1107,7 @@ export function useStorageSettings() {
               : capabilities.supportsThinking,
           systemPrompt:
             agentSettings.systemPrompt ?? DEFAULT_AGENT_SETTINGS.systemPrompt,
+          skillSettings: agentSettings.skillSettings,
           customConfig: {
             ...provider.customConfig,
             ...model.customConfig,
@@ -1096,6 +1153,8 @@ export function useStorageSettings() {
     deleteModel,
     getAgentSettings,
     saveAgentSettings,
+    getSkillSettings,
+    saveSkillSettings,
     getActiveModel,
     setActiveModel,
     getRuntimeConfig,

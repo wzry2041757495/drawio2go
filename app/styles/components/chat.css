@@ -259,6 +259,14 @@
   flex: 0 0 auto;
 }
 
+.chat-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  min-height: 36px;
+}
+
 .chat-model-button {
   display: inline-flex;
   align-items: center;
@@ -288,6 +296,109 @@
 
 .dark .chat-model-popover {
   background: var(--background, #0f172a);
+}
+
+.skill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 36px;
+  padding-inline: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.skill-button__label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-popover {
+  min-width: 260px;
+  max-width: 320px;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default, var(--border));
+  background: var(--surface, #ffffff);
+  box-shadow: var(--shadow-2);
+}
+
+.dark .skill-popover {
+  background: var(--background, #0f172a);
+}
+
+.skill-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.skill-section + .skill-section {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-light);
+}
+
+.skill-section__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.skill-section__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.skill-section__hint {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--text-secondary);
+}
+
+.skill-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.skill-elements-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.skill-element-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+}
+
+.skill-element-item__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.skill-element-item__required {
+  flex: 0 0 auto;
+  padding: 0 var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--text-secondary);
+}
+
+.skill-element-item[data-selected="true"],
+.skill-element-item[aria-selected="true"] {
+  background: var(--bg-secondary);
+}
+
+.skill-element-item[data-disabled="true"],
+.skill-element-item[aria-disabled="true"] {
+  opacity: 0.6;
 }
 
 /* Markdown内容包装器 - 让打字指示器显示在同一行 */
@@ -334,7 +445,8 @@
 
   .chat-model-button,
   .mcp-button,
-  .page-selector-button {
+  .page-selector-button,
+  .skill-button {
     justify-content: center;
   }
 
@@ -343,13 +455,19 @@
   }
 
   .mcp-button__label,
-  .page-selector-button__label {
+  .page-selector-button__label,
+  .skill-button__label {
     display: none;
   }
 
   .chat-model-popover {
     min-width: min(240px, 100cqi);
     max-width: min(90cqi, 360px);
+  }
+
+  .skill-popover {
+    min-width: min(240px, 100cqi);
+    max-width: min(90cqi, 320px);
   }
 }
 

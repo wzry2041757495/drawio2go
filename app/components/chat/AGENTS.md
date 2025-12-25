@@ -30,6 +30,7 @@
 | **ChatInputArea**       | 输入区域         | 多行文本框，表单处理，按 Enter 发送                     |
 | **CanvasContextButton** | 画布上下文按钮   | 切换是否在对话中附带画布上下文信息                      |
 | **PageSelectorButton**  | 页面选择器按钮   | 选择 AI 生效页面范围（多选/全选），用于后续工具执行     |
+| **SkillButton**         | 绘图技能按钮     | 配置绘图风格与元素类型（Dropdown + 单选/多选）          |
 | **ChatInputActions**    | 输入操作按钮组   | 新建/历史/模型选择 Popover/发送/取消按钮                |
 | **ChatHistoryView**     | 历史记录视图     | 搜索/筛选对话、日期范围、批量操作、预览                 |
 | **HistoryToolbar**      | 历史工具栏       | 搜索框、日期选择、批量操作切换、全选/清除               |
@@ -340,6 +341,7 @@ app/components/chat/
 ├── ChatInputArea.tsx             # 输入区域
 ├── ChatInputActions.tsx          # 输入操作按钮（含模型 Popover）
 ├── ModelComboBox.tsx             # 模型选择器
+├── SkillButton.tsx               # 绘图技能按钮
 ├── ChatHistoryView.tsx           # 历史记录视图
 ├── HistoryToolbar.tsx            # 历史工具栏
 ├── ConversationList.tsx          # 对话列表

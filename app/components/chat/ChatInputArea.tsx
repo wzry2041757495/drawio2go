@@ -31,6 +31,7 @@ import { McpButton, McpConfigDialog } from "@/app/components/mcp";
 import type { McpConfig } from "@/app/types/mcp";
 import CanvasContextButton from "./CanvasContextButton";
 import PageSelectorButton from "./PageSelectorButton";
+import type { SkillButtonProps } from "./SkillButton";
 import type { DrawioPageInfo } from "@/app/lib/storage/page-metadata";
 
 const MIN_BASE_TEXTAREA_HEIGHT = 60;
@@ -51,6 +52,7 @@ interface ChatInputAreaProps {
   onRetry: () => void;
   imageAttachments?: ReturnType<typeof useImageAttachments>;
   onAttachmentsChange?: (attachments: AttachmentItem[]) => void;
+  skillButton?: SkillButtonProps;
   modelSelectorProps: {
     providers: ProviderConfig[];
     models: ModelConfig[];
@@ -103,6 +105,7 @@ export default function ChatInputArea({
   onRetry,
   imageAttachments,
   onAttachmentsChange,
+  skillButton,
   modelSelectorProps,
   isCanvasContextEnabled,
   onCanvasContextToggle,
@@ -370,6 +373,7 @@ export default function ChatInputArea({
           onHistory={onHistory}
           onRetry={onRetry}
           onImageUpload={handleImageUpload}
+          skillButton={skillButton}
           modelSelectorProps={modelSelectorProps}
           isCompact={isCompactActions}
         />

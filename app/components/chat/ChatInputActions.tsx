@@ -13,6 +13,7 @@ import { RotateCcw } from "lucide-react";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import type { ModelConfig, ProviderConfig } from "@/app/types/chat";
 import ModelComboBox from "./ModelComboBox";
+import SkillButton, { type SkillButtonProps } from "./SkillButton";
 import { useToast } from "@/app/components/toast";
 import ModelIcon from "@/app/components/common/ModelIcon";
 import ImageUploadButton from "@/components/chat/ImageUploadButton";
@@ -29,6 +30,7 @@ interface ChatInputActionsProps {
   onHistory: () => void;
   onRetry: () => void;
   onImageUpload?: (files: File[]) => void;
+  skillButton?: SkillButtonProps;
   modelSelectorProps: {
     providers: ProviderConfig[];
     models: ModelConfig[];
@@ -51,6 +53,7 @@ export default function ChatInputActions({
   onHistory,
   onRetry,
   onImageUpload,
+  skillButton,
   modelSelectorProps,
 }: ChatInputActionsProps) {
   const { t } = useAppTranslation("chat");
@@ -212,6 +215,8 @@ export default function ChatInputActions({
             {t("input.retry")}
           </Button>
         )}
+
+        {skillButton ? <SkillButton {...skillButton} /> : null}
 
         <Dropdown
           isOpen={isModelPopoverOpen}

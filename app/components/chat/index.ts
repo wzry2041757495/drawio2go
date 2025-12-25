@@ -14,6 +14,7 @@ export { default as ChatInputArea } from "./ChatInputArea";
 export { default as ChatInputActions } from "./ChatInputActions";
 export { default as CanvasContextButton } from "./CanvasContextButton";
 export { default as PageSelectorButton } from "./PageSelectorButton";
+export { default as SkillButton } from "./SkillButton";
 export { default as ModelComboBox } from "./ModelComboBox";
 export { default as ToolCallCard } from "./ToolCallCard";
 export { default as ThinkingBlock } from "./ThinkingBlock";

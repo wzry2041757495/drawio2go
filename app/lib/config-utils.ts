@@ -5,6 +5,7 @@ import {
   ProviderConfig,
   ProviderType,
   type RuntimeLLMConfig,
+  type SkillSettings,
 } from "@/app/types/chat";
 import { getDefaultCapabilities } from "@/app/lib/model-capabilities";
 import type { StorageAdapter } from "@/app/lib/storage/adapter";
@@ -13,6 +14,8 @@ import { createLogger } from "@/lib/logger";
 const logger = createLogger("LLM");
 
 export const DEFAULT_SYSTEM_PROMPT = `You are a professional DrawIO diagram assistant that safely reads and edits diagrams via XPath-driven tools.
+
+{{theme}}
 
 ## Language Requirement
 **Always respond in the same language the user uses.** If the user writes in Chinese, respond in Chinese. If in English, respond in English. Match the user's language exactly.
@@ -42,6 +45,10 @@ Use \`allow_no_match: true\` to skip operations when target not found instead of
 
 ### drawio_overwrite
 Replace entire diagram XML. Use only for template replacement or complete restructuring.
+
+## DrawIO Elements Usage Guide
+
+{{elements}}
 
 ## DrawIO XML Structure Reference
 
@@ -278,9 +285,15 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [];
 export const DEFAULT_MODELS: ModelConfig[] = [];
 
+export const DEFAULT_SKILL_SETTINGS: SkillSettings = {
+  selectedTheme: "modern",
+  selectedElements: ["general"],
+};
+
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
-  updatedAt: 0,
+  updatedAt: Date.now(),
+  skillSettings: DEFAULT_SKILL_SETTINGS,
 };
 
 export const DEFAULT_ACTIVE_MODEL: ActiveModelReference | null = null;
@@ -324,6 +337,33 @@ const normalizeCustomConfig = (
   return { ...DEFAULT_LLM_CONFIG.customConfig };
 };
 
+const normalizeSkillSettings = (value: unknown): SkillSettings | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const selectedTheme =
+    typeof record.selectedTheme === "string" && record.selectedTheme.trim()
+      ? record.selectedTheme
+      : DEFAULT_SKILL_SETTINGS.selectedTheme;
+
+  const selectedElements = Array.isArray(record.selectedElements)
+    ? record.selectedElements.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : DEFAULT_SKILL_SETTINGS.selectedElements;
+
+  return {
+    selectedTheme,
+    selectedElements:
+      selectedElements.length > 0
+        ? selectedElements
+        : DEFAULT_SKILL_SETTINGS.selectedElements,
+  };
+};
+
 /**
  * 规范化运行时 LLM 配置
  * - 合并默认值
@@ -364,6 +404,7 @@ export function normalizeLLMConfig(
       : DEFAULT_SYSTEM_PROMPT;
 
   const customConfig = normalizeCustomConfig(safeConfig.customConfig);
+  const skillSettings = normalizeSkillSettings(safeConfig.skillSettings);
 
   return {
     apiUrl,
@@ -389,6 +430,7 @@ export function normalizeLLMConfig(
     capabilities,
     enableToolsInThinking,
     systemPrompt,
+    skillSettings,
     customConfig,
   };
 }

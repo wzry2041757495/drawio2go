@@ -46,6 +46,7 @@ app/api/
     apiUrl?: string;
     apiKey: string;
     systemPrompt?: string;
+    skillSettings?: SkillSettings;
     temperature?: number;
     maxToolRounds?: number;
   };
@@ -144,6 +145,7 @@ export interface LLMConfig {
   temperature: number; // 温度（0-1）
   modelName: string; // 模型标识
   systemPrompt: string; // 系统提示词
+  skillSettings?: SkillSettings; // 模板变量配置（可选）
   providerType: ProviderType; // 提供者类型
   maxToolRounds: number; // 最大工具轮次
 }

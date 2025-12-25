@@ -14,6 +14,7 @@ LLM 供应商与聊天消息相关的核心类型定义。
 
 - **ProviderType**: 支持的供应商枚举（`gemini`、`openai-reasoning`、`openai-compatible`、`deepseek-native`、`anthropic`）。
 - **LLMConfig**: 设置页与后端共用的 LLM 配置（URL、密钥、温度、模型、系统提示、供应商、工具轮次数）。
+- **SkillSettings**: 系统提示词模板相关配置（主题/元素选择）。
 - **ToolInvocation/ToolInvocationState**: AI 工具调用的状态结构。
 - **ChatMessage**: 扩展 AI SDK Message 的聊天消息定义。
 - **MessageMetadata**: 消息元数据（模型名称、创建时间）。

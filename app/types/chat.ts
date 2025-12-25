@@ -60,9 +60,15 @@ export interface ModelConfig {
 }
 
 // 全局 Agent 设置
+export interface SkillSettings {
+  selectedTheme: string; // 选中的风格 ID
+  selectedElements: string[]; // 选中的元素 ID 列表
+}
+
 export interface AgentSettings {
   systemPrompt: string; // 系统提示词
   updatedAt: number; // 更新时间戳（毫秒）
+  skillSettings?: SkillSettings; // Skill 配置（可选，向后兼容）
 }
 
 // 当前活动模型引用
@@ -83,6 +89,7 @@ export interface RuntimeLLMConfig {
   capabilities: ModelCapabilities; // 模型能力标记
   enableToolsInThinking: boolean; // 思考中是否启用工具
   systemPrompt: string; // Agent 系统提示词
+  skillSettings?: SkillSettings; // Skill 配置（可选）
   customConfig: { [key: string]: JsonValue }; // 合并后的自定义配置（模型优先）
 }
 

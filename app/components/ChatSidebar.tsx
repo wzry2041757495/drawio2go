@@ -45,8 +45,16 @@ import {
   getStorage,
   WIP_VERSION,
 } from "@/app/lib/storage";
-import type { ChatUIMessage, MessageMetadata } from "@/app/types/chat";
-import { DEFAULT_LLM_CONFIG } from "@/app/lib/config-utils";
+import type {
+  ChatUIMessage,
+  MessageMetadata,
+  SkillSettings,
+} from "@/app/types/chat";
+import {
+  DEFAULT_AGENT_SETTINGS,
+  DEFAULT_LLM_CONFIG,
+  DEFAULT_SKILL_SETTINGS,
+} from "@/app/lib/config-utils";
 import type { DrawioEditorRef } from "@/app/components/DrawioEditorNative";
 import { getDrawioXML, replaceDrawioXML } from "@/app/lib/drawio-tools";
 import type { DrawioReadResult } from "@/app/types/drawio-tools";
@@ -439,6 +447,13 @@ export default function ChatSidebar({
   const mcpOverlayContainerRef = useRef<HTMLDivElement | null>(null);
   const [mcpOverlayPortalContainer, setMcpOverlayPortalContainer] =
     useState<Element | null>(null);
+  const [skillSettings, setSkillSettings] = useState<SkillSettings>(
+    DEFAULT_SKILL_SETTINGS,
+  );
+  const [skillSettingsLoading, setSkillSettingsLoading] = useState(true);
+  const [systemPrompt, setSystemPrompt] = useState(
+    DEFAULT_AGENT_SETTINGS.systemPrompt,
+  );
   const chatShellContainerRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
 
@@ -483,7 +498,12 @@ export default function ChatSidebar({
     useOperationToast();
   const imageAttachments = useImageAttachments();
   const mcpServer = useMcpServer();
-  const { getSetting } = useStorageSettings();
+  const {
+    getSetting,
+    getAgentSettings,
+    saveSkillSettings,
+    subscribeSettingsUpdates,
+  } = useStorageSettings();
   const { createHistoricalVersion, getAllXMLVersions } =
     useStorageXMLVersions();
 
@@ -508,6 +528,50 @@ export default function ChatSidebar({
   const { canChat, lockHolder, acquireLock, releaseLock } =
     useChatLock(resolvedProjectUuid);
   const { isOnline, offlineReason } = useNetworkStatus();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAgentSettings = async () => {
+      try {
+        const settings = await getAgentSettings();
+        if (cancelled) return;
+        setSkillSettings(settings.skillSettings ?? DEFAULT_SKILL_SETTINGS);
+        setSystemPrompt(
+          settings.systemPrompt ?? DEFAULT_AGENT_SETTINGS.systemPrompt,
+        );
+      } catch (error) {
+        logger.warn("[ChatSidebar] 获取 Skill 设置失败", { error });
+      } finally {
+        if (!cancelled) setSkillSettingsLoading(false);
+      }
+    };
+
+    void loadAgentSettings();
+
+    const unsubscribe = subscribeSettingsUpdates((detail) => {
+      if (detail.type === "agent") {
+        void loadAgentSettings();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [getAgentSettings, subscribeSettingsUpdates]);
+
+  const handleSkillSettingsChange = useCallback(
+    async (nextSettings: SkillSettings) => {
+      setSkillSettings(nextSettings);
+      try {
+        await saveSkillSettings(nextSettings);
+      } catch (error) {
+        logger.error("[ChatSidebar] 保存 Skill 设置失败", { error });
+      }
+    },
+    [saveSkillSettings],
+  );
 
   useEffect(() => {
     setMcpOverlayPortalContainer(mcpOverlayContainerRef.current);
@@ -2012,6 +2076,7 @@ export default function ChatSidebar({
   };
 
   const modelSelectorDisabled = isChatStreaming || selectorLoading;
+  const skillButtonDisabled = isChatStreaming || skillSettingsLoading;
   const isModelConfigMissing = providers.length === 0 || models.length === 0;
   const isInputDisabled =
     configLoading ||
@@ -2109,6 +2174,12 @@ export default function ChatSidebar({
                 onHistory={handleHistory}
                 onRetry={handleRetry}
                 imageAttachments={imageAttachments}
+                skillButton={{
+                  skillSettings,
+                  onSkillSettingsChange: handleSkillSettingsChange,
+                  systemPrompt,
+                  isDisabled: skillButtonDisabled,
+                }}
                 modelSelectorProps={{
                   providers,
                   models,

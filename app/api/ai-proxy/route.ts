@@ -4,11 +4,16 @@ import {
   convertImagePartsToFileUIParts,
   validateImageParts,
 } from "@/app/lib/attachment-converter";
+import {
+  applyTemplateVariables,
+  hasTemplateVariables,
+} from "@/app/lib/prompt-template";
 import type {
   ImagePart,
   LLMConfig,
   ModelCapabilities,
   ProviderType,
+  SkillSettings,
 } from "@/app/types/chat";
 import { ErrorCodes, type ErrorCode } from "@/app/errors/error-codes";
 import { createLogger } from "@/lib/logger";
@@ -48,6 +53,7 @@ type AiProxyIncomingConfig = {
   temperature?: number;
   maxToolRounds?: number;
   capabilities?: ModelCapabilities;
+  skillSettings?: SkillSettings;
 };
 
 type AiProxyConfig = Omit<AiProxyIncomingConfig, "providerType"> & {
@@ -386,6 +392,7 @@ export async function POST(req: NextRequest) {
       temperature: validation.rawConfig.temperature,
       maxToolRounds: validation.rawConfig.maxToolRounds,
       capabilities: validation.rawConfig.capabilities,
+      skillSettings: validation.rawConfig.skillSettings,
     });
 
     const model = createModelFromConfig(normalizedConfig);
@@ -423,6 +430,18 @@ export async function POST(req: NextRequest) {
     const modelMessages = await convertToModelMessages(converted.messages);
     const toolSet = toToolSet(validation.tools);
 
+    let systemPrompt = normalizedConfig.systemPrompt;
+    if (hasTemplateVariables(systemPrompt)) {
+      if (normalizedConfig.skillSettings) {
+        systemPrompt = applyTemplateVariables(
+          systemPrompt,
+          normalizedConfig.skillSettings,
+        );
+      } else {
+        logger.warn("系统提示词包含模板变量，但未提供 skillSettings");
+      }
+    }
+
     logger.info("收到 AI 代理请求", {
       provider: normalizedConfig.providerType,
       model: normalizedConfig.modelName,
@@ -433,7 +452,7 @@ export async function POST(req: NextRequest) {
 
     const result = streamText({
       model,
-      system: normalizedConfig.systemPrompt,
+      system: systemPrompt,
       messages: modelMessages,
       temperature: normalizedConfig.temperature,
       stopWhen: stepCountIs(normalizedConfig.maxToolRounds),

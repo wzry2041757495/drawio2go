@@ -124,6 +124,39 @@
     "ariaLabel": "选择页面范围",
     "noPagesSelected": "请至少选择一个页面"
   },
+  "skill": {
+    "buttonLabel": "{{theme}} · {{count}}元素",
+    "ariaLabel": "配置绘图风格与元素",
+    "disabled": {
+      "missingTemplate": "系统提示词需要包含 {{theme}} 与 {{elements}} 占位符",
+      "partialTemplate": "系统提示词需要同时包含 {{theme}} 与 {{elements}} 占位符",
+      "unavailable": "当前状态下无法修改绘图技能设置"
+    },
+    "theme": {
+      "label": "风格",
+      "description": "选择图表整体风格",
+      "modern": "现代",
+      "academic": "学术",
+      "classic": "经典",
+      "custom": "自定义",
+      "unknown": "未知风格"
+    },
+    "elements": {
+      "label": "元素",
+      "description": "选择可用元素类型（可多选）",
+      "required": "必选"
+    },
+    "element": {
+      "general": "通用",
+      "basic": "基础流程",
+      "misc": "杂项",
+      "uml": "UML",
+      "aws": "AWS",
+      "azure": "Azure",
+      "gcp": "GCP",
+      "network": "网络"
+    }
+  },
   "toolCalls": {
     "title": "工具调用",
     "parameters": "输入参数",

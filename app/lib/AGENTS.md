@@ -17,6 +17,7 @@
 - **storage/writers.ts**: 统一的 WIP/历史版本写入管线（归一化 + 页面元数据 + 关键帧/Diff 计算 + 事件派发）
 - **svg-smart-diff.ts**: SVG 智能差异对比引擎（基于 data-cell-id + 几何语义匹配的元素级高亮）
 - **config-utils.ts**: LLM 配置规范化工具（默认值、类型校验、URL 规范化）
+- **prompt-template.ts**: 系统提示词模板变量替换（{{theme}} / {{elements}}）
 - **model-factory.ts**: 服务器侧模型工厂：按 `providerType` 创建 AI SDK `LanguageModel`（供 `/api/ai-proxy` 使用）
 - **error-classifier.ts**: 服务器侧错误分类：将错误归一化为 `{ statusCode, code, message }`（供 `/api/ai-proxy` 使用）
 - **model-capabilities.ts**: 模型能力白名单与查找辅助函数（supportsThinking / supportsVision）
