@@ -111,7 +111,7 @@
     "characterCount": "{{current}} / {{max}} 字符"
   },
   "canvasContext": "画布上下文",
-  "canvasContextTooltip": "对话自动注入压缩后的画布元素信息，App 中还会自动注入鼠标选中元素信息",
+  "canvasContextTooltip": "对话自动注入画布摘要（节点/连线数量），App 中还会注入鼠标选中元素 ID",
   "pageSelector": {
     "title": "页面选择器",
     "allPages": "全部页面",

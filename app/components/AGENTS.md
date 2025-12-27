@@ -120,7 +120,7 @@
 - 模块化架构（12个独立子组件）
 - 一体化布局：消息区 + 输入区（含模型选择按钮）
 - 按钮组：新建聊天/历史对话（左）、版本管理/文件上传/发送（右）
-- 画布上下文（Canvas Context）：发送前可选注入 `<drawio_status>`（最多 100 个元素，过滤根节点 0/1，超出截断）与 `<user_select>`（仅 Electron，来自 `app/page.tsx` 的 `selectionRef`）；仅影响请求 payload，不写入本地历史/存储
+- 画布上下文（Canvas Context）：发送前可选注入 `<drawio_status vertices="X" edges="Y"/>`（仅包含节点/连接线数量）与 `<user_select>`（仅 Electron，来自 `app/page.tsx` 的 `selectionRef`）；仅影响请求 payload，不写入本地历史/存储
 - @ai-sdk/react: `useChat` hook + 流式响应
 - Markdown 渲染（react-markdown）
 - 工具状态卡片（进行中/成功/失败）

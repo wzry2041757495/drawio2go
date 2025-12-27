@@ -87,8 +87,6 @@ type UseChatMessage = UIMessage<MessageMetadata>;
 
 // ========== 辅助函数 ==========
 
-const CANVAS_CONTEXT_MAX_ITEMS = 100;
-
 const hasImageParts = (msg: unknown): boolean => {
   if (!msg || typeof msg !== "object") return false;
   const parts = (msg as { parts?: unknown }).parts;
@@ -221,20 +219,10 @@ function buildToolSchemaPayload(
   return payload;
 }
 
-function formatDrawioStatusTag(items: Array<{ id: string; type: string }>) {
-  const filtered = items.filter((item) => item.id !== "0" && item.id !== "1");
-
-  const total = filtered.length;
-  const sliced = filtered.slice(0, CANVAS_CONTEXT_MAX_ITEMS);
-
-  let payload = sliced.map((item) => `${item.id}:${item.type}`).join(",");
-  if (total > CANVAS_CONTEXT_MAX_ITEMS) {
-    payload = payload
-      ? `${payload},...(truncated, total: ${total})`
-      : `...(truncated, total: ${total})`;
-  }
-
-  return `<drawio_status content="id:type">${payload}</drawio_status>`;
+function formatDrawioStatusTag(counts: { vertices: number; edges: number }) {
+  const vertices = Math.max(0, Math.floor(counts.vertices));
+  const edges = Math.max(0, Math.floor(counts.edges));
+  return `<drawio_status vertices="${vertices}" edges="${edges}"/>`;
 }
 
 function formatUserSelectTag(ids: readonly string[]) {
@@ -263,14 +251,18 @@ async function buildCanvasContextPrefix(options: {
   const list = "list" in result ? result.list : undefined;
   if (!Array.isArray(list)) return null;
 
-  const items = list
-    .map((entry) => ({
-      id: entry.id,
-      type: entry.type,
-    }))
-    .filter((entry) => Boolean(entry.id));
+  let vertices = 0;
+  let edges = 0;
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue;
+    if ((entry as { id?: unknown }).id === "0") continue;
+    if ((entry as { id?: unknown }).id === "1") continue;
+    const type = (entry as { type?: unknown }).type;
+    if (type === "vertex") vertices += 1;
+    else if (type === "edge") edges += 1;
+  }
 
-  const lines: string[] = [formatDrawioStatusTag(items)];
+  const lines: string[] = [formatDrawioStatusTag({ vertices, edges })];
   if (isAppEnv) {
     const selectTag = formatUserSelectTag(selectionIds);
     if (selectTag) lines.push(selectTag);

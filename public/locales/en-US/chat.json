@@ -111,7 +111,7 @@
     "characterCount": "{{current}} / {{max}} chars"
   },
   "canvasContext": "Canvas Context",
-  "canvasContextTooltip": "Auto-inject compressed canvas elements into conversations, in App will injecting mouse-selected element data",
+  "canvasContextTooltip": "Auto-inject a canvas summary (vertex/edge counts). In App, also inject selected element IDs.",
   "pageSelector": {
     "title": "Page Selector",
     "allPages": "All pages",
