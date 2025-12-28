@@ -13,7 +13,8 @@ const compat = new FlatCompat({
 export default [
   {
     ignores: [
-      ".next/**",
+      "**/.next/**",
+      ".open-next/**",
       "out/**",
       "dist/**",
       "node_modules/**",

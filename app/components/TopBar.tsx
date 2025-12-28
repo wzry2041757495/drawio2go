@@ -1,7 +1,15 @@
 "use client";
 
-import { Button } from "@heroui/react";
-import { FolderOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Button, Dropdown, Label } from "@heroui/react";
+import {
+  ChevronDown,
+  FileDown,
+  FileImage,
+  Upload,
+  FolderOpen,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
 import { useAppTranslation } from "@/app/i18n/hooks";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -11,6 +19,7 @@ interface TopBarProps {
   onOpenProjectSelector?: () => void;
   onLoad?: () => void;
   onSave?: () => void;
+  onExportSVG?: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
@@ -21,6 +30,7 @@ export default function TopBar({
   onOpenProjectSelector,
   onLoad,
   onSave,
+  onExportSVG,
   isSidebarOpen,
   onToggleSidebar,
 }: TopBarProps) {
@@ -54,47 +64,45 @@ export default function TopBar({
             className="top-bar-button"
             onPress={onLoad}
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-              />
-            </svg>
+            <Upload className="h-4 w-4" />
             {t("buttons.load")}
           </Button>
         )}
 
-        {onSave && (
-          <Button
-            variant="primary"
-            size="sm"
-            className="top-bar-button"
-            onPress={onSave}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-              />
-            </svg>
-            {t("buttons.save")}
-          </Button>
+        {(onSave || onExportSVG) && (
+          <Dropdown>
+            <Button variant="primary" size="sm" className="top-bar-button">
+              <FileDown className="h-4 w-4" />
+              {t("buttons.export")}
+              <ChevronDown className="ml-0.5 h-4 w-4 opacity-70" />
+            </Button>
+            <Dropdown.Popover className="z-[1000] min-w-[180px]">
+              <Dropdown.Menu
+                disabledKeys={[
+                  ...(onSave ? [] : ["export-drawio"]),
+                  ...(onExportSVG ? [] : ["export-svg"]),
+                ]}
+                onAction={(key) => {
+                  if (key === "export-drawio") {
+                    onSave?.();
+                  } else if (key === "export-svg") {
+                    onExportSVG?.();
+                  }
+                }}
+              >
+                <Dropdown.Item id="export-drawio" textValue="export-drawio">
+                  <FileDown className="h-4 w-4" />
+                  <Label>
+                    {t("buttons.exportDrawio", "导出为 .drawio 文件")}
+                  </Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="export-svg" textValue="export-svg">
+                  <FileImage className="h-4 w-4" />
+                  <Label>{t("buttons.exportSvg", "导出为 .svg 文件")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
         )}
 
         <ThemeToggle />

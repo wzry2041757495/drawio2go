@@ -520,6 +520,101 @@ export default function Home() {
     }
   };
 
+  // 导出 SVG
+  const handleExportSVG = async () => {
+    try {
+      const svgContent = await editorRef.current?.exportSVG();
+
+      if (!svgContent) {
+        push({
+          description: t("toasts.noContentToSave"),
+          variant: "warning",
+        });
+        return;
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const fileName = `diagram_${timestamp}.svg`;
+
+      const joinPath = (basePath: string, name: string) => {
+        const separator = basePath.includes("\\") ? "\\" : "/";
+        const normalized = basePath.endsWith(separator)
+          ? basePath.slice(0, -1)
+          : basePath;
+        return `${normalized}${separator}${name}`;
+      };
+
+      if (typeof window !== "undefined" && window.electron) {
+        if (settings.defaultPath) {
+          const filePath = joinPath(settings.defaultPath, fileName);
+          const result = await window.electron.writeFile(filePath, svgContent);
+
+          if (result.success) {
+            push({
+              description: t("toasts.fileSaved", { filePath }),
+              variant: "success",
+            });
+          } else {
+            push({
+              description: t("toasts.saveFailed", {
+                error: result.error ?? "Unknown error",
+              }),
+              variant: "danger",
+            });
+          }
+
+          return;
+        }
+
+        const filePath = await window.electron.showSaveDialog({
+          defaultPath: "diagram.svg",
+          filters: [
+            { name: "SVG Files", extensions: ["svg"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        });
+
+        if (!filePath) return;
+
+        const result = await window.electron.writeFile(filePath, svgContent);
+        if (result.success) {
+          push({
+            description: t("toasts.fileSaved", { filePath }),
+            variant: "success",
+          });
+        } else {
+          push({
+            description: t("toasts.saveFailed", {
+              error: result.error ?? "Unknown error",
+            }),
+            variant: "danger",
+          });
+        }
+
+        return;
+      }
+
+      // 浏览器环境下载文件
+      const blob = new Blob([svgContent], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "diagram.svg";
+      a.click();
+      push({
+        description: t("toasts.saveSuccess"),
+        variant: "success",
+      });
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      logger.error("导出 SVG 失败", { error });
+      push({
+        description: t("toasts.saveFailed", { error: toErrorString(error) }),
+        variant: "danger",
+      });
+    }
+  };
+
   // 加载文件
   const handleLoad = async () => {
     if (typeof window !== "undefined" && window.electron) {
@@ -830,6 +925,7 @@ export default function Home() {
         onOpenProjectSelector={handleOpenProjectSelector}
         onLoad={handleLoad}
         onSave={handleManualSave}
+        onExportSVG={handleExportSVG}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={handleToggleSidebarVisibility}
       />

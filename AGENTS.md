@@ -355,6 +355,16 @@ npm run format           # 使用 Prettier 格式化所有代码
 
 ⚠️ **重要**: 不能使用 `next dev` 命令，必须使用 `npm run dev` 启动自定义 `server.js`。
 
+## Vercel 部署适配（Web）
+
+- 项目已提供 `vercel.json`：使用 `npm ci --ignore-scripts` 跳过 Electron 相关 postinstall（如 `electron-rebuild`）。
+- `next.config.mjs` 使用 `process.env.VERCEL` 区分环境：
+  - **Vercel**：不启用 `output: "standalone"`，并启用默认图片优化。
+  - **Electron**：保持 `output: "standalone"` 与 `images.unoptimized: true`，确保 `npm run electron:build` 打包流程不变。
+- API 运行时策略：
+  - `app/api/test/route.ts` 使用默认 Node.js runtime（移除 Edge runtime）。
+  - `app/api/ai-proxy/route.ts` 通过 `export const maxDuration = 300` 提升 LLM 调用超时上限（具体上限取决于 Vercel 计划）。
+
 ## CI/CD 自动发布
 
 项目配置了 GitHub Actions 自动构建和发布 Electron 应用（`.github/workflows/release.yml`）。

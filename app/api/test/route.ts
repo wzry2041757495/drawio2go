@@ -18,8 +18,6 @@ import { APICallError } from "@ai-sdk/provider";
 
 const logger = createLogger("Test API");
 
-export const runtime = "edge";
-
 type TestErrorResponse = {
   success: false;
   error: string;

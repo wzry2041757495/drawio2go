@@ -149,13 +149,13 @@
 
 ### 6. TopBar.tsx - 顶部操作栏
 
-**Props**: `selectionLabel`, `currentProjectName`, `onOpenProjectSelector`, `onLoad`, `onSave`, `isSidebarOpen`, `onToggleSidebar`
+**Props**: `selectionLabel`, `currentProjectName`, `onOpenProjectSelector`, `onLoad`, `onSave`, `onExportSVG`, `isSidebarOpen`, `onToggleSidebar`
 
 **布局**:
 
 - 左侧：选区徽章（超长省略 + Tooltip）
 - 中部：工程切换按钮（HeroUI Button variant secondary + 文件夹图标）
-- 右侧：加载/保存 + ThemeToggle + 侧栏切换（PanelRightOpen/Close）
+- 右侧：加载 + 导出下拉菜单（.drawio/.svg）+ ThemeToggle + 侧栏切换（PanelRightOpen/Close）
 
 **环境差异**:
 

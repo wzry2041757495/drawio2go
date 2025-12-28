@@ -4,7 +4,10 @@
   },
   "buttons": {
     "load": "Load",
-    "save": "Save"
+    "save": "Save",
+    "export": "Export",
+    "exportDrawio": "Export as .drawio",
+    "exportSvg": "Export as .svg"
   },
   "aria": {
     "collapseSidebar": "Collapse sidebar",
