@@ -212,15 +212,15 @@ VersionSettingsPanel
 ### 基础集成
 
 ```tsx
-	import {
-	  SettingsNav,
-	  GeneralSettingsPanel,
-	  DrawioSettingsPanel,
-	  ModelsSettingsPanel,
-	  AgentSettingsPanel,
-	  VersionSettingsPanel,
-	  isSystemPromptValid,
-	} from "@/app/components/settings";
+import {
+  SettingsNav,
+  GeneralSettingsPanel,
+  DrawioSettingsPanel,
+  ModelsSettingsPanel,
+  AgentSettingsPanel,
+  VersionSettingsPanel,
+  isSystemPromptValid,
+} from "@/app/components/settings";
 
 // 在父组件中管理 activeTab 和各面板的 state
 // 通过 onTabChange、onChange 等回调处理状态更新

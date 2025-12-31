@@ -77,12 +77,20 @@
     "theme": {
       "label": "DrawIO Default Theme",
       "description": "Controlled via URL parameter ui= (requires reloading the canvas)",
+      "change": "Change theme",
       "options": {
         "kennedy": "kennedy (Default)",
         "min": "min",
         "atlas": "atlas",
         "sketch": "sketch",
         "simple": "simple"
+      },
+      "descriptions": {
+        "kennedy": "Classic default UI with best compatibility",
+        "min": "Minimal UI for distraction-free editing",
+        "atlas": "Feature-rich layout with more tools",
+        "sketch": "Hand-drawn look for sketchy diagrams",
+        "simple": "Simplified, lightweight UI"
       }
     },
     "urlParams": {

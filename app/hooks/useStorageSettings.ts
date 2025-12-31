@@ -98,7 +98,9 @@ const normalizeGeneralSettings = (parsed: unknown): GeneralSettings | null => {
     return trimmed ? trimmed : undefined;
   };
 
-  const normalizeDrawioTheme = (value: unknown): GeneralSettings["drawioTheme"] =>
+  const normalizeDrawioTheme = (
+    value: unknown,
+  ): GeneralSettings["drawioTheme"] =>
     isDrawioTheme(value) ? value : undefined;
 
   return {

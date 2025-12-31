@@ -77,12 +77,20 @@
     "theme": {
       "label": "DrawIO 默认主题",
       "description": "通过 URL 参数 ui= 控制（修改后需要重新加载画布）",
+      "change": "切换主题",
       "options": {
         "kennedy": "kennedy（默认）",
         "min": "min",
         "atlas": "atlas",
         "sketch": "sketch",
         "simple": "simple"
+      },
+      "descriptions": {
+        "kennedy": "经典默认主题，界面完整，兼容性最佳",
+        "min": "极简界面，适合专注绘图",
+        "atlas": "更丰富的工具与面板布局",
+        "sketch": "手绘风格外观，适合草图表达",
+        "simple": "简化界面，清爽轻量"
       }
     },
     "urlParams": {

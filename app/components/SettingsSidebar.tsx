@@ -446,7 +446,9 @@ export default function SettingsSidebar({
   }, [drawioBaseUrl, t]);
 
   const drawioIdentifierError = useMemo(() => {
-    return drawioIdentifier.trim().length > 0 ? undefined : t("errors.required");
+    return drawioIdentifier.trim().length > 0
+      ? undefined
+      : t("errors.required");
   }, [drawioIdentifier, t]);
 
   const handleDefaultPathChange = useCallback(
